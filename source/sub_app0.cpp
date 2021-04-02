@@ -15,6 +15,7 @@ bool vid_pause_request = false;
 bool vid_seek_request = false;
 bool vid_linear_filter = true;
 bool vid_show_controls = false;
+bool vid_allow_skip_frames = false;
 double vid_time[6][320];
 double vid_frametime = 0;
 double vid_framerate = 0;
@@ -72,6 +73,7 @@ void Sapp0_decode_thread(void* arg)
 	int w = 0;
 	int h = 0;
 	int sleep = 0;
+	int skip = 0;
 	double pos = 0;
 	bool key = false;
 	bool has_audio = false;
@@ -90,6 +92,7 @@ void Sapp0_decode_thread(void* arg)
 		if(vid_play_request || vid_change_video_request)
 		{
 			sleep = 0;
+			skip = 0;
 			vid_x = 0;
 			vid_y = 15;
 			vid_frametime = 0;
@@ -247,44 +250,55 @@ void Sapp0_decode_thread(void* arg)
 				}
 				else if(type == "video")
 				{
-					result = Util_decoder_ready_video_packet(1);
-					if(result.code == 0)
+					if(vid_allow_skip_frames && skip > vid_frametime)
 					{
-						while(vid_wait_request)
-							usleep(1000);
-
-						osTickCounterUpdate(&counter[0]);
-						result = Util_video_decoder_decode(&w, &h, &key, &pos, 1);
-						osTickCounterUpdate(&counter[0]);
-						vid_time[0][319] = osTickCounterRead(&counter[0]);
-						for(int i = 1; i < 320; i++)
-							vid_time[0][i - 1] = vid_time[0][i];
-
-						vid_current_pos = pos;
-						if(result.code == 0)
-							vid_convert_request = true;
-						else
-							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
-
-						osTickCounterUpdate(&counter[2]);
-						vid_time[4][319] = osTickCounterRead(&counter[2]);
-						for(int i = 1; i < 320; i++)
-							vid_time[4][i - 1] = vid_time[4][i];
-						
-						if(vid_frametime - vid_time[4][319] > 0)
-						{
-							sleep += vid_frametime - vid_time[4][319];
-							if(sleep > vid_frametime * 3)
-							{
-								usleep(sleep / 2 * 1000);
-								sleep -= (sleep / 2);
-							}
-						}
-
-						osTickCounterUpdate(&counter[2]);
+						skip -= vid_frametime;
+						Util_decoder_skip_video_packet(1);
 					}
 					else
-						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_ready_video_packet()..." + result.string + result.error_description, result.code);
+					{
+						result = Util_decoder_ready_video_packet(1);
+
+						if(result.code == 0)
+						{
+							while(vid_wait_request)
+								usleep(1000);
+
+							osTickCounterUpdate(&counter[0]);
+							result = Util_video_decoder_decode(&w, &h, &key, &pos, 1);
+							osTickCounterUpdate(&counter[0]);
+							vid_time[0][319] = osTickCounterRead(&counter[0]);
+							for(int i = 1; i < 320; i++)
+								vid_time[0][i - 1] = vid_time[0][i];
+
+							vid_current_pos = pos;
+							if(result.code == 0)
+								vid_convert_request = true;
+							else
+								Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
+
+							osTickCounterUpdate(&counter[2]);
+							vid_time[4][319] = osTickCounterRead(&counter[2]);
+							for(int i = 1; i < 320; i++)
+								vid_time[4][i - 1] = vid_time[4][i];
+							
+							if(vid_frametime - vid_time[4][319] > 0)
+							{
+								sleep += vid_frametime - vid_time[4][319];
+								if(sleep > vid_frametime * 3)
+								{
+									usleep(sleep / 2 * 1000);
+									sleep -= (sleep / 2);
+								}
+							}
+							else if(vid_allow_skip_frames)
+								skip -= vid_frametime - vid_time[4][319];
+
+							osTickCounterUpdate(&counter[2]);
+						}
+						else
+							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_ready_video_packet()..." + result.string + result.error_description, result.code);
+					}
 				}
 			}
 
@@ -512,6 +526,7 @@ void Sapp0_init(void)
 
 	vid_detail_mode = false;
 	vid_show_controls = false;
+	vid_allow_skip_frames = false;
 	vid_lr_count = 0;
 	vid_cd_count = 0;
 	vid_x = 0;
@@ -611,13 +626,17 @@ void Sapp0_main(void)
 		if(vid_width > 1024 && vid_height > 1024)
 			Draw_texture(vid_image[3].c2d, (vid_x + vid_tex_width[0] * vid_zoom) - 40, (vid_y + vid_tex_height[0] * vid_zoom) - 240, vid_tex_width[3] * vid_zoom, vid_tex_height[3] * vid_zoom);
 
+		//controls
+		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, 165, 145, 10);
+		Draw(vid_msg[2], 167.5, 165, 0.4, 0.4, color);
+
 		//texture filter
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 10, 180, 145, 10);
 		Draw(vid_msg[vid_linear_filter], 12.5, 180, 0.4, 0.4, color);
 
-		//controls
+		//allow skip frames
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, 180, 145, 10);
-		Draw(vid_msg[2], 167.5, 180, 0.4, 0.4, color);
+		Draw(vid_msg[4 + vid_allow_skip_frames], 167.5, 180, 0.4, 0.4, color);
 
 		//time bar
 		Draw(Util_convert_seconds_to_time(vid_current_pos / 1000) + "/" + Util_convert_seconds_to_time(vid_duration), 110, 210, 0.5, 0.5, color);
@@ -707,6 +726,11 @@ void Sapp0_main(void)
 			vid_seek_request = true;
 			var_need_reflesh = true;
 		}
+		else if(key.p_touch && key.touch_x >= 165 && key.touch_x <= 309 && key.touch_y >= 165 && key.touch_y <= 174)
+		{
+			vid_show_controls = !vid_show_controls;
+			var_need_reflesh = true;
+		}
 		else if(key.p_touch && key.touch_x >= 10 && key.touch_x <= 154 && key.touch_y >= 180 && key.touch_y <= 189)
 		{
 			vid_linear_filter = !vid_linear_filter;
@@ -717,7 +741,7 @@ void Sapp0_main(void)
 		}
 		else if(key.p_touch && key.touch_x >= 165 && key.touch_x <= 309 && key.touch_y >= 180 && key.touch_y <= 189)
 		{
-			vid_show_controls = !vid_show_controls;
+			vid_allow_skip_frames = !vid_allow_skip_frames;
 			var_need_reflesh = true;
 		}
 		else if(key.h_touch || key.p_touch)

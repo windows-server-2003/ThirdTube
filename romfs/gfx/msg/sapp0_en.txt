@@ -9,3 +9,5 @@ Debug : Y
 Zoom out : L
 Zoom in : R
 Move video : ↑↓→←</3>
+<4>Allow skip frames : OFF</4>
+<5>Allow skip frames : ON</5>
