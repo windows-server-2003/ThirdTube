@@ -35,7 +35,7 @@ TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
 SOURCES		:=	source source/system source/system/util source/system/draw library/base64
 DATA		:=	data
-INCLUDES	:=	include library library/ffmpeg/include library/libctru/include
+INCLUDES	:=	include library library/ffmpeg/include library/libctru/include library/x264/include
 GRAPHICS	:=	gfx
 ROMFS		:=	romfs
 GFXBUILD	:=	$(ROMFS)/gfx
@@ -75,7 +75,7 @@ LIBS	:= -lswresample -lavformat -lswscale -lavcodec -lavutil -lcitro2d -lcitro3d
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS := library/ffmpeg/lib library/libctru/lib
+LIBDIRS := library/ffmpeg/lib library/libctru/lib library/x264/lib
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
