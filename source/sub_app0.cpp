@@ -36,7 +36,7 @@ std::string vid_video_format = "n/a";
 std::string vid_audio_format = "n/a";
 std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
 Image_data vid_image[8];
-Thread vid_encode_thread, vid_convert_thread;
+Thread vid_decode_thread, vid_convert_thread;
 
 void Sapp0_callback(std::string file, std::string dir)
 {
@@ -474,12 +474,12 @@ void Sapp0_init(void)
 	vid_thread_run = true;
 	if(new_3ds)
 	{
-		vid_encode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
+		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
 	else
 	{
-		vid_encode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
+		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
 
@@ -548,9 +548,9 @@ void Sapp0_exit(void)
 	vid_convert_request = false;
 	vid_play_request = false;
 
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_encode_thread, time_out));
+	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
-	threadFree(vid_encode_thread);
+	threadFree(vid_decode_thread);
 	threadFree(vid_convert_thread);
 
 	for(int i = 0; i < 4; i++)
