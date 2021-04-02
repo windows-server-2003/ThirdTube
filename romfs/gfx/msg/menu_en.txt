@@ -1,0 +1,11 @@
+<0>Do you want to exit this software?</0>
+<1>A to close</1>
+<2>B to back</2>
+<3>☢A new version is available!☢</3>
+<4>How to update : 
+Settings
+->Update
+->Check for updates
+->Go to editions select
+->select .3dsx or .cia
+->Download & install</4>

@@ -1,0 +1,11 @@
+<0>Texture filter : OFF</0>
+<1>Texture filter : ON</1>
+<2>Controls</2>
+<3>Play/Puase : A
+Seek : touch the bar
+Stop : B
+Select file : X
+Debug : Y
+Zoom out : L
+Zoom in : R
+Move video : ↑↓→←</3>
