@@ -27,3 +27,14 @@ Video player for 3DS
 * aac (Advanced audio coding)
 * ogg (Vorbis)
 * pcm audio
+
+### Contorol
+Controls
+* A : Play/Pause
+* B : Stop
+* Y : Debug
+* X : Select file
+* R : Zoom in
+* L : Zoom out
+* C/DPAD : Move video
+* touch the bar : Seek
