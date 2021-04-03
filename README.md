@@ -28,8 +28,7 @@ Video player for 3DS
 * ogg (Vorbis)
 * pcm audio
 
-### Contorol
-Controls
+### Contorols
 * A : Play/Pause
 * B : Stop
 * Y : Debug
