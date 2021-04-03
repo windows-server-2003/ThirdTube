@@ -1,6 +1,8 @@
 # Video player for 3DS
 
 ## Patch note
+* v1.0.1
+* Added allow skip frames option
 * v1.0.0
 * Initial release
 
