@@ -13,7 +13,7 @@
 #define DEF_CURRENT_APP_VER (std::string)"v1.0.1"
 #define DEF_CURRENT_APP_VER_INT 1025
 #define DEF_ENABLE_SUB_APP0
-//#define DEF_ENABLE_SUB_APP1
+#define DEF_ENABLE_SUB_APP1
 //#define DEF_ENABLE_SUB_APP2
 //#define DEF_ENABLE_SUB_APP3
 //#define DEF_ENABLE_SUB_APP4
@@ -32,13 +32,14 @@
 #define DEF_SAPP0_CONVERT_THREAD_STR (std::string)"Vid/Convert thread"
 
 //sample app 1
-#define DEF_SAPP1_NUM_OF_MSG 1
-#define DEF_SAPP1_NAME (std::string)"sample 1"
-#define DEF_SAPP1_VER (std::string)"v0.0.1"
-#define DEF_SAPP1_MAIN_STR (std::string)"Sapp1/Main"
-#define DEF_SAPP1_INIT_STR (std::string)"Sapp1/Init"
-#define DEF_SAPP1_EXIT_STR (std::string)"Sapp1/Exit"
-#define DEF_SAPP1_THREAD_STR (std::string)"Sapp1/Sub thread"
+#define DEF_SAPP1_NUM_OF_MSG 6
+#define DEF_SAPP1_NAME (std::string)"mvd test"
+#define DEF_SAPP1_VER (std::string)"v1.0.0"
+#define DEF_SAPP1_MAIN_STR (std::string)"Vid/Main"
+#define DEF_SAPP1_INIT_STR (std::string)"Vid/Init"
+#define DEF_SAPP1_EXIT_STR (std::string)"Vid/Exit"
+#define DEF_SAPP1_DECODE_THREAD_STR (std::string)"Vid/Decode thread"
+#define DEF_SAPP1_CONVERT_THREAD_STR (std::string)"Vid/Convert thread"
 
 //sample app 2
 #define DEF_SAPP2_NUM_OF_MSG 1

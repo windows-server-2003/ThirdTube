@@ -1,5 +1,9 @@
 #pragma once
 
+Result_with_string Util_mvd_video_decoder_init(void);
+
+void Util_mvd_video_decoder_exit(void);
+
 Result_with_string Util_decoder_open_file(std::string file_path, bool* has_audio, bool* has_video, int session);
 
 Result_with_string Util_audio_decoder_init(int session);
@@ -24,7 +28,11 @@ Result_with_string Util_audio_decoder_decode(int* size, u8** raw_data, double* c
 
 Result_with_string Util_video_decoder_decode(int* width, int* height, bool* key_frame, double* current_pos, int session);
 
+Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* key_frame, double* current_pos, int session);
+
 Result_with_string Util_video_decoder_get_image(u8** raw_data, int width, int height, int session);
+
+Result_with_string Util_mvd_video_decoder_get_image(u8** raw_data, int width, int height, int session);
 
 Result_with_string Util_decoder_seek(u64 seek_pos, int flag, int session);
 
