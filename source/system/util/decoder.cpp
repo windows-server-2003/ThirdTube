@@ -539,6 +539,10 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 	log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
 	mvdstdProcessVideoFrame(packet, util_video_decoder_packet[session]->size, 0, NULL);
 	Util_log_add(log_num, "", result.code);
+	if(MVD_CHECKNALUPROC_SUCCESS(result.code))
+		log_num = Util_log_save("", "success");
+	else
+		log_num = Util_log_save("", "error");
 
 	config.physaddr_outdata0 = osConvertVirtToPhys(util_video_decoder_mvd_raw_data[session][util_video_decoder_buffer_num[session]]);
 

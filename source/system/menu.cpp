@@ -654,7 +654,7 @@ void Menu_update_thread(void* arg)
 	Result_with_string result;
 	http_buffer = (u8*)malloc(0x1000);
 
-	result = Util_httpc_dl_data(DEF_CHECK_UPDATE_URL, http_buffer, 0x1000, &dl_size, &status_code, true, 10);
+	result = Util_httpc_dl_data(DEF_CHECK_UPDATE_URL, http_buffer, 0x1000, &dl_size, &status_code, true, 3);
 	Util_log_save(DEF_MENU_UPDATE_THREAD_STR, "Util_httpc_dl_data()..." + result.string + result.error_description, result.code);
 	if(result.code == 0)
 	{
