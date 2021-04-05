@@ -17,7 +17,7 @@ bool menu_check_exit_request = false;
 bool menu_update_available = false;
 std::string menu_msg[DEF_MENU_NUM_OF_MSG];
 Thread menu_worker_thread, menu_send_app_info_thread, menu_check_connectivity_thread, menu_update_thread;
-C2D_Image menu_app_icon[2];
+C2D_Image menu_app_icon[3];
 
 bool Menu_query_must_exit_flag(void)
 {
