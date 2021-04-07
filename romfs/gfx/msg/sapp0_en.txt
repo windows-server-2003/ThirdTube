@@ -1,7 +1,7 @@
 <0>Texture filter : OFF</0>
 <1>Texture filter : ON</1>
 <2>Controls</2>
-<3>Play/Puase : A
+<3>Play/Pause : A
 Seek : touch the bar
 Stop : B
 Select file : X
