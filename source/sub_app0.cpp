@@ -284,12 +284,13 @@ void Sapp0_decode_thread(void* arg)
 							
 							if(vid_frametime - vid_time[4][319] > 0)
 							{
-								sleep += vid_frametime - vid_time[4][319];
+								usleep((vid_frametime - vid_time[4][319]) * 1000);
+								/*sleep += vid_frametime - vid_time[4][319];
 								if(sleep > vid_frametime * 3)
 								{
 									usleep(sleep / 2 * 1000);
 									sleep -= (sleep / 2);
-								}
+								}*/
 							}
 							else if(vid_allow_skip_frames)
 								skip -= vid_frametime - vid_time[4][319];
@@ -309,7 +310,7 @@ void Sapp0_decode_thread(void* arg)
 			if(has_audio)
 			{
 				Util_audio_decoder_exit(1);
-				while(Util_speaker_is_playing(1))
+				while(Util_speaker_is_playing(1) && vid_play_request)
 					usleep(10000);
 				
 				Util_speaker_exit(1);
