@@ -349,7 +349,7 @@ void Sapp1_convert_thread(void* arg)
 	TickCounter counter[3];
 	Result_with_string result;
 
-	APT_SetAppCpuTimeLimit(80);
+	APT_SetAppCpuTimeLimit(30);
 	osTickCounterStart(&counter[0]);
 	osTickCounterStart(&counter[1]);
 	osTickCounterStart(&counter[2]);
