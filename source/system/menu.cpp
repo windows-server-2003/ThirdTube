@@ -17,7 +17,7 @@ bool menu_check_exit_request = false;
 bool menu_update_available = false;
 std::string menu_msg[DEF_MENU_NUM_OF_MSG];
 Thread menu_worker_thread, menu_send_app_info_thread, menu_check_connectivity_thread, menu_update_thread;
-C2D_Image menu_app_icon[3];
+C2D_Image menu_app_icon[4];
 
 bool Menu_query_must_exit_flag(void)
 {
@@ -96,7 +96,7 @@ void Menu_init(void)
 	if (var_allow_send_app_info)
 		menu_send_app_info_thread = threadCreate(Menu_send_app_info_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_LOW, 1, true);
 
-	result = Draw_load_texture("romfs:/gfx/draw/app_icon.t3x", 5, menu_app_icon, 0, 3);
+	result = Draw_load_texture("romfs:/gfx/draw/app_icon.t3x", 5, menu_app_icon, 0, 4);
 	Util_log_save(DEF_MENU_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 
 	Menu_get_system_info();
@@ -204,7 +204,8 @@ void Menu_main(void)
 #endif
 #ifdef DEF_ENABLE_SUB_APP1
 			Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 80.0, 0.0, 60.0, 60.0);
-			Draw(DEF_SAPP1_NAME, 90.0, 25.0, 0.4, 0.4, color);
+			Draw_texture(menu_app_icon[1], 80.0, 0.0, 60.0, 60.0);
+			//Draw(DEF_SAPP1_NAME, 90.0, 25.0, 0.4, 0.4, color);
 			if(Sapp1_query_init_flag())
 			{
 				Draw_texture(var_square_image[0], DEF_DRAW_WEAK_RED, 125.0, 0.0, 15.0, 15.0);
@@ -267,7 +268,7 @@ void Menu_main(void)
 #endif
 
 			Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 260.0, 170.0, 60.0, 60.0);
-			Draw_texture(menu_app_icon[1 + var_night_mode], 260.0, 170.0, 60.0, 60.0);
+			Draw_texture(menu_app_icon[2 + var_night_mode], 260.0, 170.0, 60.0, 60.0);
 			//Draw("Settings", 270.0, 205.0, 0.4, 0.4, color);
 
 			if(Util_err_query_error_show_flag())
