@@ -143,13 +143,13 @@ void Sapp1_decode_thread(void* arg)
 			}
 			if(has_video && vid_mvd_play_request)
 			{
-				result = Util_mvd_video_decoder_init();
-				Util_log_save(DEF_SAPP1_DECODE_THREAD_STR, "Util_mvd_video_decoder_init()..." + result.string + result.error_description, result.code);
+				result = Util_video_decoder_init(0, 1);
+				Util_log_save(DEF_SAPP1_DECODE_THREAD_STR, "Util_video_decoder_init()..." + result.string + result.error_description, result.code);
 				if(result.code != 0)
 					vid_mvd_play_request = false;
 
-				result = Util_video_decoder_init(0, 1);
-				Util_log_save(DEF_SAPP1_DECODE_THREAD_STR, "Util_video_decoder_init()..." + result.string + result.error_description, result.code);
+				result = Util_mvd_video_decoder_init();
+				Util_log_save(DEF_SAPP1_DECODE_THREAD_STR, "Util_mvd_video_decoder_init()..." + result.string + result.error_description, result.code);
 				if(result.code != 0)
 					vid_mvd_play_request = false;
 				
@@ -187,7 +187,7 @@ void Sapp1_decode_thread(void* arg)
 				Util_err_set_error_show_flag(true);
 				var_need_reflesh = true;
 			}
-
+			
 			osTickCounterUpdate(&counter[2]);
 			while(vid_mvd_play_request)
 			{
