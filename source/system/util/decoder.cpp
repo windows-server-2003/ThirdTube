@@ -19,6 +19,7 @@ AVCodecContext* util_audio_decoder_context[2] = { NULL, NULL, };
 AVCodec* util_audio_decoder_codec[2] = { NULL, NULL, };
 SwrContext* util_audio_decoder_swr_context[2] = { NULL, NULL, };
 
+bool util_video_decoder_mvd_first = false;
 bool util_video_decoder_lock[2][3] = { { false, false, false, }, { false, false, false, } };
 int util_video_decoder_buffer_num[2] = { 0, 0, };
 int util_video_decoder_ready_buffer_num[2] = { 0, 0, };
@@ -32,23 +33,17 @@ AVCodec* util_video_decoder_codec[2] = { NULL, NULL, };
 
 AVFormatContext* util_decoder_format_context[2] = { NULL, NULL, };
 
-int count__ = 0;
-
 Result_with_string Util_mvd_video_decoder_init(void)
 {
-	int log_num = 0;
 	Result_with_string result;
 
-	log_num = Util_log_save("", "mvdstdInit()...");
 	result.code = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE, NULL);
-	Util_log_add(log_num, "", result.code);
+	if(result.code != 0)
+		result.string = "mvdstdInit() failed. ";
+	else
+		util_video_decoder_mvd_first = true;
 
 	return result;
-}
-
-void Util_mvd_video_decoder_exit(void)
-{
-	mvdstdExit();
 }
 
 Result_with_string Util_decoder_open_file(std::string file_path, bool* has_audio, bool* has_video, int session)
@@ -446,9 +441,6 @@ Result_with_string Util_video_decoder_decode(int* width, int* height, bool* key_
 		goto fail;
 	}
 
-	/*Util_file_save_to_file(std::to_string(count__) + ".data", "/test/", util_video_decoder_packet[session]->data, util_video_decoder_packet[session]->size, true);
-	count__++;*/
-
 	ffmpeg_result = avcodec_send_packet(util_video_decoder_context[session], util_video_decoder_packet[session]);
 	if(ffmpeg_result == 0)
 	{
@@ -542,7 +534,7 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 	}
 
 	MVDSTD_Config config;
-	Util_log_save("", std::to_string(*width) + " " + std::to_string(*height));
+	//Util_log_save("", std::to_string(*width) + " " + std::to_string(*height));
 	mvdstdGenerateDefaultConfig(&config, *width, *height, *width, *height, NULL, NULL, NULL);
 
 	type = *((u8*)util_video_decoder_packet[session]->data + 4);
@@ -550,7 +542,7 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 	size = __builtin_bswap32(size);
 	packet = (u8*)linearAlloc(util_video_decoder_packet[session]->size);
 	
-	if(count__ == 0)
+	if(util_video_decoder_mvd_first)
 	{
 		offset = 0;
 		memset(packet, 0x0, 0x2);
@@ -584,7 +576,7 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 		log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
 		result.code = mvdstdProcessVideoFrame(packet, offset, 0, NULL);
 		Util_log_add(log_num, "", result.code);
-		count__ = 2;
+		util_video_decoder_mvd_first = false;
 	}
 
 	//Util_log_save("", std::to_string(size));
@@ -632,28 +624,22 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 	//config.physaddr_outdata0 = osConvertVirtToPhys(gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
 	config.physaddr_outdata0 = osConvertVirtToPhys(util_video_decoder_mvd_raw_data);
 
-	//log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
+	log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
 	//GSPGPU_FlushDataCache(packet, offset);
-	//Util_file_save_to_file(std::to_string(count__), "/test/", packet, offset, true);
-	//count__++;
 	result.code = mvdstdProcessVideoFrame(packet, offset, 0, NULL);
-	Util_log_save("", "mvdstdProcessVideoFrame()... ", result.code);
-	//Util_log_add(log_num, "", result.code);
+	//Util_log_save("", "mvdstdProcessVideoFrame()... ", result.code);
+	Util_log_add(log_num, "", result.code);
 
 	if(result.code == MVD_STATUS_FRAMEREADY)
 	{
-		//log_num = Util_log_save("", "mvdstdRenderVideoFrame()...");
+		log_num = Util_log_save("", "mvdstdRenderVideoFrame()...");
 		result.code = mvdstdRenderVideoFrame(&config, true);
-		Util_log_save("", "mvdstdRenderVideoFrame()...", result.code);
-		//Util_file_save_to_file("raw" + std::to_string(count__), "/test/", util_video_decoder_mvd_raw_data[session][util_video_decoder_buffer_num[session]], 256 * 144 * 2, true);
-		count__++;
+		//Util_log_save("", "mvdstdRenderVideoFrame()...", result.code);
 		//usleep(1000000);
-		//Util_log_add(log_num, "", result.code);
+		Util_log_add(log_num, "", result.code);
 		//GSPGPU_InvalidateDataCache GSPGPU_FlushDataCache(util_video_decoder_mvd_raw_data[session][util_video_decoder_buffer_num[session]], *width * *height * 2);
 		result.code = 0;
 		//gfxSwapBuffersGpu();
-		/*Util_file_save_to_file(std::to_string(count__) + "rawdata", "/test/", util_video_decoder_mvd_raw_data[session][util_video_decoder_buffer_num[session]], *width * *height * 2, true);
-		count__++;*/
 	}
 
 	/*ffmpeg_result = avcodec_send_packet(util_video_decoder_context[session], util_video_decoder_packet[session]);
@@ -807,6 +793,13 @@ void Util_video_decoder_exit(int session)
 	av_frame_free(&util_video_decoder_raw_data[session][0]);
 	av_frame_free(&util_video_decoder_raw_data[session][1]);
 	av_frame_free(&util_video_decoder_raw_data[session][2]);
+}
+
+void Util_mvd_video_decoder_exit(void)
+{
+	mvdstdExit();
+	linearFree(util_video_decoder_mvd_raw_data);
+	util_video_decoder_mvd_raw_data = NULL;
 }
 
 Result_with_string Util_image_decoder_decode(std::string file_name, u8** raw_data, int* width, int* height)
