@@ -123,34 +123,34 @@ void Sapp0_decode_thread(void* arg)
 				vid_time[5][i] = 0;
 			}
 
-			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 1);
+			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
 			if(result.code != 0)
 				vid_play_request = false;
 
 			if(has_audio && vid_play_request)
 			{
-				result = Util_audio_decoder_init(1);
+				result = Util_audio_decoder_init(0);
 				Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_audio_decoder_init()..." + result.string + result.error_description, result.code);
 				if(result.code != 0)
 					vid_play_request = false;
 
 				if(vid_play_request)
 				{
-					Util_audio_decoder_get_info(&bitrate, &sample_rate, &ch, &vid_audio_format, &vid_duration, 1);
-					Util_speaker_init(1, ch, sample_rate);
+					Util_audio_decoder_get_info(&bitrate, &sample_rate, &ch, &vid_audio_format, &vid_duration, 0);
+					Util_speaker_init(0, ch, sample_rate);
 				}
 			}
 			if(has_video && vid_play_request)
 			{
-				result = Util_video_decoder_init(0, 1);
+				result = Util_video_decoder_init(0, 0);
 				Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_init()..." + result.string + result.error_description, result.code);
 				if(result.code != 0)
 					vid_play_request = false;
 				
 				if(vid_play_request)
 				{
-					Util_video_decoder_get_info(&vid_width, &vid_height, &vid_framerate, &vid_video_format, &vid_duration, 1);
+					Util_video_decoder_get_info(&vid_width, &vid_height, &vid_framerate, &vid_video_format, &vid_duration, 0);
 					vid_frametime = (1000.0 / vid_framerate);
 
 					//fit to screen size
@@ -186,7 +186,7 @@ void Sapp0_decode_thread(void* arg)
 			osTickCounterUpdate(&counter[2]);
 			while(vid_play_request)
 			{
-				result = Util_decoder_read_packet(&type, 1);
+				result = Util_decoder_read_packet(&type, 0);
 				if(result.code != 0)
 					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_read_packet()..." + result.string + result.error_description, result.code);
 				
@@ -194,19 +194,19 @@ void Sapp0_decode_thread(void* arg)
 
 				if(vid_pause_request)
 				{
-					Util_speaker_pause(1);
+					Util_speaker_pause(0);
 					while(vid_pause_request && vid_play_request && !vid_seek_request && !vid_change_video_request)
 						usleep(20000);
 					
-					Util_speaker_resume(1);
+					Util_speaker_resume(0);
 				}
 
 				if(vid_seek_request)
 				{
 					//µs
-					result = Util_decoder_seek(vid_seek_pos * 1000, 8, 1);
+					result = Util_decoder_seek(vid_seek_pos * 1000, 8, 0);
 					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_seek()..." + result.string + result.error_description, result.code);
-					Util_speaker_clear_buffer(1);
+					Util_speaker_clear_buffer(0);
 					vid_seek_request = false;
 				}
 
@@ -215,11 +215,11 @@ void Sapp0_decode_thread(void* arg)
 
 				if(type == "audio")
 				{
-					result = Util_decoder_ready_audio_packet(1);
+					result = Util_decoder_ready_audio_packet(0);
 					if(result.code == 0)
 					{
 						osTickCounterUpdate(&counter[1]);
-						result = Util_audio_decoder_decode(&audio_size, &audio, &pos, 1);
+						result = Util_audio_decoder_decode(&audio_size, &audio, &pos, 0);
 						osTickCounterUpdate(&counter[1]);
 						vid_time[1][319] = osTickCounterRead(&counter[1]);
 						for(int i = 1; i < 320; i++)
@@ -232,7 +232,7 @@ void Sapp0_decode_thread(void* arg)
 						{
 							while(true)
 							{
-								result = Util_speaker_add_buffer(1, ch, audio, audio_size);
+								result = Util_speaker_add_buffer(0, ch, audio, audio_size);
 								if(result.code == 0 || !vid_play_request || vid_seek_request || vid_change_video_request)
 									break;
 								
@@ -253,11 +253,11 @@ void Sapp0_decode_thread(void* arg)
 					if(vid_allow_skip_frames && skip > vid_frametime)
 					{
 						skip -= vid_frametime;
-						Util_decoder_skip_video_packet(1);
+						Util_decoder_skip_video_packet(0);
 					}
 					else
 					{
-						result = Util_decoder_ready_video_packet(1);
+						result = Util_decoder_ready_video_packet(0);
 
 						if(result.code == 0)
 						{
@@ -265,7 +265,7 @@ void Sapp0_decode_thread(void* arg)
 								usleep(1000);
 
 							osTickCounterUpdate(&counter[0]);
-							result = Util_video_decoder_decode(&w, &h, &key, &pos, 1);
+							result = Util_video_decoder_decode(&w, &h, &key, &pos, 0);
 							osTickCounterUpdate(&counter[0]);
 							vid_time[0][319] = osTickCounterRead(&counter[0]);
 							for(int i = 1; i < 320; i++)
@@ -309,14 +309,16 @@ void Sapp0_decode_thread(void* arg)
 
 			if(has_audio)
 			{
-				Util_audio_decoder_exit(1);
-				while(Util_speaker_is_playing(1) && vid_play_request)
+				Util_audio_decoder_exit(0);
+				while(Util_speaker_is_playing(0) && vid_play_request)
 					usleep(10000);
 				
-				Util_speaker_exit(1);
+				Util_speaker_exit(0);
 			}
 			if(has_video)
-				Util_video_decoder_exit(1);
+				Util_video_decoder_exit(0);
+
+			Util_decoder_close_file(0);
 
 			vid_pause_request = false;
 			vid_seek_request = false;
@@ -357,7 +359,7 @@ void Sapp0_convert_thread(void* arg)
 				{
 					vid_wait_request = true;
 					osTickCounterUpdate(&counter[2]);
-					result = Util_video_decoder_get_image(&yuv_video, vid_width, vid_height, 1);
+					result = Util_video_decoder_get_image(&yuv_video, vid_width, vid_height, 0);
 					
 					vid_convert_request = false;
 					vid_wait_request = false;

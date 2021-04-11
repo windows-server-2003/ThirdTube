@@ -2,8 +2,6 @@
 
 Result_with_string Util_mvd_video_decoder_init(void);
 
-void Util_mvd_video_decoder_exit(void);
-
 Result_with_string Util_decoder_open_file(std::string file_path, bool* has_audio, bool* has_video, int session);
 
 Result_with_string Util_audio_decoder_init(int session);
@@ -41,5 +39,7 @@ void Util_decoder_close_file(int session);
 void Util_audio_decoder_exit(int session);
 
 void Util_video_decoder_exit(int session);
+
+void Util_mvd_video_decoder_exit(void);
 
 Result_with_string Util_image_decoder_decode(std::string file_name, u8** raw_data, int* width, int* height);

@@ -37,6 +37,8 @@ std::string vid_mvd_video_format = "n/a";
 std::string vid_mvd_audio_format = "n/a";
 std::string vid_mvd_msg[DEF_SAPP1_NUM_OF_MSG];
 Image_data vid_mvd_image[8];
+C2D_Image vid_mvd_banner[2];
+C2D_Image vid_mvd_control[2];
 Thread vid_mvd_decode_thread, vid_mvd_convert_thread;
 
 void Sapp1_callback(std::string file, std::string dir)
@@ -289,12 +291,13 @@ void Sapp1_decode_thread(void* arg)
 							
 							if(vid_mvd_frametime - vid_mvd_time[4][319] > 0)
 							{
-								sleep += vid_mvd_frametime - vid_mvd_time[4][319];
+								usleep((vid_mvd_frametime - vid_mvd_time[4][319]) * 1000);
+								/*sleep += vid_mvd_frametime - vid_mvd_time[4][319];
 								if(sleep > vid_mvd_frametime * 3)
 								{
 									usleep(sleep / 2 * 1000);
 									sleep -= (sleep / 2);
-								}
+								}*/
 							}
 							else if(vid_mvd_allow_skip_frames)
 								skip -= vid_mvd_frametime - vid_mvd_time[4][319];
@@ -314,7 +317,7 @@ void Sapp1_decode_thread(void* arg)
 			if(has_audio)
 			{
 				Util_audio_decoder_exit(1);
-				while(Util_speaker_is_playing(1))
+				while(Util_speaker_is_playing(1) && vid_mvd_play_request)
 					usleep(10000);
 				
 				Util_speaker_exit(1);
@@ -325,6 +328,11 @@ void Sapp1_decode_thread(void* arg)
 				Util_mvd_video_decoder_exit();
 			}
 
+			Util_decoder_close_file(1);
+
+			free(audio);
+			audio = NULL;
+			
 			vid_mvd_pause_request = false;
 			vid_mvd_seek_request = false;
 			if(!vid_mvd_change_video_request)
@@ -532,6 +540,12 @@ void Sapp1_init(void)
 		}
 	}
 
+	result = Draw_load_texture("romfs:/gfx/draw/video_player/banner.t3x", 63, vid_mvd_banner, 0, 2);
+	Util_log_save(DEF_SAPP1_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+
+	result = Draw_load_texture("romfs:/gfx/draw/video_player/control.t3x", 64, vid_mvd_control, 0, 2);
+	Util_log_save(DEF_SAPP1_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+
 	vid_mvd_detail_mode = false;
 	vid_mvd_show_controls = false;
 	vid_mvd_allow_skip_frames = false;
@@ -576,6 +590,9 @@ void Sapp1_exit(void)
 	threadFree(vid_mvd_decode_thread);
 	threadFree(vid_mvd_convert_thread);
 
+	Draw_free_texture(63);
+	Draw_free_texture(64);
+
 	for(int i = 0; i < 4; i++)
 		Draw_c2d_image_free(vid_mvd_image[i]);
 	
@@ -602,14 +619,19 @@ void Sapp1_main(void)
 		Draw_frame_ready();
 		Draw_screen_ready(0, back_color);
 
-		//video
-		Draw_texture(vid_mvd_image[0].c2d, vid_mvd_x, vid_mvd_y, vid_mvd_tex_width[0] * vid_mvd_zoom, vid_mvd_tex_height[0] * vid_mvd_zoom);
-		if(vid_mvd_width > 1024)
-			Draw_texture(vid_mvd_image[1].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom), vid_mvd_y, vid_mvd_tex_width[1] * vid_mvd_zoom, vid_mvd_tex_height[1] * vid_mvd_zoom);
-		if(vid_mvd_height > 1024)
-			Draw_texture(vid_mvd_image[2].c2d, vid_mvd_x, (vid_mvd_y + vid_mvd_tex_width[0] * vid_mvd_zoom), vid_mvd_tex_width[2] * vid_mvd_zoom, vid_mvd_tex_height[2] * vid_mvd_zoom);
-		if(vid_mvd_width > 1024 && vid_mvd_height > 1024)
-			Draw_texture(vid_mvd_image[3].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom), (vid_mvd_y + vid_mvd_tex_height[0] * vid_mvd_zoom), vid_mvd_tex_width[3] * vid_mvd_zoom, vid_mvd_tex_height[3] * vid_mvd_zoom);
+		if(vid_mvd_play_request)
+		{
+			//video
+			Draw_texture(vid_mvd_image[0].c2d, vid_mvd_x, vid_mvd_y, vid_mvd_tex_width[0] * vid_mvd_zoom, vid_mvd_tex_height[0] * vid_mvd_zoom);
+			if(vid_mvd_width > 1024)
+				Draw_texture(vid_mvd_image[1].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom), vid_mvd_y, vid_mvd_tex_width[1] * vid_mvd_zoom, vid_mvd_tex_height[1] * vid_mvd_zoom);
+			if(vid_mvd_height > 1024)
+				Draw_texture(vid_mvd_image[2].c2d, vid_mvd_x, (vid_mvd_y + vid_mvd_tex_width[0] * vid_mvd_zoom), vid_mvd_tex_width[2] * vid_mvd_zoom, vid_mvd_tex_height[2] * vid_mvd_zoom);
+			if(vid_mvd_width > 1024 && vid_mvd_height > 1024)
+				Draw_texture(vid_mvd_image[3].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom), (vid_mvd_y + vid_mvd_tex_height[0] * vid_mvd_zoom), vid_mvd_tex_width[3] * vid_mvd_zoom, vid_mvd_tex_height[3] * vid_mvd_zoom);
+		}
+		else
+			Draw_texture(vid_mvd_banner[var_night_mode], 0, 15, 400, 225);
 
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
@@ -625,14 +647,17 @@ void Sapp1_main(void)
 		Draw(vid_mvd_audio_format, 0, 20, 0.5, 0.5, color);
 		Draw(std::to_string(vid_mvd_width) + "x" + std::to_string(vid_mvd_height) + "@" + std::to_string(vid_mvd_framerate).substr(0, 5) + "fps", 0, 30, 0.5, 0.5, color);
 
-		//video
-		Draw_texture(vid_mvd_image[0].c2d, vid_mvd_x - 40, vid_mvd_y - 240, vid_mvd_tex_width[0] * vid_mvd_zoom, vid_mvd_tex_height[0] * vid_mvd_zoom);
-		if(vid_mvd_width > 1024)
-			Draw_texture(vid_mvd_image[1].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom) - 40, vid_mvd_y - 240, vid_mvd_tex_width[1] * vid_mvd_zoom, vid_mvd_tex_height[1] * vid_mvd_zoom);
-		if(vid_mvd_height > 1024)
-			Draw_texture(vid_mvd_image[2].c2d, vid_mvd_x - 40, (vid_mvd_y + vid_mvd_tex_width[0] * vid_mvd_zoom) - 240, vid_mvd_tex_width[2] * vid_mvd_zoom, vid_mvd_tex_height[2] * vid_mvd_zoom);
-		if(vid_mvd_width > 1024 && vid_mvd_height > 1024)
-			Draw_texture(vid_mvd_image[3].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom) - 40, (vid_mvd_y + vid_mvd_tex_height[0] * vid_mvd_zoom) - 240, vid_mvd_tex_width[3] * vid_mvd_zoom, vid_mvd_tex_height[3] * vid_mvd_zoom);
+		if(vid_mvd_play_request)
+		{
+			//video
+			Draw_texture(vid_mvd_image[0].c2d, vid_mvd_x - 40, vid_mvd_y - 240, vid_mvd_tex_width[0] * vid_mvd_zoom, vid_mvd_tex_height[0] * vid_mvd_zoom);
+			if(vid_mvd_width > 1024)
+				Draw_texture(vid_mvd_image[1].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom) - 40, vid_mvd_y - 240, vid_mvd_tex_width[1] * vid_mvd_zoom, vid_mvd_tex_height[1] * vid_mvd_zoom);
+			if(vid_mvd_height > 1024)
+				Draw_texture(vid_mvd_image[2].c2d, vid_mvd_x - 40, (vid_mvd_y + vid_mvd_tex_width[0] * vid_mvd_zoom) - 240, vid_mvd_tex_width[2] * vid_mvd_zoom, vid_mvd_tex_height[2] * vid_mvd_zoom);
+			if(vid_mvd_width > 1024 && vid_mvd_height > 1024)
+				Draw_texture(vid_mvd_image[3].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom) - 40, (vid_mvd_y + vid_mvd_tex_height[0] * vid_mvd_zoom) - 240, vid_mvd_tex_width[3] * vid_mvd_zoom, vid_mvd_tex_height[3] * vid_mvd_zoom);
+		}
 
 		//controls
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, 165, 145, 10);
@@ -677,8 +702,14 @@ void Sapp1_main(void)
 
 		if(vid_mvd_show_controls)
 		{
-			Draw_texture(var_square_image[0], DEF_DRAW_AQUA, 80, 40, 160, 130);
-			Draw(vid_mvd_msg[3], 82.5, 40, 0.5, 0.5, DEF_DRAW_BLACK);
+			Draw_texture(vid_mvd_control[var_night_mode], 80, 20, 160, 160);
+			Draw(vid_mvd_msg[5], 122.5, 47.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_mvd_msg[6], 122.5, 62.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_mvd_msg[7], 122.5, 77.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_mvd_msg[8], 122.5, 92.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_mvd_msg[9], 135, 107.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_mvd_msg[10], 122.5, 122.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_mvd_msg[11], 132.5, 137.5, 0.45, 0.45, DEF_DRAW_BLACK);
 		}
 
 		if(Util_expl_query_show_flag())
