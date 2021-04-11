@@ -96,7 +96,7 @@ void Menu_init(void)
 	if (var_allow_send_app_info)
 		menu_send_app_info_thread = threadCreate(Menu_send_app_info_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_LOW, 1, true);
 
-	result = Draw_load_texture("romfs:/gfx/draw/app_icon.t3x", 5, menu_app_icon, 0, 4);
+	result = Draw_load_texture("romfs:/gfx/draw/app_icon.t3x", 60, menu_app_icon, 0, 4);
 	Util_log_save(DEF_MENU_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 
 	Menu_get_system_info();

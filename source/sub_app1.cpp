@@ -187,7 +187,7 @@ void Sapp1_decode_thread(void* arg)
 				Util_err_set_error_show_flag(true);
 				var_need_reflesh = true;
 			}
-			
+
 			osTickCounterUpdate(&counter[2]);
 			while(vid_mvd_play_request)
 			{
@@ -349,7 +349,7 @@ void Sapp1_convert_thread(void* arg)
 	TickCounter counter[3];
 	Result_with_string result;
 
-	APT_SetAppCpuTimeLimit(30);
+	APT_SetAppCpuTimeLimit(5);
 	osTickCounterStart(&counter[0]);
 	osTickCounterStart(&counter[1]);
 	osTickCounterStart(&counter[2]);

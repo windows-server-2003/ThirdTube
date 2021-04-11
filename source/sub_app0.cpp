@@ -37,6 +37,8 @@ std::string vid_video_format = "n/a";
 std::string vid_audio_format = "n/a";
 std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
 Image_data vid_image[8];
+C2D_Image vid_banner[2];
+C2D_Image vid_control[2];
 Thread vid_decode_thread, vid_convert_thread;
 
 void Sapp0_callback(std::string file, std::string dir)
@@ -72,7 +74,6 @@ void Sapp0_decode_thread(void* arg)
 	int audio_size = 0;
 	int w = 0;
 	int h = 0;
-	int sleep = 0;
 	int skip = 0;
 	double pos = 0;
 	bool key = false;
@@ -91,7 +92,6 @@ void Sapp0_decode_thread(void* arg)
 	{
 		if(vid_play_request || vid_change_video_request)
 		{
-			sleep = 0;
 			skip = 0;
 			vid_x = 0;
 			vid_y = 15;
@@ -525,6 +525,12 @@ void Sapp0_init(void)
 		}
 	}
 
+	result = Draw_load_texture("romfs:/gfx/draw/video_player/banner.t3x", 61, vid_banner, 0, 2);
+	Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+
+	result = Draw_load_texture("romfs:/gfx/draw/video_player/control.t3x", 62, vid_control, 0, 2);
+	Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+
 	vid_detail_mode = false;
 	vid_show_controls = false;
 	vid_allow_skip_frames = false;
@@ -569,6 +575,9 @@ void Sapp0_exit(void)
 	threadFree(vid_decode_thread);
 	threadFree(vid_convert_thread);
 
+	Draw_free_texture(61);
+	Draw_free_texture(62);
+
 	for(int i = 0; i < 4; i++)
 		Draw_c2d_image_free(vid_image[i]);
 	
@@ -595,14 +604,19 @@ void Sapp0_main(void)
 		Draw_frame_ready();
 		Draw_screen_ready(0, back_color);
 
-		//video
-		Draw_texture(vid_image[0].c2d, vid_x, vid_y, vid_tex_width[0] * vid_zoom, vid_tex_height[0] * vid_zoom);
-		if(vid_width > 1024)
-			Draw_texture(vid_image[1].c2d, (vid_x + vid_tex_width[0] * vid_zoom), vid_y, vid_tex_width[1] * vid_zoom, vid_tex_height[1] * vid_zoom);
-		if(vid_height > 1024)
-			Draw_texture(vid_image[2].c2d, vid_x, (vid_y + vid_tex_width[0] * vid_zoom), vid_tex_width[2] * vid_zoom, vid_tex_height[2] * vid_zoom);
-		if(vid_width > 1024 && vid_height > 1024)
-			Draw_texture(vid_image[3].c2d, (vid_x + vid_tex_width[0] * vid_zoom), (vid_y + vid_tex_height[0] * vid_zoom), vid_tex_width[3] * vid_zoom, vid_tex_height[3] * vid_zoom);
+		if(vid_play_request)
+		{
+			//video
+			Draw_texture(vid_image[0].c2d, vid_x, vid_y, vid_tex_width[0] * vid_zoom, vid_tex_height[0] * vid_zoom);
+			if(vid_width > 1024)
+				Draw_texture(vid_image[1].c2d, (vid_x + vid_tex_width[0] * vid_zoom), vid_y, vid_tex_width[1] * vid_zoom, vid_tex_height[1] * vid_zoom);
+			if(vid_height > 1024)
+				Draw_texture(vid_image[2].c2d, vid_x, (vid_y + vid_tex_width[0] * vid_zoom), vid_tex_width[2] * vid_zoom, vid_tex_height[2] * vid_zoom);
+			if(vid_width > 1024 && vid_height > 1024)
+				Draw_texture(vid_image[3].c2d, (vid_x + vid_tex_width[0] * vid_zoom), (vid_y + vid_tex_height[0] * vid_zoom), vid_tex_width[3] * vid_zoom, vid_tex_height[3] * vid_zoom);
+		}
+		else
+			Draw_texture(vid_banner[var_night_mode], 0, 15, 400, 225);
 
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
@@ -618,14 +632,17 @@ void Sapp0_main(void)
 		Draw(vid_audio_format, 0, 20, 0.5, 0.5, color);
 		Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, 30, 0.5, 0.5, color);
 
-		//video
-		Draw_texture(vid_image[0].c2d, vid_x - 40, vid_y - 240, vid_tex_width[0] * vid_zoom, vid_tex_height[0] * vid_zoom);
-		if(vid_width > 1024)
-			Draw_texture(vid_image[1].c2d, (vid_x + vid_tex_width[0] * vid_zoom) - 40, vid_y - 240, vid_tex_width[1] * vid_zoom, vid_tex_height[1] * vid_zoom);
-		if(vid_height > 1024)
-			Draw_texture(vid_image[2].c2d, vid_x - 40, (vid_y + vid_tex_width[0] * vid_zoom) - 240, vid_tex_width[2] * vid_zoom, vid_tex_height[2] * vid_zoom);
-		if(vid_width > 1024 && vid_height > 1024)
-			Draw_texture(vid_image[3].c2d, (vid_x + vid_tex_width[0] * vid_zoom) - 40, (vid_y + vid_tex_height[0] * vid_zoom) - 240, vid_tex_width[3] * vid_zoom, vid_tex_height[3] * vid_zoom);
+		if(vid_play_request)
+		{
+			//video
+			Draw_texture(vid_image[0].c2d, vid_x - 40, vid_y - 240, vid_tex_width[0] * vid_zoom, vid_tex_height[0] * vid_zoom);
+			if(vid_width > 1024)
+				Draw_texture(vid_image[1].c2d, (vid_x + vid_tex_width[0] * vid_zoom) - 40, vid_y - 240, vid_tex_width[1] * vid_zoom, vid_tex_height[1] * vid_zoom);
+			if(vid_height > 1024)
+				Draw_texture(vid_image[2].c2d, vid_x - 40, (vid_y + vid_tex_width[0] * vid_zoom) - 240, vid_tex_width[2] * vid_zoom, vid_tex_height[2] * vid_zoom);
+			if(vid_width > 1024 && vid_height > 1024)
+				Draw_texture(vid_image[3].c2d, (vid_x + vid_tex_width[0] * vid_zoom) - 40, (vid_y + vid_tex_height[0] * vid_zoom) - 240, vid_tex_width[3] * vid_zoom, vid_tex_height[3] * vid_zoom);
+		}
 
 		//controls
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, 165, 145, 10);
@@ -637,7 +654,7 @@ void Sapp0_main(void)
 
 		//allow skip frames
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, 180, 145, 10);
-		Draw(vid_msg[4 + vid_allow_skip_frames], 167.5, 180, 0.4, 0.4, color);
+		Draw(vid_msg[3 + vid_allow_skip_frames], 167.5, 180, 0.4, 0.4, color);
 
 		//time bar
 		Draw(Util_convert_seconds_to_time(vid_current_pos / 1000) + "/" + Util_convert_seconds_to_time(vid_duration), 110, 210, 0.5, 0.5, color);
@@ -670,8 +687,14 @@ void Sapp0_main(void)
 
 		if(vid_show_controls)
 		{
-			Draw_texture(var_square_image[0], DEF_DRAW_AQUA, 80, 40, 160, 130);
-			Draw(vid_msg[3], 82.5, 40, 0.5, 0.5, DEF_DRAW_BLACK);
+			Draw_texture(vid_control[var_night_mode], 80, 20, 160, 160);
+			Draw(vid_msg[5], 122.5, 47.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_msg[6], 122.5, 62.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_msg[7], 122.5, 77.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_msg[8], 122.5, 92.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_msg[9], 135, 107.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_msg[10], 122.5, 122.5, 0.45, 0.45, DEF_DRAW_BLACK);
+			Draw(vid_msg[11], 132.5, 137.5, 0.45, 0.45, DEF_DRAW_BLACK);
 		}
 
 		if(Util_expl_query_show_flag())
