@@ -22,7 +22,7 @@
 //#define DEF_ENABLE_SUB_APP7
 
 //video player
-#define DEF_SAPP0_NUM_OF_MSG 6
+#define DEF_SAPP0_NUM_OF_MSG 12
 #define DEF_SAPP0_NAME (std::string)"Video\nplayer"
 #define DEF_SAPP0_VER (std::string)"v1.0.1"
 #define DEF_SAPP0_MAIN_STR (std::string)"Vid/Main"
@@ -31,8 +31,8 @@
 #define DEF_SAPP0_DECODE_THREAD_STR (std::string)"Vid/Decode thread"
 #define DEF_SAPP0_CONVERT_THREAD_STR (std::string)"Vid/Convert thread"
 
-//sample app 1
-#define DEF_SAPP1_NUM_OF_MSG 6
+//video player(mvd)
+#define DEF_SAPP1_NUM_OF_MSG 12
 #define DEF_SAPP1_NAME (std::string)"mvd test"
 #define DEF_SAPP1_VER (std::string)"v1.0.0"
 #define DEF_SAPP1_MAIN_STR (std::string)"Vid/Main"
