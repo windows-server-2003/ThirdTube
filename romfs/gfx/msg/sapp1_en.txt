@@ -10,3 +10,8 @@
 <9>Move the video</9>
 <10>Seek</10>
 <11>Zoom out/in</11>
+<12>H.264 hardware decoder β
+Known issues : 
+⁂Video won't play in some resolution
+⁂Video will not be decoded correctly at first
+</12>

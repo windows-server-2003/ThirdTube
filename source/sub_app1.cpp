@@ -180,6 +180,13 @@ void Sapp1_decode_thread(void* arg)
 						vid_mvd_width = 480;
 					if(vid_mvd_width == 644)
 						vid_mvd_width = 656;*/
+					if(vid_mvd_video_format != "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10")
+					{
+						result.code = DEF_ERR_OTHER;
+						result.string = "[Error] H264 only";
+						vid_mvd_play_request = false;
+					}
+
 				}
 			}
 
@@ -509,8 +516,9 @@ void Sapp1_init(void)
 	}
 	else
 	{
-		vid_mvd_decode_thread = threadCreate(Sapp1_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
-		vid_mvd_convert_thread = threadCreate(Sapp1_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+		vid_mvd_thread_run = false;
+		Util_err_set_error_message("[Error] New 3DS only", "", DEF_SAPP1_INIT_STR, DEF_ERR_OTHER);
+		Util_err_set_error_show_flag(true);
 	}
 
 	for(int i = 0; i < 4; i++)
@@ -631,7 +639,10 @@ void Sapp1_main(void)
 				Draw_texture(vid_mvd_image[3].c2d, (vid_mvd_x + vid_mvd_tex_width[0] * vid_mvd_zoom), (vid_mvd_y + vid_mvd_tex_height[0] * vid_mvd_zoom), vid_mvd_tex_width[3] * vid_mvd_zoom, vid_mvd_tex_height[3] * vid_mvd_zoom);
 		}
 		else
+		{
 			Draw_texture(vid_mvd_banner[var_night_mode], 0, 15, 400, 225);
+			Draw(vid_mvd_msg[12], 0, 15, 0.5, 0.5, DEF_DRAW_RED);
+		}
 
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
@@ -669,7 +680,7 @@ void Sapp1_main(void)
 
 		//allow skip frames
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, 180, 145, 10);
-		Draw(vid_mvd_msg[4 + vid_mvd_allow_skip_frames], 167.5, 180, 0.4, 0.4, color);
+		Draw(vid_mvd_msg[3 + vid_mvd_allow_skip_frames], 167.5, 180, 0.4, 0.4, color);
 
 		//time bar
 		Draw(Util_convert_seconds_to_time(vid_mvd_current_pos / 1000) + "/" + Util_convert_seconds_to_time(vid_mvd_duration), 110, 210, 0.5, 0.5, color);
