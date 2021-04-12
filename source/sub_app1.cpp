@@ -186,7 +186,6 @@ void Sapp1_decode_thread(void* arg)
 						result.string = "[Error] H264 only";
 						vid_mvd_play_request = false;
 					}
-
 				}
 			}
 
