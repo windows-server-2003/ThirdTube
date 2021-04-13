@@ -33,6 +33,8 @@ AVCodec* util_video_decoder_codec[2] = { NULL, NULL, };
 
 AVFormatContext* util_decoder_format_context[2] = { NULL, NULL, };
 
+int debug_count = 0;
+
 Result_with_string Util_mvd_video_decoder_init(void)
 {
 	Result_with_string result;
@@ -500,13 +502,11 @@ Result_with_string Util_video_decoder_decode(int* width, int* height, bool* key_
 
 Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* key_frame, double* current_pos, int session)
 {
-	int ffmpeg_result = 0;
 	int offset = 0;
+	int source_offset = 0;
 	int count = 0;
 	int size = 0;
-	int size_ = 0;
 	int log_num = 0;
-	u8 type = 0;
 	double framerate = (double)util_decoder_format_context[session]->streams[util_video_decoder_stream_num[session]]->avg_frame_rate.num / util_decoder_format_context[session]->streams[util_video_decoder_stream_num[session]]->avg_frame_rate.den;
 	double current_frame = (double)util_video_decoder_packet[session]->dts / util_video_decoder_packet[session]->duration;
 	u8* packet = NULL;
@@ -533,17 +533,17 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 		goto fail;
 	}
 
+	/*Util_file_save_to_file(std::to_string(debug_count), "/test/", util_video_decoder_packet[session]->data, util_video_decoder_packet[session]->size, true);
+	debug_count++;*/
 	MVDSTD_Config config;
 	//Util_log_save("", std::to_string(*width) + " " + std::to_string(*height));
 	mvdstdGenerateDefaultConfig(&config, *width, *height, *width, *height, NULL, NULL, NULL);
-
-	type = *((u8*)util_video_decoder_packet[session]->data + 4);
-	size = *((int*)util_video_decoder_packet[session]->data);
-	size = __builtin_bswap32(size);
-	packet = (u8*)linearAlloc(util_video_decoder_packet[session]->size);
 	
+	packet = (u8*)linearAlloc(util_video_decoder_packet[session]->size);	
 	if(util_video_decoder_mvd_first)
 	{
+		//set extra data
+
 		offset = 0;
 		memset(packet, 0x0, 0x2);
 		offset += 2;
@@ -576,7 +576,6 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 		log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
 		result.code = mvdstdProcessVideoFrame(packet, offset, 0, NULL);
 		Util_log_add(log_num, "", result.code);
-		util_video_decoder_mvd_first = false;
 	}
 
 	//Util_log_save("", std::to_string(size));
@@ -593,26 +592,25 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 	//Util_log_save("", std::to_string(*(util_video_decoder_context[session]->extradata + 7)));
 
 	offset = 0;
-	memset(packet, 0x0, 0x2);
-	offset += 2;
-	memset(packet + offset, 0x1, 0x1);
-	offset += 1;
-	memcpy(packet + offset, util_video_decoder_packet[session]->data + 4, size);
-	offset += size;
+	source_offset = 0;
 
-	//Util_log_save("", "type " + std::to_string(type));
-
-	if(type == 0x6)
+	while(source_offset + 4 < util_video_decoder_packet[session]->size)
 	{
-		size_ = *((int*)(util_video_decoder_packet[session]->data + 4 + size));
-		size_ = __builtin_bswap32(size_);
+		//get nal size
+		size = *((int*)(util_video_decoder_packet[session]->data + source_offset));
+		size = __builtin_bswap32(size);
+		source_offset += 4;
 
+		//set nal prefix 0x0 0x0 0x1
 		memset(packet + offset, 0x0, 0x2);
 		offset += 2;
 		memset(packet + offset, 0x1, 0x1);
 		offset += 1;
-		memcpy(packet + offset, util_video_decoder_packet[session]->data + 8 + size, size_);
-		offset += size_;
+
+		//copy raw nal data
+		memcpy(packet + offset, (util_video_decoder_packet[session]->data + source_offset), size);
+		offset += size;
+		source_offset += size;
 	}
 
 	//Util_log_save("", std::to_string(*(util_video_decoder_packet[session]->data + 3)));
@@ -629,6 +627,15 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 	result.code = mvdstdProcessVideoFrame(packet, offset, 0, NULL);
 	//Util_log_save("", "mvdstdProcessVideoFrame()... ", result.code);
 	Util_log_add(log_num, "", result.code);
+
+	if(util_video_decoder_mvd_first)
+	{
+		//Do I need to send same nal data at first frame?
+		log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
+		result.code = mvdstdProcessVideoFrame(packet, offset, 0, NULL);
+		Util_log_add(log_num, "", result.code);
+		util_video_decoder_mvd_first = false;
+	}
 
 	if(result.code == MVD_STATUS_FRAMEREADY)
 	{
