@@ -34,12 +34,13 @@ AVCodec* util_video_decoder_codec[2] = { NULL, NULL, };
 AVFormatContext* util_decoder_format_context[2] = { NULL, NULL, };
 
 int debug_count = 0;
+	MVDSTD_Config config;
 
 Result_with_string Util_mvd_video_decoder_init(void)
 {
 	Result_with_string result;
 
-	result.code = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE, NULL);
+	result.code = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE * 2, NULL);
 	if(result.code != 0)
 		result.string = "mvdstdInit() failed. ";
 	else
@@ -443,6 +444,9 @@ Result_with_string Util_video_decoder_decode(int* width, int* height, bool* key_
 		goto fail;
 	}
 
+	/*Util_file_save_to_file(std::to_string(debug_count), "/test/", util_video_decoder_packet[session]->data, util_video_decoder_packet[session]->size, true);
+	debug_count++;*/
+
 	ffmpeg_result = avcodec_send_packet(util_video_decoder_context[session], util_video_decoder_packet[session]);
 	if(ffmpeg_result == 0)
 	{
@@ -535,7 +539,6 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 
 	/*Util_file_save_to_file(std::to_string(debug_count), "/test/", util_video_decoder_packet[session]->data, util_video_decoder_packet[session]->size, true);
 	debug_count++;*/
-	MVDSTD_Config config;
 	//Util_log_save("", std::to_string(*width) + " " + std::to_string(*height));
 	mvdstdGenerateDefaultConfig(&config, *width, *height, *width, *height, NULL, NULL, NULL);
 	
@@ -638,16 +641,7 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 	}
 
 	if(result.code == MVD_STATUS_FRAMEREADY)
-	{
-		log_num = Util_log_save("", "mvdstdRenderVideoFrame()...");
-		result.code = mvdstdRenderVideoFrame(&config, true);
-		//Util_log_save("", "mvdstdRenderVideoFrame()...", result.code);
-		//usleep(1000000);
-		Util_log_add(log_num, "", result.code);
-		//GSPGPU_InvalidateDataCache GSPGPU_FlushDataCache(util_video_decoder_mvd_raw_data[session][util_video_decoder_buffer_num[session]], *width * *height * 2);
 		result.code = 0;
-		//gfxSwapBuffersGpu();
-	}
 
 	/*ffmpeg_result = avcodec_send_packet(util_video_decoder_context[session], util_video_decoder_packet[session]);
 	if(ffmpeg_result == 0)
@@ -756,6 +750,9 @@ Result_with_string Util_mvd_video_decoder_get_image(u8** raw_data, int width, in
 		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
 		return result;
 	}
+
+	result.code = mvdstdRenderVideoFrame(&config, true);
+	result.code = 0;
 
 	memcpy_asm(*raw_data, util_video_decoder_mvd_raw_data, cpy_size);
 	

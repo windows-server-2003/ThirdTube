@@ -515,8 +515,8 @@ void Sapp1_init(void)
 	vid_mvd_thread_run = true;
 	if(new_3ds)
 	{
-		vid_mvd_decode_thread = threadCreate(Sapp1_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
-		vid_mvd_convert_thread = threadCreate(Sapp1_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+		vid_mvd_decode_thread = threadCreate(Sapp1_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 0, false);
+		vid_mvd_convert_thread = threadCreate(Sapp1_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
 	}
 	else
 	{
@@ -793,7 +793,7 @@ void Sapp1_main(void)
 		else if(key.p_touch && key.touch_x >= 10 && key.touch_x <= 154 && key.touch_y >= 180 && key.touch_y <= 189)
 		{
 			vid_mvd_linear_filter = !vid_mvd_linear_filter;
-			for(int i = 0; i < 4; i++)
+			for(int i = 0; i < 8; i++)
 				Draw_c2d_image_set_filter(&vid_mvd_image[i], vid_mvd_linear_filter);
 
 			var_need_reflesh = true;
