@@ -378,18 +378,18 @@ void Sapp1_convert_thread(void* arg)
 				{
 					vid_mvd_wait_request = true;
 					osTickCounterUpdate(&counter[2]);
+					osTickCounterUpdate(&counter[0]);
 					result = Util_mvd_video_decoder_get_image(&video, vid_mvd_width, vid_mvd_height, 1);
+					osTickCounterUpdate(&counter[0]);
+					vid_mvd_time[2][319] = osTickCounterRead(&counter[0]);
+					for(int i = 1; i < 320; i++)
+						vid_mvd_time[2][i - 1] = vid_mvd_time[2][i];
 					
 					vid_mvd_convert_request = false;
 					vid_mvd_wait_request = false;
 					if(result.code == 0)
 					{
-						osTickCounterUpdate(&counter[0]);
 						//result = Util_converter_yuv420p_to_bgr565(yuv_video, &video, vid_mvd_width, vid_mvd_height);
-						osTickCounterUpdate(&counter[0]);
-						vid_mvd_time[2][319] = osTickCounterRead(&counter[0]);
-						for(int i = 1; i < 320; i++)
-							vid_mvd_time[2][i - 1] = vid_mvd_time[2][i];
 
 						if(result.code == 0)
 						{
