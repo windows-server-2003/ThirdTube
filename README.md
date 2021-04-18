@@ -1,6 +1,8 @@
 # Video player for 3DS
 
 ## Patch note
+* v1.1.1
+* Video will not be decoded correctly in hardware decoder has been fixed
 * v1.1.0
 * Added hardware decoder (β)
 * v1.0.1
