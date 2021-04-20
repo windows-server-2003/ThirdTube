@@ -16,7 +16,10 @@ bool vid_mvd_seek_request = false;
 bool vid_mvd_linear_filter = true;
 bool vid_mvd_show_controls = false;
 bool vid_mvd_allow_skip_frames = false;
-double vid_mvd_time[6][320];
+double vid_mvd_time[2][320];
+double vid_mvd_copy_time[2] = { 0, 0, };
+double vid_mvd_audio_time = 0;
+double vid_mvd_video_time = 0;
 double vid_mvd_frametime = 0;
 double vid_mvd_framerate = 0;
 double vid_mvd_duration = 0;
@@ -83,11 +86,10 @@ void Sapp1_decode_thread(void* arg)
 	u8* audio = NULL;
 	std::string format = "";
 	std::string type = "";
-	TickCounter counter[4];
+	TickCounter counter[3];
 	osTickCounterStart(&counter[0]);
 	osTickCounterStart(&counter[1]);
 	osTickCounterStart(&counter[2]);
-	osTickCounterStart(&counter[3]);
 
 	while (vid_mvd_thread_run)
 	{
@@ -119,11 +121,12 @@ void Sapp1_decode_thread(void* arg)
 			{
 				vid_mvd_time[0][i] = 0;
 				vid_mvd_time[1][i] = 0;
-				vid_mvd_time[2][i] = 0;
-				vid_mvd_time[3][i] = 0;
-				vid_mvd_time[4][i] = 0;
-				vid_mvd_time[5][i] = 0;
 			}
+
+			vid_mvd_audio_time = 0;
+			vid_mvd_video_time = 0;
+			vid_mvd_copy_time[0] = 0;
+			vid_mvd_copy_time[1] = 0;
 
 			result = Util_decoder_open_file(vid_mvd_dir + vid_mvd_file, &has_audio, &has_video, 1);
 			Util_log_save(DEF_SAPP1_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
@@ -211,6 +214,7 @@ void Sapp1_decode_thread(void* arg)
 					while(vid_mvd_pause_request && vid_mvd_play_request && !vid_mvd_seek_request && !vid_mvd_change_video_request)
 						usleep(20000);
 					
+					osTickCounterUpdate(&counter[2]);
 					Util_speaker_resume(1);
 				}
 
@@ -234,9 +238,7 @@ void Sapp1_decode_thread(void* arg)
 						osTickCounterUpdate(&counter[1]);
 						result = Util_audio_decoder_decode(&audio_size, &audio, &pos, 1);
 						osTickCounterUpdate(&counter[1]);
-						vid_mvd_time[1][319] = osTickCounterRead(&counter[1]);
-						for(int i = 1; i < 320; i++)
-							vid_mvd_time[1][i - 1] = vid_mvd_time[1][i];
+						vid_mvd_audio_time = osTickCounterRead(&counter[1]);
 
 						if(!has_video)
 							vid_mvd_current_pos = pos;
@@ -280,9 +282,7 @@ void Sapp1_decode_thread(void* arg)
 							osTickCounterUpdate(&counter[0]);
 							result = Util_mvd_video_decoder_decode(&w, &h, &key, &pos, 1);
 							osTickCounterUpdate(&counter[0]);
-							vid_mvd_time[0][319] = osTickCounterRead(&counter[0]);
-							for(int i = 1; i < 320; i++)
-								vid_mvd_time[0][i - 1] = vid_mvd_time[0][i];
+							vid_mvd_video_time = osTickCounterRead(&counter[0]);
 
 							vid_mvd_current_pos = pos;
 							if(result.code == 0)
@@ -291,24 +291,16 @@ void Sapp1_decode_thread(void* arg)
 								Util_log_save(DEF_SAPP1_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
 
 							osTickCounterUpdate(&counter[2]);
-							vid_mvd_time[4][319] = osTickCounterRead(&counter[2]);
-							for(int i = 1; i < 320; i++)
-								vid_mvd_time[4][i - 1] = vid_mvd_time[4][i];
+							vid_mvd_time[0][319] = osTickCounterRead(&counter[2]);
 							
-							if(vid_mvd_frametime - vid_mvd_time[4][319] > 0)
-							{
-								usleep((vid_mvd_frametime - vid_mvd_time[4][319]) * 1000);
-								/*sleep += vid_mvd_frametime - vid_mvd_time[4][319];
-								if(sleep > vid_mvd_frametime * 3)
-								{
-									usleep(sleep / 2 * 1000);
-									sleep -= (sleep / 2);
-								}*/
-							}
+							if(vid_mvd_frametime - vid_mvd_time[0][319] > 0)
+								usleep((vid_mvd_frametime - vid_mvd_time[0][319]) * 1000);
 							else if(vid_mvd_allow_skip_frames)
-								skip -= vid_mvd_frametime - vid_mvd_time[4][319];
+								skip -= vid_mvd_frametime - vid_mvd_time[0][319];
 
 							osTickCounterUpdate(&counter[2]);
+							for(int i = 1; i < 320; i++)
+								vid_mvd_time[0][i - 1] = vid_mvd_time[0][i];
 						}
 						else
 							Util_log_save(DEF_SAPP1_DECODE_THREAD_STR, "Util_decoder_ready_video_packet()..." + result.string + result.error_description, result.code);
@@ -381,9 +373,7 @@ void Sapp1_convert_thread(void* arg)
 					osTickCounterUpdate(&counter[0]);
 					result = Util_mvd_video_decoder_get_image(&video, vid_mvd_width, vid_mvd_height, 1);
 					osTickCounterUpdate(&counter[0]);
-					vid_mvd_time[2][319] = osTickCounterRead(&counter[0]);
-					for(int i = 1; i < 320; i++)
-						vid_mvd_time[2][i - 1] = vid_mvd_time[2][i];
+					vid_mvd_copy_time[0] = osTickCounterRead(&counter[0]);
 					
 					vid_mvd_convert_request = false;
 					vid_mvd_wait_request = false;
@@ -454,9 +444,7 @@ void Sapp1_convert_thread(void* arg)
 								vid_mvd_image_num = 0;
 
 							osTickCounterUpdate(&counter[1]);
-							vid_mvd_time[3][319] = osTickCounterRead(&counter[1]);
-							for(int i = 1; i < 320; i++)
-								vid_mvd_time[3][i - 1] = vid_mvd_time[3][i];
+							vid_mvd_copy_time[1] = osTickCounterRead(&counter[1]);
 							
 							free(yuv_video);
 							free(video);
@@ -471,9 +459,9 @@ void Sapp1_convert_thread(void* arg)
 						Util_log_save(DEF_SAPP1_CONVERT_THREAD_STR, "Util_video_decoder_get_image()..." + result.string + result.error_description, result.code);
 
 					osTickCounterUpdate(&counter[2]);
-					vid_mvd_time[5][319] = osTickCounterRead(&counter[2]);
+					vid_mvd_time[1][319] = osTickCounterRead(&counter[2]);
 					for(int i = 1; i < 320; i++)
-						vid_mvd_time[5][i - 1] = vid_mvd_time[5][i];
+						vid_mvd_time[1][i - 1] = vid_mvd_time[1][i];
 				}
 				else
 					usleep(1000);
@@ -515,7 +503,7 @@ void Sapp1_init(void)
 	vid_mvd_thread_run = true;
 	if(new_3ds)
 	{
-		vid_mvd_decode_thread = threadCreate(Sapp1_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 0, false);
+		vid_mvd_decode_thread = threadCreate(Sapp1_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 0, false);
 		vid_mvd_convert_thread = threadCreate(Sapp1_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
 	}
 	else
@@ -535,11 +523,12 @@ void Sapp1_init(void)
 	{
 		vid_mvd_time[0][i] = 0;
 		vid_mvd_time[1][i] = 0;
-		vid_mvd_time[2][i] = 0;
-		vid_mvd_time[3][i] = 0;
-		vid_mvd_time[4][i] = 0;
-		vid_mvd_time[5][i] = 0;
 	}
+
+	vid_mvd_audio_time = 0;
+	vid_mvd_video_time = 0;
+	vid_mvd_copy_time[0] = 0;
+	vid_mvd_copy_time[1] = 0;
 
 	for(int i = 0 ; i < 8; i++)
 	{
@@ -702,21 +691,19 @@ void Sapp1_main(void)
 			//decoding detail
 			for(int i = 0; i < 319; i++)
 			{
-				Draw_line(i, 120 - vid_mvd_time[0][i], 0xFF0000FF, i + 1, 120 - vid_mvd_time[0][i + 1], 0xFF0000FF, 1);//video decode time graph
-				Draw_line(i, 120 - vid_mvd_time[1][i], 0xFF0080FF, i + 1, 120 - vid_mvd_time[1][i + 1], 0xFF0080FF, 1);//audio decode time graph
-				Draw_line(i, 120 - vid_mvd_time[2][i], 0xFF00FF00, i + 1, 120 - vid_mvd_time[2][i + 1], 0xFF00FF00, 1);//color convert time graph
-				Draw_line(i, 120 - (vid_mvd_time[2][i] + vid_mvd_time[3][i]), 0xFFFF0000, i + 1, 120 - (vid_mvd_time[2][i + 1] + vid_mvd_time[3][i + 1]), 0xFFFF0000, 1);//data copy time graph
+				Draw_line(i, 120 - vid_mvd_time[1][i], DEF_DRAW_BLUE, i + 1, 120 - vid_mvd_time[1][i + 1], DEF_DRAW_BLUE, 1);//Thread 1
+				Draw_line(i, 120 - vid_mvd_time[0][i], DEF_DRAW_RED, i + 1, 120 - vid_mvd_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
 			}
 
 			Draw_line(0, 120, color, 320, 120, color, 2);
 			Draw_line(0, 120 - vid_mvd_frametime, 0xFFFFFF00, 320, 120 - vid_mvd_frametime, 0xFFFFFF00, 2);
 			Draw("Deadline : " + std::to_string(vid_mvd_frametime).substr(0, 5) + "ms", 0, 120, 0.4, 0.4, 0xFFFFFF00);
-			Draw("Video decode : " + std::to_string(vid_mvd_time[0][319]).substr(0, 5) + "ms", 160, 120, 0.4, 0.4, 0xFF0000FF);
-			Draw("Audio decode : " + std::to_string(vid_mvd_time[1][319]).substr(0, 5) + "ms", 0, 130, 0.4, 0.4, 0xFF0080FF);
-			Draw("Color convert : " + std::to_string(vid_mvd_time[2][319]).substr(0, 5) + "ms", 160, 130, 0.4, 0.4, 0xFF00FF00);
-			Draw("Data copy : " + std::to_string(vid_mvd_time[3][319]).substr(0, 5) + "ms", 0, 140, 0.4, 0.4, 0xFFFF0000);
-			Draw("Thread 0 : " + std::to_string(vid_mvd_time[4][319]).substr(0, 6) + "ms", 0, 150, 0.5, 0.5, color);
-			Draw("Thread 1 : " + std::to_string(vid_mvd_time[5][319]).substr(0, 6) + "ms", 160, 150, 0.5, 0.5, color);
+			Draw("Video decode : " + std::to_string(vid_mvd_video_time).substr(0, 5) + "ms", 0, 130, 0.4, 0.4, DEF_DRAW_RED);
+			Draw("Audio decode : " + std::to_string(vid_mvd_audio_time).substr(0, 5) + "ms", 0, 140, 0.4, 0.4, DEF_DRAW_RED);
+			Draw("Data copy 0 : " + std::to_string(vid_mvd_copy_time[0]).substr(0, 5) + "ms", 160, 130, 0.4, 0.4, DEF_DRAW_BLUE);
+			Draw("Data copy 1 : " + std::to_string(vid_mvd_copy_time[1]).substr(0, 5) + "ms", 160, 140, 0.4, 0.4, DEF_DRAW_BLUE);
+			Draw("Thread 0 : " + std::to_string(vid_mvd_time[0][319]).substr(0, 6) + "ms", 0, 150, 0.5, 0.5, DEF_DRAW_RED);
+			Draw("Thread 1 : " + std::to_string(vid_mvd_time[1][319]).substr(0, 6) + "ms", 160, 150, 0.5, 0.5, DEF_DRAW_BLUE);
 			Draw("Zoom : x" + std::to_string(vid_mvd_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_mvd_x) + " Y : " + std::to_string((int)vid_mvd_y), 0, 160, 0.5, 0.5, color);
 		}
 
