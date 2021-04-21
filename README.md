@@ -53,3 +53,7 @@ Known issues :
 * L : Zoom out
 * C/DPAD : Move video
 * touch the bar : Seek
+
+### Credits
+* Core 2 Extreme
+* dixy52-beep (icon, banner, in app texture)
