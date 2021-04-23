@@ -113,8 +113,38 @@ void Menu_exit(void)
 
 	menu_thread_run = false;
 
+#ifdef DEF_ENABLE_SUB_APP0
 	if (Sapp0_query_init_flag())
 		Sapp0_exit();
+#endif
+#ifdef DEF_ENABLE_SUB_APP1
+	if (Sapp1_query_init_flag())
+		Sapp1_exit();
+#endif
+#ifdef DEF_ENABLE_SUB_APP2
+	if (Sapp2_query_init_flag())
+		Sapp2_exit();
+#endif
+#ifdef DEF_ENABLE_SUB_APP3
+	if (Sapp3_query_init_flag())
+		Sapp3_exit();
+#endif
+#ifdef DEF_ENABLE_SUB_APP4
+	if (Sapp4_query_init_flag())
+		Sapp4_exit();
+#endif
+#ifdef DEF_ENABLE_SUB_APP5
+	if (Sapp5_query_init_flag())
+		Sapp5_exit();
+#endif
+#ifdef DEF_ENABLE_SUB_APP6
+	if (Sapp6_query_init_flag())
+		Sapp6_exit();
+#endif
+#ifdef DEF_ENABLE_SUB_APP7
+	if (Sapp7_query_init_flag())
+		Sapp7_exit();
+#endif
 	if (Sem_query_init_flag())
 		Sem_exit();
 
