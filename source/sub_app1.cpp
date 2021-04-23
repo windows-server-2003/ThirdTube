@@ -111,7 +111,7 @@ void Sapp1_decode_thread(void* arg)
 			vid_mvd_change_video_request = false;
 			vid_mvd_play_request = true;
 
-			for(int i = 0; i < 4; i++)
+			for(int i = 0; i < 8; i++)
 			{
 				vid_mvd_tex_width[i] = 0;
 				vid_mvd_tex_height[i] = 0;

@@ -625,11 +625,11 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 	//config.physaddr_outdata0 = osConvertVirtToPhys(gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
 	config.physaddr_outdata0 = osConvertVirtToPhys(util_video_decoder_mvd_raw_data);
 
-	log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
+	//log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
 	//GSPGPU_FlushDataCache(packet, offset);
 	result.code = mvdstdProcessVideoFrame(packet, offset, 0, NULL);
 	//Util_log_save("", "mvdstdProcessVideoFrame()... ", result.code);
-	Util_log_add(log_num, "", result.code);
+	//Util_log_add(log_num, "", result.code);
 
 	if(util_video_decoder_mvd_first)
 	{
