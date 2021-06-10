@@ -29,6 +29,12 @@ double vid_x = 0;
 double vid_y = 15;
 double vid_current_pos = 0;
 double vid_seek_pos = 0;
+double vid_min_time = 0;
+double vid_max_time = 0;
+double vid_total_time = 0;
+double vid_recent_time[90];
+double vid_recent_total_time = 0;
+int vid_total_frames = 0;
 int vid_width = 0;
 int vid_height = 0;
 int vid_tex_width[4] = { 0, 0, 0, 0, };
@@ -85,11 +91,13 @@ void Sapp0_decode_thread(void* arg)
 	bool has_video = false;
 	u8* audio = NULL;
 	std::string format = "";
-	std::string type = "";
+	std::string type = (char*)arg;
 	TickCounter counter[3];
 	osTickCounterStart(&counter[0]);
 	osTickCounterStart(&counter[1]);
 	osTickCounterStart(&counter[2]);
+	if(type == "1")
+		APT_SetAppCpuTimeLimit(80);
 
 	while (vid_thread_run)
 	{
@@ -109,7 +117,14 @@ void Sapp0_decode_thread(void* arg)
 			vid_audio_format = "n/a";
 			vid_change_video_request = false;
 			vid_play_request = true;
-
+			vid_total_time = 0;
+			vid_total_frames = 0;
+			vid_min_time = 99999999;
+			vid_max_time = 0;
+			vid_recent_total_time = 0;
+			for(int i = 0; i < 90; i++)
+				vid_recent_time[i] = 0;
+			
 			for(int i = 0; i < 4; i++)
 			{
 				vid_tex_width[i] = 0;
@@ -281,13 +296,29 @@ void Sapp0_decode_thread(void* arg)
 
 							osTickCounterUpdate(&counter[2]);
 							vid_time[0][319] = osTickCounterRead(&counter[2]);
-							
+
 							if(vid_frametime - vid_time[0][319] > 0)
 								usleep((vid_frametime - vid_time[0][319]) * 1000);
 							else if(vid_allow_skip_frames)
 								skip -= vid_frametime - vid_time[0][319];
 
 							osTickCounterUpdate(&counter[2]);
+							if(vid_min_time > vid_time[0][319])
+								vid_min_time = vid_time[0][319];
+							if(vid_max_time < vid_time[0][319])
+								vid_max_time = vid_time[0][319];
+							
+							vid_total_time += vid_time[0][319];
+							vid_total_frames++;
+
+							vid_recent_time[89] = vid_time[0][319];
+							vid_recent_total_time = 0;
+							for(int i = 0; i < 90; i++)
+								vid_recent_total_time += vid_recent_time[i];
+
+							for(int i = 1; i < 90; i++)
+								vid_recent_time[i - 1] = vid_recent_time[i];
+
 							for(int i = 1; i < 320; i++)
 								vid_time[0][i - 1] = vid_time[0][i];
 						}
@@ -338,7 +369,6 @@ void Sapp0_convert_thread(void* arg)
 	TickCounter counter[4];
 	Result_with_string result;
 
-	APT_SetAppCpuTimeLimit(80);
 	osTickCounterStart(&counter[0]);
 	osTickCounterStart(&counter[1]);
 	osTickCounterStart(&counter[2]);
@@ -490,9 +520,17 @@ void Sapp0_init(void)
 	}
 	else
 	{
-		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
+		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
+
+	vid_total_time = 0;
+	vid_total_frames = 0;
+	vid_min_time = 99999999;
+	vid_max_time = 0;
+	vid_recent_total_time = 0;
+	for(int i = 0; i < 90; i++)
+		vid_recent_time[i] = 0;
 
 	for(int i = 0; i < 4; i++)
 	{
@@ -665,16 +703,22 @@ void Sapp0_main(void)
 			//decoding detail
 			for(int i = 0; i < 319; i++)
 			{
-				Draw_line(i, 120 - vid_time[1][i], DEF_DRAW_BLUE, i + 1, 120 - vid_time[1][i + 1], DEF_DRAW_BLUE, 1);//Thread 1
-				Draw_line(i, 120 - vid_time[0][i], DEF_DRAW_RED, i + 1, 120 - vid_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
+				Draw_line(i, 110 - vid_time[1][i], DEF_DRAW_BLUE, i + 1, 110 - vid_time[1][i + 1], DEF_DRAW_BLUE, 1);//Thread 1
+				Draw_line(i, 110 - vid_time[0][i], DEF_DRAW_RED, i + 1, 110 - vid_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
 			}
 
-			Draw_line(0, 120, color, 320, 120, color, 2);
-			Draw_line(0, 120 - vid_frametime, 0xFFFFFF00, 320, 120 - vid_frametime, 0xFFFFFF00, 2);
+			Draw_line(0, 110, color, 320, 110, color, 2);
+			Draw_line(0, 110 - vid_frametime, 0xFFFFFF00, 320, 110 - vid_frametime, 0xFFFFFF00, 2);
+			if(vid_total_frames != 0 && vid_min_time != 0  && vid_recent_total_time != 0)
+			{
+				Draw("avg " + std::to_string(1000 / (vid_total_time / vid_total_frames)).substr(0, 5) + " min " + std::to_string(1000 / vid_max_time).substr(0, 5) 
+				+  " max " + std::to_string(1000 / vid_min_time).substr(0, 5) + " recent avg " + std::to_string(1000 / (vid_recent_total_time / 90)).substr(0, 5) +  " fps", 0, 110, 0.4, 0.4, color);
+			}
+
 			Draw("Deadline : " + std::to_string(vid_frametime).substr(0, 5) + "ms", 0, 120, 0.4, 0.4, 0xFFFFFF00);
 			Draw("Video decode : " + std::to_string(vid_video_time).substr(0, 5) + "ms", 0, 130, 0.4, 0.4, DEF_DRAW_RED);
 			Draw("Audio decode : " + std::to_string(vid_audio_time).substr(0, 5) + "ms", 0, 140, 0.4, 0.4, DEF_DRAW_RED);
-			Draw("Data copy 0 : " + std::to_string(vid_copy_time[0]).substr(0, 5) + "ms", 160, 120, 0.4, 0.4, DEF_DRAW_BLUE);
+			//Draw("Data copy 0 : " + std::to_string(vid_copy_time[0]).substr(0, 5) + "ms", 160, 120, 0.4, 0.4, DEF_DRAW_BLUE);
 			Draw("Color convert : " + std::to_string(vid_convert_time).substr(0, 5) + "ms", 160, 130, 0.4, 0.4, DEF_DRAW_BLUE);
 			Draw("Data copy 1 : " + std::to_string(vid_copy_time[1]).substr(0, 5) + "ms", 160, 140, 0.4, 0.4, DEF_DRAW_BLUE);
 			Draw("Thread 0 : " + std::to_string(vid_time[0][319]).substr(0, 6) + "ms", 0, 150, 0.5, 0.5, DEF_DRAW_RED);

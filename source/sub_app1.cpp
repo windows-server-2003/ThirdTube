@@ -28,6 +28,12 @@ double vid_mvd_x = 0;
 double vid_mvd_y = 15;
 double vid_mvd_current_pos = 0;
 double vid_mvd_seek_pos = 0;
+double vid_mvd_min_time = 0;
+double vid_mvd_max_time = 0;
+double vid_mvd_total_time = 0;
+double vid_mvd_recent_time[90];
+double vid_mvd_recent_total_time = 0;
+int vid_mvd_total_frames = 0;
 int vid_mvd_width = 0;
 int vid_mvd_height = 0;
 int vid_mvd_tex_width[8] = { 0, 0, 0, 0, 0, 0, 0, 0, };
@@ -110,6 +116,13 @@ void Sapp1_decode_thread(void* arg)
 			vid_mvd_audio_format = "n/a";
 			vid_mvd_change_video_request = false;
 			vid_mvd_play_request = true;
+			vid_mvd_total_time = 0;
+			vid_mvd_total_frames = 0;
+			vid_mvd_min_time = 99999999;
+			vid_mvd_max_time = 0;
+			vid_mvd_recent_total_time = 0;
+			for(int i = 0; i < 90; i++)
+				vid_mvd_recent_time[i] = 0;
 
 			for(int i = 0; i < 8; i++)
 			{
@@ -292,13 +305,29 @@ void Sapp1_decode_thread(void* arg)
 
 							osTickCounterUpdate(&counter[2]);
 							vid_mvd_time[0][319] = osTickCounterRead(&counter[2]);
-							
+
 							if(vid_mvd_frametime - vid_mvd_time[0][319] > 0)
 								usleep((vid_mvd_frametime - vid_mvd_time[0][319]) * 1000);
 							else if(vid_mvd_allow_skip_frames)
 								skip -= vid_mvd_frametime - vid_mvd_time[0][319];
 
 							osTickCounterUpdate(&counter[2]);
+							if(vid_mvd_min_time > vid_mvd_time[0][319])
+								vid_mvd_min_time = vid_mvd_time[0][319];
+							if(vid_mvd_max_time < vid_mvd_time[0][319])
+								vid_mvd_max_time = vid_mvd_time[0][319];
+							
+							vid_mvd_total_time += vid_mvd_time[0][319];
+							vid_mvd_total_frames++;
+
+							vid_mvd_recent_time[89] = vid_mvd_time[0][319];
+							vid_mvd_recent_total_time = 0;
+							for(int i = 0; i < 90; i++)
+								vid_mvd_recent_total_time += vid_mvd_recent_time[i];
+
+							for(int i = 1; i < 90; i++)
+								vid_mvd_recent_time[i - 1] = vid_mvd_recent_time[i];
+
 							for(int i = 1; i < 320; i++)
 								vid_mvd_time[0][i - 1] = vid_mvd_time[0][i];
 						}
@@ -513,6 +542,14 @@ void Sapp1_init(void)
 		Util_err_set_error_show_flag(true);
 	}
 
+	vid_mvd_total_time = 0;
+	vid_mvd_total_frames = 0;
+	vid_mvd_min_time = 99999999;
+	vid_mvd_max_time = 0;
+	vid_mvd_recent_total_time = 0;
+	for(int i = 0; i < 90; i++)
+		vid_mvd_recent_time[i] = 0;
+
 	for(int i = 0; i < 8; i++)
 	{
 		vid_mvd_tex_width[i] = 0;
@@ -691,13 +728,19 @@ void Sapp1_main(void)
 			//decoding detail
 			for(int i = 0; i < 319; i++)
 			{
-				Draw_line(i, 120 - vid_mvd_time[1][i], DEF_DRAW_BLUE, i + 1, 120 - vid_mvd_time[1][i + 1], DEF_DRAW_BLUE, 1);//Thread 1
-				Draw_line(i, 120 - vid_mvd_time[0][i], DEF_DRAW_RED, i + 1, 120 - vid_mvd_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
+				Draw_line(i, 110 - vid_mvd_time[1][i], DEF_DRAW_BLUE, i + 1, 110 - vid_mvd_time[1][i + 1], DEF_DRAW_BLUE, 1);//Thread 1
+				Draw_line(i, 110 - vid_mvd_time[0][i], DEF_DRAW_RED, i + 1, 110 - vid_mvd_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
 			}
 
-			Draw_line(0, 120, color, 320, 120, color, 2);
-			Draw_line(0, 120 - vid_mvd_frametime, 0xFFFFFF00, 320, 120 - vid_mvd_frametime, 0xFFFFFF00, 2);
-			Draw("Deadline : " + std::to_string(vid_mvd_frametime).substr(0, 5) + "ms", 0, 120, 0.4, 0.4, 0xFFFFFF00);
+			Draw_line(0, 110, color, 320, 110, color, 2);
+			Draw_line(0, 110 - vid_mvd_frametime, 0xFFFFFF00, 320, 110 - vid_mvd_frametime, 0xFFFFFF00, 2);
+			if(vid_mvd_total_frames != 0 && vid_mvd_min_time != 0  && vid_mvd_recent_total_time != 0)
+			{
+				Draw("avg " + std::to_string(1000 / (vid_mvd_total_time / vid_mvd_total_frames)).substr(0, 5) + " min " + std::to_string(1000 / vid_mvd_max_time).substr(0, 5) 
+				+ " max " + std::to_string(1000 / vid_mvd_min_time).substr(0, 5) + " recent avg " + std::to_string(1000 / (vid_mvd_recent_total_time / 90)).substr(0, 5) +  " fps", 0, 110, 0.4, 0.4, color);
+			}
+
+			Draw("Deadline : " + std::to_string(vid_mvd_frametime).substr(0, 5) + "ms", 0, 120, 0.4, 0.4, 0xFFFFFF00);			
 			Draw("Video decode : " + std::to_string(vid_mvd_video_time).substr(0, 5) + "ms", 0, 130, 0.4, 0.4, DEF_DRAW_RED);
 			Draw("Audio decode : " + std::to_string(vid_mvd_audio_time).substr(0, 5) + "ms", 0, 140, 0.4, 0.4, DEF_DRAW_RED);
 			Draw("Data copy 0 : " + std::to_string(vid_mvd_copy_time[0]).substr(0, 5) + "ms", 160, 130, 0.4, 0.4, DEF_DRAW_BLUE);
