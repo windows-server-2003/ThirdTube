@@ -9,7 +9,7 @@ double log_spend_time[512];
 std::string log_logs[512];
 TickCounter log_up_time_stopwatch;
 
-void Util_log_add(void)
+void Util_log_init(void)
 {
 	osTickCounterStart(&log_up_time_stopwatch);
 	log_up_time_ms = 0;

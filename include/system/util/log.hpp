@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-void Util_log_add(void);
+void Util_log_init(void);
 
 bool Util_log_query_log_show_flag(void);
 

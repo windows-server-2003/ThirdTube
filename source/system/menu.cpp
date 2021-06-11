@@ -49,7 +49,7 @@ void Menu_init(void)
 {
 	Result_with_string result;
 	
-	Util_log_add();
+	Util_log_init();
 	Util_log_save(DEF_MENU_INIT_STR, "Initializing..." + DEF_CURRENT_APP_VER);
 
 	osSetSpeedupEnable(true);
