@@ -520,7 +520,9 @@ Result_with_string Util_mvd_video_decoder_decode(int* width, int* height, bool* 
 
 	if(*width % 16 != 0)
 		*width += 16 - *width % 16;
-	
+	if(*height % 16 != 0)
+		*height += 16 - *height % 16;
+
 	*current_pos = 0;
 	if(framerate != 0.0)
 		*current_pos = current_frame * (1000 / framerate);//calc frame pos

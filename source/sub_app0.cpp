@@ -183,16 +183,8 @@ void Sapp0_decode_thread(void* arg)
 
 					if(vid_width % 16 != 0)
 						vid_width += 16 - vid_width % 16;
-					/*if(vid_width >= 420 && vid_width <= 431)
-						vid_width = 432;
-					if(vid_width >= 436 && vid_width <= 447)
-						vid_width = 448;
-					if(vid_width >= 452 && vid_width <= 463)
-						vid_width = 464;
-					if(vid_width >= 468 && vid_width <= 479)
-						vid_width = 480;
-					if(vid_width == 644)
-						vid_width = 656;*/
+					if(vid_height % 16 != 0)
+						vid_height += 16 - vid_height % 16;
 				}
 			}
 

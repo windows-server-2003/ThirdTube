@@ -186,16 +186,9 @@ void Sapp1_decode_thread(void* arg)
 
 					if(vid_mvd_width % 16 != 0)
 						vid_mvd_width += 16 - vid_mvd_width % 16;
-					/*if(vid_mvd_width >= 420 && vid_mvd_width <= 431)
-						vid_mvd_width = 432;
-					if(vid_mvd_width >= 436 && vid_mvd_width <= 447)
-						vid_mvd_width = 448;
-					if(vid_mvd_width >= 452 && vid_mvd_width <= 463)
-						vid_mvd_width = 464;
-					if(vid_mvd_width >= 468 && vid_mvd_width <= 479)
-						vid_mvd_width = 480;
-					if(vid_mvd_width == 644)
-						vid_mvd_width = 656;*/
+					if(vid_mvd_height % 16 != 0)
+						vid_mvd_height += 16 - vid_mvd_height % 16;
+					
 					if(vid_mvd_video_format != "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10")
 					{
 						result.code = DEF_ERR_OTHER;
