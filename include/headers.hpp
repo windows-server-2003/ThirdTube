@@ -29,4 +29,5 @@
 #include "system/util/speaker.hpp"
 #include "system/util/swkbd.hpp"
 #include "system/util/util.hpp"
+#include "system/util/network_io.hpp"
 #include "system/menu.hpp"

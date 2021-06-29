@@ -2,6 +2,8 @@
 
 Result_with_string Util_mvd_video_decoder_init(void);
 
+struct NetworkStreamCacherData;
+Result_with_string Util_decoder_open_network_stream(NetworkStreamCacherData *cacher, bool* has_audio, bool* has_video, int session);
 Result_with_string Util_decoder_open_file(std::string file_path, bool* has_audio, bool* has_video, int session);
 
 Result_with_string Util_audio_decoder_init(int session);

@@ -49,6 +49,106 @@ Result_with_string Util_mvd_video_decoder_init(void)
 	return result;
 }
 
+
+int read_network_stream(void *cacher_, u8 *buf, int buf_size_) { // size or AVERROR_EOF
+	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
+	size_t buf_size = buf_size_;
+	
+	while (!cacher->is_inited()) {
+		usleep(200000);
+		if (cacher->bad()) return AVERROR_EOF;
+	}
+	while (!cacher->is_data_available(cacher->head, std::min(buf_size, cacher->get_length() - cacher->head))) usleep(10000);
+	
+	auto tmp = cacher->get_data(cacher->head, std::min(buf_size, cacher->get_length() - cacher->head));
+	cacher->head += tmp.size();
+	size_t read_size = tmp.size();
+	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "read req:" + std::to_string(buf_size) + " act : " + std::to_string(read_size));
+	memcpy(buf, &tmp[0], tmp.size());
+	if (!read_size) return AVERROR_EOF;
+	return read_size;
+}
+int64_t seek_network_stream(void *cacher_, s64 offset, int whence) { // size or AVERROR_EOF
+	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
+	
+	if (whence == AVSEEK_SIZE) return cacher->get_length();
+	size_t new_pos;
+	if (whence == SEEK_SET) new_pos = offset;
+	else if (whence == SEEK_CUR) new_pos = cacher->head + offset;
+	else if (whence == SEEK_END) new_pos = cacher->get_length() + offset;
+	if (new_pos > cacher->get_length()) return -1;
+	
+	while (!cacher->is_inited()) {
+		usleep(200000);
+		if (cacher->bad()) return -1;
+	}
+	cacher->head = new_pos;
+	cacher->set_download_start(new_pos);
+	
+	return cacher->head;
+}
+
+#define NETWORK_BUFFER_SIZE 0x8000
+Result_with_string Util_decoder_open_network_stream(NetworkStreamCacherData *cacher, bool* has_audio, bool* has_video, int session) {
+	int ffmpeg_result = 0;
+	Result_with_string result;
+	*has_audio = false;
+	*has_video = false;
+	
+	{
+		unsigned char *buffer = (unsigned char *) av_malloc(NETWORK_BUFFER_SIZE);
+		if (!buffer) {
+			result.error_description = "network buffer allocation failed";
+			goto fail;
+		}
+		AVIOContext *io_context = avio_alloc_context(buffer, NETWORK_BUFFER_SIZE, 0, cacher, read_network_stream, NULL, seek_network_stream);
+		util_decoder_format_context[session] = avformat_alloc_context();
+		util_decoder_format_context[session]->pb = io_context;
+	}
+	ffmpeg_result = avformat_open_input(&util_decoder_format_context[session], cacher->url.c_str(), NULL, NULL);
+	if(ffmpeg_result != 0)
+	{
+		result.error_description = "avformat_open_input() failed " + std::to_string(ffmpeg_result);
+		goto fail;
+	}
+
+	ffmpeg_result = avformat_find_stream_info(util_decoder_format_context[session], NULL);
+	if(util_decoder_format_context[session] == NULL)
+	{
+		result.error_description = "avformat_find_stream_info() failed " + std::to_string(ffmpeg_result);
+		goto fail;
+	}
+
+	util_audio_decoder_stream_num[session] = -1;
+	for(int i = 0; i < (int)util_decoder_format_context[session]->nb_streams; i++)
+	{
+		if(util_decoder_format_context[session]->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO)
+		{
+			*has_audio = true;
+			util_audio_decoder_stream_num[session] = i;
+		}
+		else if(util_decoder_format_context[session]->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+		{
+			*has_video = true;
+			util_video_decoder_stream_num[session] = i;
+		}
+	}
+
+	if(util_audio_decoder_stream_num[session] == -1 && util_video_decoder_stream_num[session] == -1)
+	{
+		result.error_description = "No audio and video data";
+		goto fail;
+	}
+	return result;
+
+	fail:
+
+	Util_decoder_close_file(session);
+	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
+	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
+	return result;
+}
+
 Result_with_string Util_decoder_open_file(std::string file_path, bool* has_audio, bool* has_video, int session)
 {
 	int ffmpeg_result = 0;
@@ -370,7 +470,6 @@ void Util_decoder_skip_video_packet(int session)
 Result_with_string Util_audio_decoder_decode(int* size, u8** raw_data, double* current_pos, int session)
 {
 	int ffmpeg_result = 0;
-	double current_frame = (double)util_audio_decoder_packet[session]->dts / util_audio_decoder_packet[session]->duration;
 	Result_with_string result;
 	*size = 0;
 	*current_pos = 0;
@@ -388,7 +487,10 @@ Result_with_string Util_audio_decoder_decode(int* size, u8** raw_data, double* c
 		ffmpeg_result = avcodec_receive_frame(util_audio_decoder_context[session], util_audio_decoder_raw_data[session]);
 		if(ffmpeg_result == 0)
 		{
-			*current_pos = current_frame * ((1000.0 / util_audio_decoder_raw_data[session]->sample_rate) * util_audio_decoder_raw_data[session]->nb_samples);//calc pos
+			if (util_audio_decoder_packet[session]->duration != 0.0) {
+				double current_frame = (double)util_audio_decoder_packet[session]->dts / util_audio_decoder_packet[session]->duration;
+				*current_pos = current_frame * ((1000.0 / util_audio_decoder_raw_data[session]->sample_rate) * util_audio_decoder_raw_data[session]->nb_samples); //calc pos
+			} else *current_pos = util_audio_decoder_packet[session]->pts;
 
 			*raw_data = (u8*)malloc(util_audio_decoder_raw_data[session]->nb_samples * 2 * util_audio_decoder_context[session]->channels);
 			*size = swr_convert(util_audio_decoder_swr_context[session], raw_data, util_audio_decoder_raw_data[session]->nb_samples, (const uint8_t**)util_audio_decoder_raw_data[session]->data, util_audio_decoder_raw_data[session]->nb_samples);

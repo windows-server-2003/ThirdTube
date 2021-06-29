@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include <vector>
 
 #include "sub_app0.hpp"
 
@@ -50,6 +51,7 @@ Image_data vid_image[8];
 C2D_Image vid_banner[2];
 C2D_Image vid_control[2];
 Thread vid_decode_thread, vid_convert_thread;
+std::vector<Thread> vid_download_threads; // old threads are not erased currently
 
 void Sapp0_callback(std::string file, std::string dir)
 {
@@ -142,9 +144,17 @@ void Sapp0_decode_thread(void* arg)
 			vid_copy_time[0] = 0;
 			vid_copy_time[1] = 0;
 			vid_convert_time = 0;
-
+			
+			/*
 			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
+			*/
+			std::string url_const = "https://r2---sn-oguelnss.googlevideo.com/videoplayback?expire=1624999410&ei=kjHbYNX3JOGus8IPuPS0EA&ip=221.240.44.218&id=o-AC1iZT9lmkHR-o3EjJ0g0Q4pnydcnPcPGEQaPN_lJ3yl&itag=251&source=youtube&requiressl=yes&mh=WH&mm=31%2C26&mn=sn-oguelnss%2Csn-npoe7ne7&ms=au%2Conr&mv=m&mvi=2&pl=12&initcwndbps=897500&vprv=1&mime=audio%2Fwebm&ns=bVKszWyuNW5YTm-QvMmIMSMG&gir=yes&clen=3757561&dur=219.521&lmt=1577805208345485&mt=1624977656&fvip=2&keepalive=yes&fexp=24001373%2C24007246&c=WEB&txp=5431432&n=74qwXzVJsq1baTD32n1-C&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=AOq0QJ8wRAIge9QNoA-3UgmFyqTgARyXn5c0jXasEe5lF5oEVdXk-4QCIGmn-ZbRFiwK2o7IQ3a03IEsY8yRADcamUoNm1sBmt_N&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgFl1sfXiaqjm9gwKH20f8jzR66fZNB3VB7_usjhWRByYCIQCmW5O0ONsvFjWUa3xxH1GmzKWfM-JWB-Ym-tWLVSzLaQ%3D%3D";
+			NetworkStreamCacherData *cacher = new NetworkStreamCacherData(url_const);
+			vid_download_threads.push_back(threadCreate(network_downloader_thread, (void *) cacher, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false));
+			result = Util_decoder_open_network_stream(cacher, &has_audio, &has_video, 0);
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_network_stream()..." + result.string + result.error_description, result.code);
+			
 			if(result.code != 0)
 				vid_play_request = false;
 
@@ -600,8 +610,10 @@ void Sapp0_exit(void)
 
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
+	for (auto thread : vid_download_threads) Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(thread, time_out));
 	threadFree(vid_decode_thread);
 	threadFree(vid_convert_thread);
+	for (auto thread : vid_download_threads) threadFree(thread);
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
