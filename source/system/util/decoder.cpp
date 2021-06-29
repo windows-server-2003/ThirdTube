@@ -16,7 +16,7 @@ AVPacket* util_audio_decoder_packet[2] = { NULL, NULL, };
 AVPacket* util_audio_decoder_cache_packet[2] = { NULL, NULL, };
 AVFrame* util_audio_decoder_raw_data[2] = { NULL, NULL, };
 AVCodecContext* util_audio_decoder_context[2] = { NULL, NULL, };
-AVCodec* util_audio_decoder_codec[2] = { NULL, NULL, };
+const AVCodec* util_audio_decoder_codec[2] = { NULL, NULL, };
 SwrContext* util_audio_decoder_swr_context[2] = { NULL, NULL, };
 
 bool util_video_decoder_mvd_first = false;
@@ -29,7 +29,7 @@ AVPacket* util_video_decoder_packet[2] = { NULL, NULL, };
 AVPacket* util_video_decoder_cache_packet[2] = { NULL, NULL, };
 AVFrame* util_video_decoder_raw_data[2][3] = { { NULL, NULL, NULL, }, { NULL, NULL, NULL, } };
 AVCodecContext* util_video_decoder_context[2] = { NULL, NULL, };
-AVCodec* util_video_decoder_codec[2] = { NULL, NULL, };
+const AVCodec* util_video_decoder_codec[2] = { NULL, NULL, };
 
 AVFormatContext* util_decoder_format_context[2] = { NULL, NULL, };
 
