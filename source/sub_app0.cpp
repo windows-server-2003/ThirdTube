@@ -51,7 +51,18 @@ Image_data vid_image[8];
 C2D_Image vid_banner[2];
 C2D_Image vid_control[2];
 Thread vid_decode_thread, vid_convert_thread;
-std::vector<Thread> vid_download_threads; // old threads are not erased currently
+
+namespace SubApp0 {
+	Thread downloader_thread;
+	NetworkStreamCacherData *network_cacher_data = NULL;
+};
+using namespace SubApp0;
+
+static const char *network_waiting_status = NULL;
+const char *get_network_waiting_status() {
+	if (network_waiting_status) return network_waiting_status;
+	return decoder_get_network_waiting_status();
+}
 
 void Sapp0_callback(std::string file, std::string dir)
 {
@@ -149,10 +160,10 @@ void Sapp0_decode_thread(void* arg)
 			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
 			*/
-			std::string url_const = "https://r2---sn-oguelnss.googlevideo.com/videoplayback?expire=1624999410&ei=kjHbYNX3JOGus8IPuPS0EA&ip=221.240.44.218&id=o-AC1iZT9lmkHR-o3EjJ0g0Q4pnydcnPcPGEQaPN_lJ3yl&itag=251&source=youtube&requiressl=yes&mh=WH&mm=31%2C26&mn=sn-oguelnss%2Csn-npoe7ne7&ms=au%2Conr&mv=m&mvi=2&pl=12&initcwndbps=897500&vprv=1&mime=audio%2Fwebm&ns=bVKszWyuNW5YTm-QvMmIMSMG&gir=yes&clen=3757561&dur=219.521&lmt=1577805208345485&mt=1624977656&fvip=2&keepalive=yes&fexp=24001373%2C24007246&c=WEB&txp=5431432&n=74qwXzVJsq1baTD32n1-C&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=AOq0QJ8wRAIge9QNoA-3UgmFyqTgARyXn5c0jXasEe5lF5oEVdXk-4QCIGmn-ZbRFiwK2o7IQ3a03IEsY8yRADcamUoNm1sBmt_N&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgFl1sfXiaqjm9gwKH20f8jzR66fZNB3VB7_usjhWRByYCIQCmW5O0ONsvFjWUa3xxH1GmzKWfM-JWB-Ym-tWLVSzLaQ%3D%3D";
-			NetworkStreamCacherData *cacher = new NetworkStreamCacherData(url_const);
-			vid_download_threads.push_back(threadCreate(network_downloader_thread, (void *) cacher, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false));
-			result = Util_decoder_open_network_stream(cacher, &has_audio, &has_video, 0);
+			std::string url_const = "https://r2---sn-oguelnss.googlevideo.com/videoplayback?expire=1625145156&ei=5GrdYIKFKsTC4gKFiq3ACQ&ip=221.240.44.218&id=o-AGgkhkmYrNUOH3MwluoXP3KJhm-gLFCq7CRKBcSmjjsK&itag=251&source=youtube&requiressl=yes&mh=WH&mm=31%2C26&mn=sn-oguelnss%2Csn-npoeened&ms=au%2Conr&mv=m&mvi=2&pl=12&initcwndbps=1612500&vprv=1&mime=audio%2Fwebm&ns=d6dYKE7sLssp0IrL1KZQPuQG&gir=yes&clen=3757561&dur=219.521&lmt=1577805208345485&mt=1625123343&fvip=2&keepalive=yes&fexp=24001373%2C24007246&c=WEB&txp=5431432&n=Za6QE-Fpltje0j&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=AOq0QJ8wRAIgOP8ZEVzR2hCWVGw8i93IkIpdRhoH8mqCSL1JoZzZu1ECIFh17hTOpFHHwZz36tJCfSQQoJYStRQA3xaEKKueh42Q&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIhAMOnk4iCjXFjcxcJMraiw9zlFBpWwVo-k3gbgf7fA2JaAiAudchuhqhLIM-zsRv_tfW8RNrUnXtji-ccsPWutnAwFQ%3D%3D";
+			// std::string url_const = "https://r2---sn-oguelnss.googlevideo.com/videoplayback?expire=1625057589&ei=1RTcYMeUFJzzqQGbrr74Bw&ip=221.240.44.218&id=o-AK1gz5j65kxV0p-6lcUVPPimwBRXRQUbg5uq0MsLm6GT&itag=251&source=youtube&requiressl=yes&mh=WH&mm=31%2C29&mn=sn-oguelnss%2Csn-oguesnzz&ms=au%2Crdu&mv=m&mvi=2&pl=12&initcwndbps=1540000&vprv=1&mime=audio%2Fwebm&ns=fl10DTjzq6SzREKGSuOvbvwG&gir=yes&clen=3757561&dur=219.521&lmt=1577805208345485&mt=1625035495&fvip=2&fexp=24001373%2C24007246&c=WEB&txp=5431432&n=xm1mpDaa0ip8JguvY&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=AOq0QJ8wRgIhALhDo5fv8V1XJiW_vonlPXNkB0hYdT2DnALJTxQ0ceIfAiEA5FBa-a7nmvVzlWtfvn-zc-SW23qkWQeW4CSZZIPivpU%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgW_siezRvAnUK3R7RuHV4KGOUGi1KQDybPFk2rODuEssCIQDqTDNivQHczoUqFqtWt4P31riUV9Fme5b_OiTRHbcFIw%3D%3D";
+			network_cacher_data->change_url(url_const);
+			result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_network_stream()..." + result.string + result.error_description, result.code);
 			
 			if(result.code != 0)
@@ -257,7 +268,7 @@ void Sapp0_decode_thread(void* arg)
 								if(result.code == 0 || !vid_play_request || vid_seek_request || vid_change_video_request)
 									break;
 								
-								usleep(3000);
+								usleep(10000);
 							}
 						}
 						else
@@ -525,6 +536,8 @@ void Sapp0_init(void)
 		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
+	network_cacher_data = new NetworkStreamCacherData();
+	downloader_thread = threadCreate(network_downloader_thread, network_cacher_data, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
 	vid_total_time = 0;
 	vid_total_frames = 0;
@@ -608,12 +621,14 @@ void Sapp0_exit(void)
 	vid_convert_request = false;
 	vid_play_request = false;
 
+	network_cacher_data->exit();
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
-	for (auto thread : vid_download_threads) Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(thread, time_out));
+	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(downloader_thread, time_out));
 	threadFree(vid_decode_thread);
 	threadFree(vid_convert_thread);
-	for (auto thread : vid_download_threads) threadFree(thread);
+	threadFree(downloader_thread);
+	free(network_cacher_data);
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
@@ -666,6 +681,11 @@ void Sapp0_main(void)
 		Draw_screen_ready(1, back_color);
 
 		Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
+		{
+			const char *message = get_network_waiting_status();
+			if (message) Draw(message, 0, 150, 0.5, 0.5, color);
+		}
+		Draw("Download : " + std::to_string((int) std::round(network_cacher_data->download_percent)) + "%", 0, 160, 0.5, 0.5, color);
 
 		//codec info
 		Draw(vid_video_format, 0, 10, 0.5, 0.5, color);

@@ -49,21 +49,29 @@ Result_with_string Util_mvd_video_decoder_init(void)
 	return result;
 }
 
-
+static const char *network_waiting_status = NULL;
+const char *decoder_get_network_waiting_status() {
+	return network_waiting_status;
+}
 int read_network_stream(void *cacher_, u8 *buf, int buf_size_) { // size or AVERROR_EOF
 	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
 	size_t buf_size = buf_size_;
 	
-	while (!cacher->is_inited()) {
+	network_waiting_status = cacher->waiting_status;
+	while (!cacher->latest_inited()) {
+		network_waiting_status = cacher->waiting_status;
 		usleep(200000);
-		if (cacher->bad()) return AVERROR_EOF;
+		if (cacher->has_error()) return AVERROR_EOF;
 	}
-	while (!cacher->is_data_available(cacher->head, std::min(buf_size, cacher->get_length() - cacher->head))) usleep(10000);
+	while (!cacher->is_data_available(cacher->head, std::min(buf_size, cacher->get_len() - cacher->head))) {
+		network_waiting_status = cacher->waiting_status;
+		usleep(10000);
+	}
+	network_waiting_status = NULL;
 	
-	auto tmp = cacher->get_data(cacher->head, std::min(buf_size, cacher->get_length() - cacher->head));
+	auto tmp = cacher->get_data(cacher->head, std::min(buf_size, cacher->get_len() - cacher->head));
 	cacher->head += tmp.size();
 	size_t read_size = tmp.size();
-	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "read req:" + std::to_string(buf_size) + " act : " + std::to_string(read_size));
 	memcpy(buf, &tmp[0], tmp.size());
 	if (!read_size) return AVERROR_EOF;
 	return read_size;
@@ -71,17 +79,19 @@ int read_network_stream(void *cacher_, u8 *buf, int buf_size_) { // size or AVER
 int64_t seek_network_stream(void *cacher_, s64 offset, int whence) { // size or AVERROR_EOF
 	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
 	
-	if (whence == AVSEEK_SIZE) return cacher->get_length();
+	if (whence == AVSEEK_SIZE) return cacher->get_len();
 	size_t new_pos;
 	if (whence == SEEK_SET) new_pos = offset;
 	else if (whence == SEEK_CUR) new_pos = cacher->head + offset;
-	else if (whence == SEEK_END) new_pos = cacher->get_length() + offset;
-	if (new_pos > cacher->get_length()) return -1;
+	else if (whence == SEEK_END) new_pos = cacher->get_len() + offset;
+	if (new_pos > cacher->get_len()) return -1;
 	
-	while (!cacher->is_inited()) {
+	while (!cacher->latest_inited()) {
+		network_waiting_status = cacher->waiting_status;
 		usleep(200000);
-		if (cacher->bad()) return -1;
+		if (cacher->has_error()) return -1;
 	}
+	network_waiting_status = NULL;
 	cacher->head = new_pos;
 	cacher->set_download_start(new_pos);
 	
@@ -95,6 +105,7 @@ Result_with_string Util_decoder_open_network_stream(NetworkStreamCacherData *cac
 	*has_audio = false;
 	*has_video = false;
 	
+	cacher->head = 0;
 	{
 		unsigned char *buffer = (unsigned char *) av_malloc(NETWORK_BUFFER_SIZE);
 		if (!buffer) {
@@ -105,7 +116,7 @@ Result_with_string Util_decoder_open_network_stream(NetworkStreamCacherData *cac
 		util_decoder_format_context[session] = avformat_alloc_context();
 		util_decoder_format_context[session]->pb = io_context;
 	}
-	ffmpeg_result = avformat_open_input(&util_decoder_format_context[session], cacher->url.c_str(), NULL, NULL);
+	ffmpeg_result = avformat_open_input(&util_decoder_format_context[session], "yay", NULL, NULL);
 	if(ffmpeg_result != 0)
 	{
 		result.error_description = "avformat_open_input() failed " + std::to_string(ffmpeg_result);
