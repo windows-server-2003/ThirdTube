@@ -90,8 +90,8 @@ std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::
 		ret = httpcSetSSLOpt(&context, SSLCOPT_DisableVerify); // to access https:// websites
 		ret = httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_ENABLED);
 		ret = httpcAddRequestHeaderField(&context, "Connection", "Keep-Alive");
-		ret = httpcAddRequestHeaderField(&context, "User-Agent", "httpc-example/1.0.0");
-		for (auto i : request_headers) httpcAddRequestHeaderField(&context, i.first.c_str(), i.second.c_str());
+		if (!request_headers.count("User-Agent")) ret = httpcAddRequestHeaderField(&context, "User-Agent", "httpc-example/1.0.0");
+		for (auto i : request_headers) ret = httpcAddRequestHeaderField(&context, i.first.c_str(), i.second.c_str());
 
 		ret = httpcBeginRequest(&context);
 		if (ret != 0) {

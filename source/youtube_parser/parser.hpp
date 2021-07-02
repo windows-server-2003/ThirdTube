@@ -1,8 +1,13 @@
 #pragma once
 
+struct YoutubeChannel {
+	std::string name;
+	std::string url;
+	std::string icon_url;
+};
 struct YouTubeVideoInfo {
 	std::string title;
-	std::string author;
+	YoutubeChannel author;
 	std::string audio_stream_url;
 };
 YouTubeVideoInfo parse_youtube_html(const std::string &html);

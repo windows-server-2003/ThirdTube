@@ -90,7 +90,8 @@ std::string download_video_page(std::string url) {
 	constexpr int BLOCK = 0x40000; // 256 KB
 	APT_SetAppCpuTimeLimit(25);
 	network_waiting_status = "Accessing video page";
-	auto network_res = access_http(url, {});
+	// set 3DS user-agent to elicit Youtube's support (low-
+	auto network_res = access_http(url, {{"User-Agent", "Mozilla/5.0 (Nintendo 3DS; U; ; ja) Version/1.7567.JP"}});
 	std::string res;
 	if (network_res.first == "") {
 		network_waiting_status = "Downloading video page";
