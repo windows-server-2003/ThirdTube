@@ -64,6 +64,8 @@ public :
 	void exit();
 };
 
+// it's just useful
+std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::string, std::string> request_headers);
 
 // 'arg' should be a pointer to a **fresh** NetworkStreamCacherData instance
 void network_downloader_thread(void *arg);

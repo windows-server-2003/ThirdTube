@@ -80,7 +80,7 @@ void NetworkStreamCacherData::exit() {
 
 // return.first : error message, an empty string if the operation suceeded without an error
 // return.second : the acquired http context, should neither be used nor closed if return.first isn't empty
-static std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::string, std::string> request_headers) {
+std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::string, std::string> request_headers) {
 	httpcContext context;
 	
 	u32 statuscode = 0;
@@ -88,8 +88,8 @@ static std::pair<std::string, httpcContext> access_http(std::string url, std::ma
 	do {
 		ret = httpcOpenContext(&context, HTTPC_METHOD_GET, url.c_str(), 0);
 		ret = httpcSetSSLOpt(&context, SSLCOPT_DisableVerify); // to access https:// websites
-		// ret = httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_ENABLED);
-		// ret = httpcAddRequestHeaderField(&context, "Connection", "Keep-Alive");
+		ret = httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_ENABLED);
+		ret = httpcAddRequestHeaderField(&context, "Connection", "Keep-Alive");
 		ret = httpcAddRequestHeaderField(&context, "User-Agent", "httpc-example/1.0.0");
 		for (auto i : request_headers) httpcAddRequestHeaderField(&context, i.first.c_str(), i.second.c_str());
 
@@ -108,6 +108,7 @@ static std::pair<std::string, httpcContext> access_http(std::string url, std::ma
 		if ((statuscode >= 301 && statuscode <= 303) || (statuscode >= 307 && statuscode <= 308)) {
 			char newurl[0x1000];
 			ret = httpcGetResponseHeader(&context, "Location", newurl, 0x1000);
+			Util_log_save("httpc", "redirect");
 			url = std::string(newurl);
 			httpcCloseContext(&context); // close this context before we try the next
 		}

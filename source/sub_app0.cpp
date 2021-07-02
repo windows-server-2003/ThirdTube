@@ -58,7 +58,7 @@ namespace SubApp0 {
 };
 using namespace SubApp0;
 
-static const char *network_waiting_status = NULL;
+static const char * volatile network_waiting_status = NULL;
 const char *get_network_waiting_status() {
 	if (network_waiting_status) return network_waiting_status;
 	return decoder_get_network_waiting_status();
@@ -84,6 +84,35 @@ bool Sapp0_query_init_flag(void)
 bool Sapp0_query_running_flag(void)
 {
 	return vid_main_run;
+}
+
+std::string download_video_page(std::string url) {
+	constexpr int BLOCK = 0x40000; // 256 KB
+	APT_SetAppCpuTimeLimit(25);
+	network_waiting_status = "Accessing video page";
+	auto network_res = access_http(url, {});
+	std::string res;
+	if (network_res.first == "") {
+		network_waiting_status = "Downloading video page";
+		std::vector<u8> buffer(BLOCK);
+		std::vector<u8> res_vec;
+		while (1) {
+			u32 len_read;
+			Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
+			res_vec.insert(res_vec.end(), buffer.begin(), buffer.begin() + len_read);
+			if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
+		}
+		
+		httpcCloseContext(&network_res.second);
+		res = std::string(res_vec.begin(), res_vec.end());
+	} else {
+		Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "failed accessing video page : " + network_res.first);
+		network_waiting_status = "Failed accessing video page";
+		vid_play_request = false;
+	}
+	
+	APT_SetAppCpuTimeLimit(80);
+	return res;
 }
 
 void Sapp0_decode_thread(void* arg)
@@ -160,14 +189,20 @@ void Sapp0_decode_thread(void* arg)
 			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
 			*/
-			std::string url_const = "https://r2---sn-oguelnss.googlevideo.com/videoplayback?expire=1625145156&ei=5GrdYIKFKsTC4gKFiq3ACQ&ip=221.240.44.218&id=o-AGgkhkmYrNUOH3MwluoXP3KJhm-gLFCq7CRKBcSmjjsK&itag=251&source=youtube&requiressl=yes&mh=WH&mm=31%2C26&mn=sn-oguelnss%2Csn-npoeened&ms=au%2Conr&mv=m&mvi=2&pl=12&initcwndbps=1612500&vprv=1&mime=audio%2Fwebm&ns=d6dYKE7sLssp0IrL1KZQPuQG&gir=yes&clen=3757561&dur=219.521&lmt=1577805208345485&mt=1625123343&fvip=2&keepalive=yes&fexp=24001373%2C24007246&c=WEB&txp=5431432&n=Za6QE-Fpltje0j&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=AOq0QJ8wRAIgOP8ZEVzR2hCWVGw8i93IkIpdRhoH8mqCSL1JoZzZu1ECIFh17hTOpFHHwZz36tJCfSQQoJYStRQA3xaEKKueh42Q&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIhAMOnk4iCjXFjcxcJMraiw9zlFBpWwVo-k3gbgf7fA2JaAiAudchuhqhLIM-zsRv_tfW8RNrUnXtji-ccsPWutnAwFQ%3D%3D";
-			// std::string url_const = "https://r2---sn-oguelnss.googlevideo.com/videoplayback?expire=1625057589&ei=1RTcYMeUFJzzqQGbrr74Bw&ip=221.240.44.218&id=o-AK1gz5j65kxV0p-6lcUVPPimwBRXRQUbg5uq0MsLm6GT&itag=251&source=youtube&requiressl=yes&mh=WH&mm=31%2C29&mn=sn-oguelnss%2Csn-oguesnzz&ms=au%2Crdu&mv=m&mvi=2&pl=12&initcwndbps=1540000&vprv=1&mime=audio%2Fwebm&ns=fl10DTjzq6SzREKGSuOvbvwG&gir=yes&clen=3757561&dur=219.521&lmt=1577805208345485&mt=1625035495&fvip=2&fexp=24001373%2C24007246&c=WEB&txp=5431432&n=xm1mpDaa0ip8JguvY&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cns%2Cgir%2Cclen%2Cdur%2Clmt&sig=AOq0QJ8wRgIhALhDo5fv8V1XJiW_vonlPXNkB0hYdT2DnALJTxQ0ceIfAiEA5FBa-a7nmvVzlWtfvn-zc-SW23qkWQeW4CSZZIPivpU%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRQIgW_siezRvAnUK3R7RuHV4KGOUGi1KQDybPFk2rODuEssCIQDqTDNivQHczoUqFqtWt4P31riUV9Fme5b_OiTRHbcFIw%3D%3D";
-			network_cacher_data->change_url(url_const);
-			result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_network_stream()..." + result.string + result.error_description, result.code);
+			std::string url_const = "https://www.youtube.com/watch?v=t8JXBtezzOc";
+			auto video_page = download_video_page(url_const);
 			
-			if(result.code != 0)
-				vid_play_request = false;
+			if (vid_play_request) {
+				network_waiting_status = "parsing html";
+				YouTubeVideoInfo video_info = parse_youtube_html(video_page);
+				network_waiting_status = NULL;
+				network_cacher_data->change_url(video_info.audio_stream_url);
+				result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
+				Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_network_stream()..." + result.string + result.error_description, result.code);
+				if(result.code != 0)
+					vid_play_request = false;
+			}
+			
 
 			if(has_audio && vid_play_request)
 			{
@@ -788,8 +823,10 @@ void Sapp0_main(void)
 		{
 			if(vid_play_request)
 				vid_pause_request = !vid_pause_request;
-			else
+			else {
+				network_waiting_status = NULL;
 				vid_play_request = true;
+			}
 
 			var_need_reflesh = true;
 		}
