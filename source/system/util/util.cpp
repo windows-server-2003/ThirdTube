@@ -40,6 +40,9 @@ std::string Util_convert_seconds_to_time(double input_seconds)
 	long count = 0;
 	std::string time = "";
 	
+	if(std::isnan(input_seconds) || std::isinf(input_seconds))
+		input_seconds = 0;
+	
 	count = (long) input_seconds;
 	seconds = count % 60;
 	minutes = count / 60 % 60;
