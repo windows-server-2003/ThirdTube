@@ -246,9 +246,9 @@ void Sapp1_decode_thread(void* arg)
 						osTickCounterUpdate(&counter[1]);
 						vid_mvd_audio_time = osTickCounterRead(&counter[1]);
 
-						if(!has_video)
+						if(!has_video && !std::isnan(pos) && !std::isinf(pos))
 							vid_mvd_current_pos = pos;
-						
+
 						if(result.code == 0)
 						{
 							while(true)
@@ -290,7 +290,9 @@ void Sapp1_decode_thread(void* arg)
 							osTickCounterUpdate(&counter[0]);
 							vid_mvd_video_time = osTickCounterRead(&counter[0]);
 
-							vid_mvd_current_pos = pos;
+							if(!std::isnan(pos) && !std::isinf(pos))
+								vid_mvd_current_pos = pos;
+
 							if(result.code == 0)
 								vid_mvd_convert_request = true;
 							else
