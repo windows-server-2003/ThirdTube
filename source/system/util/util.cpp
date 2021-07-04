@@ -39,6 +39,9 @@ std::string Util_convert_seconds_to_time(double input_seconds)
 	long count = 0;
 	std::string time = "";
 
+	if(std::isnan(input_seconds) || std::isinf(input_seconds))
+		input_seconds = 0;
+	
 	for(count = 0; count < (int)input_seconds; count++)
 	{
 		if(seconds + 1 >= 60)
