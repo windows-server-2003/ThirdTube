@@ -71,13 +71,13 @@ void Sem_init(void)
 	Util_log_save(DEF_SEM_INIT_STR, "Initializing...");
 	bool wifi_state = true;
 	u8 region;
+	u8 model;
 	u8* cache = (u8*)malloc(0x1000);
 	u32 read_size = 0;
 	std::string data[10];
 	Result_with_string result;
 
-	result.code = CFGU_SecureInfoGetRegion(&region);
-	if(result.code == 0)
+	if(CFGU_SecureInfoGetRegion(&region) == 0)
 	{
 		if(region == CFG_REGION_CHN)
 			var_system_region = 1;
@@ -87,6 +87,22 @@ void Sem_init(void)
 			var_system_region = 3;
 		else
 			var_system_region = 0;
+	}
+
+	if(CFGU_GetSystemModel(&model))
+	{
+		if(model == 0)
+			var_model = "OLD 3DS";
+		else if(model == 1)
+			var_model = "OLD 3DS XL";
+		else if(model == 2)
+			var_model = "NEW 3DS";
+		else if(model == 3)
+			var_model = "OLD 2DS";
+		else if(model == 4)
+			var_model = "NEW 3DS XL";
+		else if(model == 5)
+			var_model = "NEW 2DS XL";
 	}
 
 	result = Util_file_load_from_file("settings.txt", DEF_MAIN_DIR, cache, 0x1000, &read_size);
@@ -118,6 +134,9 @@ void Sem_init(void)
 		if(var_num_of_app_start < 0)
 			var_num_of_app_start = 0;
 	}
+
+	if(var_model == "OLD 2DS")//OLD 2DS doesn't support high resolution mode
+		var_high_resolution_mode = false;
 
 	sem_thread_run = true;
 	sem_update_thread = threadCreate(Sem_update_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
@@ -294,12 +313,12 @@ void Sem_main(void)
 			if (var_flash_mode)
 				cache_color[2] = DEF_DRAW_RED;
 
-			if(sem_record_request && var_night_mode)
+			if((sem_record_request || var_model == "OLD 2DS") && var_night_mode)
 			{
 				cache_color[3] = DEF_DRAW_WEAK_WHITE;
 				cache_color[4] = DEF_DRAW_WEAK_WHITE;
 			}
-			else if(sem_record_request)
+			else if(sem_record_request || var_model == "OLD 2DS")
 			{
 				cache_color[3] = DEF_DRAW_WEAK_BLACK;
 				cache_color[4] = DEF_DRAW_WEAK_BLACK;
@@ -796,7 +815,7 @@ void Sem_main(void)
 						sem_bar_selected[0] = true;
 					else if (key.p_touch && key.touch_x >= 10 && key.touch_x <= 309 && key.touch_y >= 120 && key.touch_y <= 139)
 						sem_bar_selected[1] = true;
-					if (key.p_touch && key.touch_x >= 10 && key.touch_x <= 99 && key.touch_y >= 160 && key.touch_y <= 179 && !sem_record_request)
+					if (key.p_touch && key.touch_x >= 10 && key.touch_x <= 99 && key.touch_y >= 160 && key.touch_y <= 179 && !sem_record_request && var_model != "OLD 2DS")
 					{
 						var_high_resolution_mode = true;
 						Draw_reinit(var_high_resolution_mode);

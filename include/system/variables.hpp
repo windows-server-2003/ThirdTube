@@ -32,4 +32,5 @@ extern char var_status[128];
 extern std::string var_clipboard;
 extern std::string var_connected_ssid;
 extern std::string var_lang;
+extern std::string var_model;
 extern C2D_Image var_square_image[1];

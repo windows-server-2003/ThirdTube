@@ -32,4 +32,5 @@ char var_status[128];
 std::string var_clipboard = "";
 std::string var_connected_ssid = "";
 std::string var_lang = "en";
+std::string var_model = "Unknown";
 C2D_Image var_square_image[1];
