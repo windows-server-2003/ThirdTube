@@ -10,50 +10,61 @@
 #include "cipher.hpp"
 
 #ifdef _WIN32
-#include <iostream> // <------------
-#include <fstream> // <-------
-#include <sstream> // <-------
-#define debug(s) std::cerr << (s) << std::endl
+#	include <iostream> // <------------
+#	include <fstream> // <-------
+#	include <sstream> // <-------
 
-std::string http_get(const std::string &url) {
-	static const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
-	
-	system(("wget --user-agent=\"" + user_agent + "\" \"" + url + "\" -O wget_tmp.txt").c_str());
-	std::ifstream file("wget_tmp.txt");
-	std::stringstream sstream;
-	sstream << file.rdbuf();
-	return sstream.str();
-}
+	typedef uint8_t u8;
+	typedef uint16_t u16;
+	typedef uint32_t u32;
+	typedef uint64_t u64;
+	typedef int8_t s8;
+	typedef int16_t s16;
+	typedef int32_t s32;
+	typedef int64_t s64;
+
+#	define debug(s) std::cerr << (s) << std::endl
+
+	std::string http_get(const std::string &url) {
+		static const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
+		
+		system(("wget --user-agent=\"" + user_agent + "\" \"" + url + "\" -O wget_tmp.txt").c_str());
+		std::ifstream file("wget_tmp.txt");
+		std::stringstream sstream;
+		sstream << file.rdbuf();
+		return sstream.str();
+	}
 
 #else // if it's a 3ds...
-#include "headers.hpp"
-#define debug(s) Util_log_save("yt-parser", (s));
 
-std::string http_get(const std::string &url) {
-	constexpr int BLOCK = 0x40000; // 256 KB
-	APT_SetAppCpuTimeLimit(25);
-	debug("accessing...");
-	// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
-	auto network_res = access_http(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
-	std::string res;
-	if (network_res.first == "") {
-		debug("downloading...");
-		std::vector<u8> buffer(BLOCK);
-		std::vector<u8> res_vec;
-		while (1) {
-			u32 len_read;
-			Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
-			res_vec.insert(res_vec.end(), buffer.begin(), buffer.begin() + len_read);
-			if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
-		}
+#	include "headers.hpp"
+#	define debug(s) Util_log_save("yt-parser", (s));
+
+	std::string http_get(const std::string &url) {
+		constexpr int BLOCK = 0x40000; // 256 KB
+		APT_SetAppCpuTimeLimit(25);
+		debug("accessing...");
+		// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
+		auto network_res = access_http(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
+		std::string res;
+		if (network_res.first == "") {
+			debug("downloading...");
+			std::vector<u8> buffer(BLOCK);
+			std::vector<u8> res_vec;
+			while (1) {
+				u32 len_read;
+				Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
+				res_vec.insert(res_vec.end(), buffer.begin(), buffer.begin() + len_read);
+				if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
+			}
+			
+			httpcCloseContext(&network_res.second);
+			res = std::string(res_vec.begin(), res_vec.end());
+		} else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "failed accessing : " + network_res.first);
 		
-		httpcCloseContext(&network_res.second);
-		res = std::string(res_vec.begin(), res_vec.end());
-	} else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "failed accessing : " + network_res.first);
-	
-	APT_SetAppCpuTimeLimit(80);
-	return res;
-}
+		APT_SetAppCpuTimeLimit(80);
+		return res;
+	}
 
 #endif
 
@@ -205,11 +216,12 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 	Json player_response = initial_player_response(html);
 	Json player_config = get_ytplayer_config(html);
 	
-	// extract audio stream
+	// extract stream formats
 	std::vector<Json> formats;
 	for (auto i : player_response["streamingData"]["formats"].array_items()) formats.push_back(i);
 	for (auto i : player_response["streamingData"]["adaptiveFormats"].array_items()) formats.push_back(i);
-	// for obfuscated signature
+	
+	// for obfuscated signatures
 	std::string js_url;
 	for (auto &i : formats) { // handle decipher
 		if (i["url"] != Json()) continue;
@@ -246,8 +258,8 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 		auto tmp = i.object_items();
 		tmp["url"] = Json(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + yt_deobfuscate_signature(cipher_params["s"], transform_procedure));
 		i = Json(tmp);
-		
 	}
+	
 	std::vector<Json> audio_formats, video_formats;
 	for (auto i : formats) {
 		auto mime_type = i["mimeType"].string_value();
@@ -259,16 +271,33 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 			if (mime_type.find("mp4a") != std::string::npos) audio_formats.push_back(i);
 		} else {} // ???
 	}
-	int max_bitrate = -1;
-	std::string best_audio_stream_url;
-	for (auto i : audio_formats) {
-		int cur_bitrate = i["bitrate"].int_value();
-		if (max_bitrate < cur_bitrate) {
-			max_bitrate = cur_bitrate;
-			best_audio_stream_url = i["url"].string_value();
+	// audio
+	{
+		int max_bitrate = -1;
+		std::string best_audio_stream_url;
+		for (auto i : audio_formats) {
+			int cur_bitrate = i["bitrate"].int_value();
+			if (max_bitrate < cur_bitrate) {
+				max_bitrate = cur_bitrate;
+				best_audio_stream_url = i["url"].string_value();
+			}
 		}
+		res.audio_stream_url = best_audio_stream_url;
 	}
-	res.audio_stream_url = best_audio_stream_url;
+	// video
+	{
+		std::vector<std::string> recommended_quality = {"240p", "144p", "360p"};
+		u8 found = recommended_quality.size();
+		for (auto i : video_formats) {
+			std::string cur_quality = i["qualityLabel"].string_value();
+			for (size_t j = 0; j < recommended_quality.size(); j++) if (cur_quality == recommended_quality[j] && found > j) {
+				found = j;
+				res.video_stream_url = i["url"].string_value();
+			}
+		}
+		if (found == recommended_quality.size() && video_formats.size()) // recommended resolution not found, pick random one
+			res.video_stream_url = video_formats[0]["url"].string_value();
+	}
 	return true;
 }
 

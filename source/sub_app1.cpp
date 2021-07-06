@@ -253,7 +253,7 @@ void Sapp1_decode_thread(void* arg)
 						{
 							while(true)
 							{
-								result = Util_speaker_add_buffer(1, ch, audio, audio_size);
+								result = Util_speaker_add_buffer(1, ch, audio, audio_size, pos);
 								if(result.code == 0 || !vid_mvd_play_request || vid_mvd_seek_request || vid_mvd_change_video_request)
 									break;
 								

@@ -13,7 +13,7 @@
 #define DEF_CURRENT_APP_VER (std::string)"v1.1.0"
 #define DEF_CURRENT_APP_VER_INT 1041
 #define DEF_ENABLE_SUB_APP0
-#define DEF_ENABLE_SUB_APP1
+//#define DEF_ENABLE_SUB_APP1
 //#define DEF_ENABLE_SUB_APP2
 //#define DEF_ENABLE_SUB_APP3
 //#define DEF_ENABLE_SUB_APP4
@@ -157,6 +157,8 @@
 #define DEF_ERR_STB_IMG_RETURNED_NOT_SUCCESS 0xFFFFFFFB
 #define DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS 0xFFFFFFFA
 #define DEF_ERR_INVALID_ARG 0xFFFFFFF9
+#define DEF_ERR_NEED_MORE_INPUT 0xFFFFFFF8
+#define DEF_ERR_NEED_MORE_OUTPUT 0xFFFFFFF7
 
 #define DEF_ERR_OTHER_STR (std::string)"[Error] Something went wrong. "
 #define DEF_ERR_OUT_OF_MEMORY_STR (std::string)"[Error] Out of memory. "

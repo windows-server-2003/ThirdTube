@@ -1,5 +1,6 @@
 #include "headers.hpp"
 #include <vector>
+#include <numeric>
 
 #include "sub_app0.hpp"
 
@@ -7,12 +8,11 @@ bool vid_main_run = false;
 bool vid_thread_run = false;
 bool vid_already_init = false;
 bool vid_thread_suspend = true;
+bool convert_thread_running = false;
 bool vid_play_request = false;
 bool vid_change_video_request = false;
-bool vid_convert_request = false;
-bool vid_wait_request = false;
 bool vid_detail_mode = false;
-bool vid_pause_request = false;
+bool vid_pausing = false;
 bool vid_seek_request = false;
 bool vid_linear_filter = true;
 bool vid_show_controls = false;
@@ -24,6 +24,7 @@ double vid_video_time = 0;
 double vid_convert_time = 0;
 double vid_frametime = 0;
 double vid_framerate = 0;
+int vid_sample_rate = 0;
 double vid_duration = 0;
 double vid_zoom = 1;
 double vid_x = 0;
@@ -53,15 +54,19 @@ C2D_Image vid_control[2];
 Thread vid_decode_thread, vid_convert_thread;
 
 namespace SubApp0 {
-	Thread downloader_thread;
-	NetworkStreamCacherData *network_cacher_data = NULL;
+	Thread video_downloader_thread;
+	Thread audio_downloader_thread;
+	NetworkStreamCacherData *video_cacher_data = NULL;
+	NetworkStreamCacherData *audio_cacher_data = NULL;
+	NetworkDecoder network_decoder;
 };
 using namespace SubApp0;
 
 static const char * volatile network_waiting_status = NULL;
 const char *get_network_waiting_status() {
 	if (network_waiting_status) return network_waiting_status;
-	return decoder_get_network_waiting_status();
+	return NULL;
+	// return decoder_get_network_waiting_status();
 }
 
 void Sapp0_callback(std::string file, std::string dir)
@@ -92,7 +97,6 @@ void Sapp0_decode_thread(void* arg)
 
 	Result_with_string result;
 	int bitrate = 0;
-	int sample_rate = 0;
 	int ch = 0;
 	int audio_size = 0;
 	int w = 0;
@@ -100,15 +104,13 @@ void Sapp0_decode_thread(void* arg)
 	int skip = 0;
 	double pos = 0;
 	bool key = false;
-	bool has_audio = false;
-	bool has_video = false;
 	u8* audio = NULL;
 	std::string format = "";
 	std::string type = (char*)arg;
-	TickCounter counter[3];
-	osTickCounterStart(&counter[0]);
-	osTickCounterStart(&counter[1]);
-	osTickCounterStart(&counter[2]);
+	TickCounter counter0, counter1;
+	osTickCounterStart(&counter0);
+	osTickCounterStart(&counter1);
+	
 	if(type == "1")
 		APT_SetAppCpuTimeLimit(80);
 
@@ -160,7 +162,7 @@ void Sapp0_decode_thread(void* arg)
 			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
 			*/
-			std::string video_url = "https://www.youtube.com/watch?v=7yjzo8qnenk";
+			std::string video_url;
 			{ // input video id
 				SwkbdState keyboard;
 				swkbdInit(&keyboard, SWKBD_TYPE_WESTERN, 2, 11);
@@ -168,8 +170,10 @@ void Sapp0_decode_thread(void* arg)
 				swkbdSetValidation(&keyboard, SWKBD_FIXEDLEN, 0, 0);
 				swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
 				swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
+				APT_SetAppCpuTimeLimit(50);
 				char video_id[64];
 				auto button_pressed = swkbdInputText(&keyboard, video_id, 12);
+				APT_SetAppCpuTimeLimit(80);
 				if (button_pressed == SWKBD_BUTTON_RIGHT) video_url = std::string("https://www.youtube.com/watch?v=") + video_id;
 				else {
 					vid_play_request = false;
@@ -185,37 +189,35 @@ void Sapp0_decode_thread(void* arg)
 				continue;
 			}
 			network_waiting_status = NULL;
-			network_cacher_data->change_url(video_info.audio_stream_url);
-			result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_network_stream()..." + result.string + result.error_description, result.code);
+			
+			
+			video_cacher_data->change_url(video_info.video_stream_url);
+			audio_cacher_data->change_url(video_info.audio_stream_url);
+			result = network_decoder.init(video_cacher_data, audio_cacher_data);
+			
+			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
 			if(result.code != 0)
 				vid_play_request = false;
 			
-
-			if(has_audio && vid_play_request)
-			{
-				result = Util_audio_decoder_init(0);
-				Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_audio_decoder_init()..." + result.string + result.error_description, result.code);
-				if(result.code != 0)
-					vid_play_request = false;
-
-				if(vid_play_request)
+			if (vid_play_request) {
 				{
-					Util_audio_decoder_get_info(&bitrate, &sample_rate, &ch, &vid_audio_format, &vid_duration, 0);
-					Util_speaker_init(0, ch, sample_rate);
+					auto tmp = network_decoder.get_audio_info();
+					bitrate = tmp.bitrate;
+					vid_sample_rate = tmp.sample_rate;
+					ch = tmp.ch;
+					vid_audio_format = tmp.format_name;
+					vid_duration = tmp.duration;
 				}
-			}
-			if(has_video && vid_play_request)
-			{
-				result = Util_video_decoder_init(0, 0);
-				Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_init()..." + result.string + result.error_description, result.code);
-				if(result.code != 0)
-					vid_play_request = false;
-				
-				if(vid_play_request)
+				Util_speaker_init(0, ch, vid_sample_rate);
 				{
-					Util_video_decoder_get_info(&vid_width, &vid_height, &vid_framerate, &vid_video_format, &vid_duration, 0);
-					vid_frametime = (1000.0 / vid_framerate);
+					auto tmp = network_decoder.get_video_info();
+					vid_width = tmp.width;
+					vid_height = tmp.height;
+					vid_framerate = tmp.framerate;
+					vid_video_format = tmp.format_name;
+					vid_duration = tmp.duration;
+					vid_frametime = 1000.0 / vid_framerate;;
 
 					//fit to screen size
 					while(((vid_width * vid_zoom) > 400 || (vid_height * vid_zoom) > 225) && vid_zoom > 0.05)
@@ -231,7 +233,7 @@ void Sapp0_decode_thread(void* arg)
 						vid_height += 16 - vid_height % 16;
 				}
 			}
-
+			
 			if(result.code != 0)
 			{
 				Util_err_set_error_message(result.string, result.error_description, DEF_SAPP0_DECODE_THREAD_STR, result.code);
@@ -239,154 +241,110 @@ void Sapp0_decode_thread(void* arg)
 				var_need_reflesh = true;
 			}
 
-			osTickCounterUpdate(&counter[2]);
-			while(vid_play_request)
+			osTickCounterUpdate(&counter1);
+			while (vid_play_request)
 			{
-				result = Util_decoder_read_packet(&type, 0);
-				if(result.code != 0)
-					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_read_packet()..." + result.string + result.error_description, result.code);
-				
-				var_afk_time = 0;
-
-				if(vid_pause_request)
-				{
-					Util_speaker_pause(0);
-					while(vid_pause_request && vid_play_request && !vid_seek_request && !vid_change_video_request)
-						usleep(20000);
-					
-					osTickCounterUpdate(&counter[2]);
-					Util_speaker_resume(0);
-				}
-
 				if(vid_seek_request)
 				{
-					//µs
-					result = Util_decoder_seek(vid_seek_pos * 1000, 8, 0);
-					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_seek()..." + result.string + result.error_description, result.code);
+					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "seek reqeust caught... : " + std::to_string(vid_seek_pos));
+					while (convert_thread_running) usleep(10000);
+					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "confirmed the stop of convert thread...");
 					Util_speaker_clear_buffer(0);
+					result = network_decoder.seek(vid_seek_pos * 1000);
+					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
 					vid_seek_request = false;
+					if (result.code != 0) {
+						vid_play_request = false;
+						break;
+					}
+					osTickCounterUpdate(&counter1);
 				}
-
-				if(!vid_play_request || vid_change_video_request || result.code != 0)
-					break;
-
-				if(type == "audio")
-				{
-					result = Util_decoder_ready_audio_packet(0);
+				if (vid_change_video_request) break;
+				
+				std::string type = network_decoder.next_decode_type();
+				if (type == "audio") {
+					osTickCounterUpdate(&counter0);
+					result = network_decoder.decode_audio(&audio_size, &audio, &pos);
+					osTickCounterUpdate(&counter0);
+					vid_audio_time = osTickCounterRead(&counter0);
+					
+					network_decoder.read_audio_packet(); // refill
+					
+					if (!std::isnan(pos) && !std::isinf(pos))
+						vid_current_pos = pos;
+					
 					if(result.code == 0)
 					{
-						osTickCounterUpdate(&counter[1]);
-						result = Util_audio_decoder_decode(&audio_size, &audio, &pos, 0);
-						osTickCounterUpdate(&counter[1]);
-						vid_audio_time = osTickCounterRead(&counter[1]);
-						
-						if(!has_video && !std::isnan(pos) && !std::isinf(pos))
-							vid_current_pos = pos;
-						
-						if(result.code == 0)
+						while(true)
 						{
-							while(true)
-							{
-								result = Util_speaker_add_buffer(0, ch, audio, audio_size);
-								if(result.code == 0 || !vid_play_request || vid_seek_request || vid_change_video_request)
-									break;
-								
-								usleep(10000);
-							}
-						}
-						else
-							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_audio_decoder_decode()..." + result.string + result.error_description, result.code);
-
-						free(audio);
-						audio = NULL;
-					}
-					else
-						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_ready_audio_packet()..." + result.string + result.error_description, result.code);
-				}
-				else if(type == "video")
-				{
-					if(vid_allow_skip_frames && skip > vid_frametime)
-					{
-						skip -= vid_frametime;
-						Util_decoder_skip_video_packet(0);
-					}
-					else
-					{
-						result = Util_decoder_ready_video_packet(0);
-
-						if(result.code == 0)
-						{
-							while(vid_wait_request)
-								usleep(1000);
-
-							osTickCounterUpdate(&counter[0]);
-							result = Util_video_decoder_decode(&w, &h, &key, &pos, 0);
-							osTickCounterUpdate(&counter[0]);
-							vid_video_time = osTickCounterRead(&counter[0]);
-
-							if(!std::isnan(pos) && !std::isinf(pos))
-								vid_current_pos = pos;
-
-							if(result.code == 0)
-								vid_convert_request = true;
-							else
-								Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
-
-							osTickCounterUpdate(&counter[2]);
-							vid_time[0][319] = osTickCounterRead(&counter[2]);
-
-							if(vid_frametime - vid_time[0][319] > 0)
-								usleep((vid_frametime - vid_time[0][319]) * 1000);
-							else if(vid_allow_skip_frames)
-								skip -= vid_frametime - vid_time[0][319];
-
-							osTickCounterUpdate(&counter[2]);
-							if(vid_min_time > vid_time[0][319])
-								vid_min_time = vid_time[0][319];
-							if(vid_max_time < vid_time[0][319])
-								vid_max_time = vid_time[0][319];
+							result = Util_speaker_add_buffer(0, ch, audio, audio_size, pos);
+							if(result.code == 0 || !vid_play_request || vid_seek_request || vid_change_video_request)
+								break;
+							// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "audio queue full");
 							
-							vid_total_time += vid_time[0][319];
-							vid_total_frames++;
-
-							vid_recent_time[89] = vid_time[0][319];
-							vid_recent_total_time = 0;
-							for(int i = 0; i < 90; i++)
-								vid_recent_total_time += vid_recent_time[i];
-
-							for(int i = 1; i < 90; i++)
-								vid_recent_time[i - 1] = vid_recent_time[i];
-
-							for(int i = 1; i < 320; i++)
-								vid_time[0][i - 1] = vid_time[0][i];
+							usleep(10000);
 						}
-						else
-							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_ready_video_packet()..." + result.string + result.error_description, result.code);
 					}
-				}
+					else
+						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_audio_decoder_decode()..." + result.string + result.error_description, result.code);
+
+					free(audio);
+					audio = NULL;
+				} else if (type == "video") {
+					osTickCounterUpdate(&counter0);
+					result = network_decoder.decode_video(&w, &h, &key, &pos);
+					osTickCounterUpdate(&counter0);
+					
+					// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoded a video packet at " + std::to_string(pos));
+					while (result.code == DEF_ERR_NEED_MORE_OUTPUT && vid_play_request && !vid_seek_request && !vid_change_video_request) {
+							// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "video queue full");
+						usleep(10000);
+						osTickCounterUpdate(&counter0);
+						result = network_decoder.decode_video(&w, &h, &key, &pos);
+						osTickCounterUpdate(&counter0);
+					}
+					vid_video_time = osTickCounterRead(&counter0);
+					
+					// get the elapsed time from the previous frame
+					osTickCounterUpdate(&counter1);
+					double cur_frame_internval = osTickCounterRead(&counter1);
+					
+					vid_min_time = std::min(vid_min_time, cur_frame_internval);
+					vid_max_time = std::max(vid_max_time, cur_frame_internval);
+					vid_total_time += cur_frame_internval;
+					vid_total_frames++;
+					vid_recent_time[89] = cur_frame_internval;
+					vid_recent_total_time = std::accumulate(vid_recent_time, vid_recent_time + 90, 0.0);
+					for (int i = 1; i < 90; i++) vid_recent_time[i - 1] = vid_recent_time[i];
+					
+					vid_time[0][319] = cur_frame_internval;
+					for (int i = 1; i < 320; i++) vid_time[0][i - 1] = vid_time[0][i];
+					
+					if (vid_play_request && !vid_seek_request && !vid_change_video_request) {
+						network_decoder.read_video_packet(); // refill
+						
+						if (result.code != 0)
+							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
+					}
+				} else if (type == "EOF") break;
+				else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "unknown type of packet");
 			}
-
-			vid_convert_request = false;
-			while(vid_wait_request)
-				usleep(10000);
-
-			if(has_audio)
-			{
-				Util_audio_decoder_exit(0);
-				while(Util_speaker_is_playing(0) && vid_play_request)
-					usleep(10000);
-				
-				Util_speaker_exit(0);
-			}
-			if(has_video)
-				Util_video_decoder_exit(0);
-
-			Util_decoder_close_file(0);
-
-			vid_pause_request = false;
-			vid_seek_request = false;
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
+			
+			while (Util_speaker_is_playing(0) && vid_play_request) usleep(10000);
+			Util_speaker_exit(0);
+			
 			if(!vid_change_video_request)
 				vid_play_request = false;
+			
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "speaker exited, waiting for convert thread");
+			// make sure the convert thread stops before closing network_decoder
+			while (convert_thread_running) usleep(10000);
+			network_decoder.deinit();
+
+			vid_pausing = false;
+			vid_seek_request = false;
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "deinit complete");
 		}
 		else
 			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
@@ -404,118 +362,146 @@ void Sapp0_convert_thread(void* arg)
 	Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Thread started.");
 	u8* yuv_video = NULL;
 	u8* video = NULL;
-	TickCounter counter[4];
+	TickCounter counter0, counter1;
 	Result_with_string result;
 
-	osTickCounterStart(&counter[0]);
-	osTickCounterStart(&counter[1]);
-	osTickCounterStart(&counter[2]);
-	osTickCounterStart(&counter[3]);
+	osTickCounterStart(&counter0);
 
 	while (vid_thread_run)
 	{	
-		if(vid_play_request)
+		if (vid_play_request && !vid_seek_request && !vid_change_video_request)
 		{
-			while(vid_play_request)
+			while(vid_play_request && !vid_seek_request && !vid_change_video_request)
 			{
-				if(vid_convert_request)
+				convert_thread_running = true;
+				double pts;
+				do {
+					osTickCounterUpdate(&counter1);
+					osTickCounterUpdate(&counter0);
+					result = network_decoder.get_decoded_video_frame(vid_width, vid_height, &yuv_video, &pts);
+					osTickCounterUpdate(&counter0);
+					if (result.code != DEF_ERR_NEED_MORE_INPUT) break;
+					if (vid_pausing) usleep(10000);
+					else usleep(3000);
+				} while (vid_play_request && !vid_seek_request && !vid_change_video_request);
+				
+				if (vid_seek_request || vid_change_video_request) break;
+				if (result.code != 0) { // this is an unexpected error
+					Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "failure getting decoded result" + result.string + result.error_description, result.code);
+					vid_play_request = false;
+					break;
+				}
+				
+				vid_copy_time[0] = osTickCounterRead(&counter0);
+				
+				osTickCounterUpdate(&counter0);
+				result = Util_converter_yuv420p_to_bgr565(yuv_video, &video, vid_width, vid_height);
+				osTickCounterUpdate(&counter0);
+				vid_convert_time = osTickCounterRead(&counter0);
+				
+				
+				double cur_convert_time = 0;
+				
+				if(result.code == 0)
 				{
-					vid_wait_request = true;
-					osTickCounterUpdate(&counter[3]);
-					osTickCounterUpdate(&counter[2]);
-					result = Util_video_decoder_get_image(&yuv_video, vid_width, vid_height, 0);
-					osTickCounterUpdate(&counter[2]);
-					vid_copy_time[0] = osTickCounterRead(&counter[2]);
-					
-					vid_convert_request = false;
-					vid_wait_request = false;
-					if(result.code == 0)
+					if(vid_width > 1024 && vid_height > 1024)
 					{
-						osTickCounterUpdate(&counter[0]);
-						result = Util_converter_yuv420p_to_bgr565(yuv_video, &video, vid_width, vid_height);
-						osTickCounterUpdate(&counter[0]);
-						vid_convert_time = osTickCounterRead(&counter[0]);
-
-						if(result.code == 0)
-						{
-							osTickCounterUpdate(&counter[1]);
-							if(vid_width > 1024 && vid_height > 1024)
-							{
-								vid_tex_width[0] = 1024;
-								vid_tex_width[1] = vid_width - 1024;
-								vid_tex_width[2] = 1024;
-								vid_tex_width[3] = vid_width - 1024;
-								vid_tex_height[0] = 1024;
-								vid_tex_height[1] = 1024;
-								vid_tex_height[2] = vid_height - 1024;
-								vid_tex_height[3] = vid_height - 1024;
-							}
-							else if(vid_width > 1024)
-							{
-								vid_tex_width[0] = 1024;
-								vid_tex_width[1] = vid_width - 1024;
-								vid_tex_height[0] = vid_height;
-								vid_tex_height[1] = vid_height;
-							}
-							else if(vid_height > 1024)
-							{
-								vid_tex_width[0] = vid_width;
-								vid_tex_width[1] = vid_width;
-								vid_tex_height[0] = 1024;
-								vid_tex_height[1] = vid_height - 1024;
-							}
-							else
-							{
-								vid_tex_width[0] = vid_width;
-								vid_tex_height[0] = vid_height;
-							}
-
-							result = Draw_set_texture_data(&vid_image[0], video, vid_width, vid_height, 1024, 1024, GPU_RGB565);
-							if(result.code != 0)
-								Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
-
-							if(vid_width > 1024)
-							{
-								result = Draw_set_texture_data(&vid_image[1], video, vid_width, vid_height, 1024, 0, 1024, 1024, GPU_RGB565);
-								if(result.code != 0)
-									Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
-							}
-							if(vid_height > 1024)
-							{
-								result = Draw_set_texture_data(&vid_image[2], video, vid_width, vid_height, 0, 1024, 1024, 1024, GPU_RGB565);
-								if(result.code != 0)
-									Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
-							}
-							if(vid_width > 1024 && vid_height > 1024)
-							{
-								result = Draw_set_texture_data(&vid_image[3], video, vid_width, vid_height, 1024, 1024, 1024, 1024, GPU_RGB565);
-								if(result.code != 0)
-									Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
-							}
-
-							osTickCounterUpdate(&counter[1]);
-							vid_copy_time[1] = osTickCounterRead(&counter[1]);
-							
-							free(yuv_video);
-							free(video);
-							yuv_video = NULL;
-							video = NULL;
-							var_need_reflesh = true;
-						}
-						else
-							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Util_converter_yuv420p_to_bgr565()..." + result.string + result.error_description, result.code);
+						vid_tex_width[0] = 1024;
+						vid_tex_width[1] = vid_width - 1024;
+						vid_tex_width[2] = 1024;
+						vid_tex_width[3] = vid_width - 1024;
+						vid_tex_height[0] = 1024;
+						vid_tex_height[1] = 1024;
+						vid_tex_height[2] = vid_height - 1024;
+						vid_tex_height[3] = vid_height - 1024;
+					}
+					else if(vid_width > 1024)
+					{
+						vid_tex_width[0] = 1024;
+						vid_tex_width[1] = vid_width - 1024;
+						vid_tex_height[0] = vid_height;
+						vid_tex_height[1] = vid_height;
+					}
+					else if(vid_height > 1024)
+					{
+						vid_tex_width[0] = vid_width;
+						vid_tex_width[1] = vid_width;
+						vid_tex_height[0] = 1024;
+						vid_tex_height[1] = vid_height - 1024;
 					}
 					else
-						Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Util_video_decoder_get_image()..." + result.string + result.error_description, result.code);
+					{
+						vid_tex_width[0] = vid_width;
+						vid_tex_height[0] = vid_height;
+					}
+					
+					// we don't want to include the sleep time in the performance profiling
+					osTickCounterUpdate(&counter0);
+					vid_copy_time[1] = osTickCounterRead(&counter0);
+					osTickCounterUpdate(&counter1);
+					cur_convert_time = osTickCounterRead(&counter1);
+					
+					// sync with sound
+					double cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
+					
+					if (cur_sound_pos < 0) { // sound is not playing, probably because the video is lagging behind, so draw immediately
+						
+					} else {
+						while (pts - cur_sound_pos > 0.005 && vid_play_request && !vid_seek_request && !vid_change_video_request) {
+							usleep((pts - cur_sound_pos - 0.005) * 1000000);
+							cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
+							if (cur_sound_pos < 0) {
+								Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "sound pos detection FAILED");
+								break;
+							}
+						}
+					}
+					
+					osTickCounterUpdate(&counter0);
+					osTickCounterUpdate(&counter1);
+					
+					result = Draw_set_texture_data(&vid_image[0], video, vid_width, vid_height, 1024, 1024, GPU_RGB565);
+					if(result.code != 0)
+						Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 
-					osTickCounterUpdate(&counter[3]);
-					vid_time[1][319] = osTickCounterRead(&counter[3]);
-					for(int i = 1; i < 320; i++)
-						vid_time[1][i - 1] = vid_time[1][i];
+					if(vid_width > 1024)
+					{
+						result = Draw_set_texture_data(&vid_image[1], video, vid_width, vid_height, 1024, 0, 1024, 1024, GPU_RGB565);
+						if(result.code != 0)
+							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+					}
+					if(vid_height > 1024)
+					{
+						result = Draw_set_texture_data(&vid_image[2], video, vid_width, vid_height, 0, 1024, 1024, 1024, GPU_RGB565);
+						if(result.code != 0)
+							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+					}
+					if(vid_width > 1024 && vid_height > 1024)
+					{
+						result = Draw_set_texture_data(&vid_image[3], video, vid_width, vid_height, 1024, 1024, 1024, 1024, GPU_RGB565);
+						if(result.code != 0)
+							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+					}
+
+					osTickCounterUpdate(&counter0);
+					vid_copy_time[1] += osTickCounterRead(&counter0);
+					
+					free(yuv_video);
+					free(video);
+					yuv_video = NULL;
+					video = NULL;
+					var_need_reflesh = true;
 				}
 				else
-					usleep(1000);
+					Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Util_converter_yuv420p_to_bgr565()..." + result.string + result.error_description, result.code);
+
+				osTickCounterUpdate(&counter1);
+				cur_convert_time += osTickCounterRead(&counter1);
+				vid_time[1][319] = cur_convert_time;
+				for(int i = 1; i < 320; i++)
+					vid_time[1][i - 1] = vid_time[1][i];
 			}
+			convert_thread_running = false;
 		}
 		else
 			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
@@ -561,8 +547,10 @@ void Sapp0_init(void)
 		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
-	network_cacher_data = new NetworkStreamCacherData();
-	downloader_thread = threadCreate(network_downloader_thread, network_cacher_data, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+	video_cacher_data = new NetworkStreamCacherData();
+	audio_cacher_data = new NetworkStreamCacherData();
+	video_downloader_thread = threadCreate(network_downloader_thread, video_cacher_data, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+	audio_downloader_thread = threadCreate(network_downloader_thread, audio_cacher_data, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
 	vid_total_time = 0;
 	vid_total_frames = 0;
@@ -643,17 +631,20 @@ void Sapp0_exit(void)
 	vid_already_init = false;
 	vid_thread_suspend = false;
 	vid_thread_run = false;
-	vid_convert_request = false;
 	vid_play_request = false;
 
-	network_cacher_data->exit();
+	video_cacher_data->exit();
+	audio_cacher_data->exit();
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(downloader_thread, time_out));
+	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(video_downloader_thread, time_out));
+	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(audio_downloader_thread, time_out));
 	threadFree(vid_decode_thread);
 	threadFree(vid_convert_thread);
-	threadFree(downloader_thread);
-	free(network_cacher_data);
+	threadFree(video_downloader_thread);
+	threadFree(audio_downloader_thread);
+	free(video_cacher_data);
+	free(audio_cacher_data);
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
@@ -710,7 +701,8 @@ void Sapp0_main(void)
 			const char *message = get_network_waiting_status();
 			if (message) Draw(message, 0, 150, 0.5, 0.5, color);
 		}
-		Draw("Download : " + std::to_string((int) std::round(network_cacher_data->download_percent)) + "%", 0, 160, 0.5, 0.5, color);
+		Draw("Video Download : " + std::to_string((int) std::round(video_cacher_data->download_percent)) + "%", 0, 150, 0.5, 0.5, color);
+		Draw("Audio Download : " + std::to_string((int) std::round(audio_cacher_data->download_percent)) + "%", 0, 160, 0.5, 0.5, color);
 
 		//codec info
 		Draw(vid_video_format, 0, 10, 0.5, 0.5, color);
@@ -742,10 +734,10 @@ void Sapp0_main(void)
 		Draw(vid_msg[3 + vid_allow_skip_frames], 167.5, 180, 0.4, 0.4, color);
 
 		//time bar
-		Draw(Util_convert_seconds_to_time(vid_current_pos / 1000) + "/" + Util_convert_seconds_to_time(vid_duration), 110, 210, 0.5, 0.5, color);
+		Draw(Util_convert_seconds_to_time(vid_current_pos) + "/" + Util_convert_seconds_to_time(vid_duration), 110, 210, 0.5, 0.5, color);
 		Draw_texture(var_square_image[0], DEF_DRAW_GREEN, 5, 195, 310, 10);
 		if(vid_duration != 0)
-			Draw_texture(var_square_image[0], 0xFF800080, 5, 195, 310 * ((vid_current_pos / 1000) / vid_duration), 10);
+			Draw_texture(var_square_image[0], 0xFF800080, 5, 195, 310 * (vid_current_pos / vid_duration), 10);
 
 		if(vid_detail_mode)
 		{
@@ -811,9 +803,11 @@ void Sapp0_main(void)
 			Sapp0_suspend();
 		else if(key.p_a)
 		{
-			if(vid_play_request)
-				vid_pause_request = !vid_pause_request;
-			else {
+			if(vid_play_request) {
+				if (vid_pausing) Util_speaker_resume(0);
+				else Util_speaker_pause(0);
+				vid_pausing = !vid_pausing;
+			} else {
 				network_waiting_status = NULL;
 				vid_play_request = true;
 			}

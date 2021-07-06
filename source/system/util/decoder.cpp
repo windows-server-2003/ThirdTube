@@ -53,7 +53,7 @@ static const char *network_waiting_status = NULL;
 const char *decoder_get_network_waiting_status() {
 	return network_waiting_status;
 }
-int read_network_stream(void *cacher_, u8 *buf, int buf_size_) { // size or AVERROR_EOF
+static int read_network_stream(void *cacher_, u8 *buf, int buf_size_) { // size or AVERROR_EOF
 	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
 	size_t buf_size = buf_size_;
 	
@@ -76,7 +76,7 @@ int read_network_stream(void *cacher_, u8 *buf, int buf_size_) { // size or AVER
 	if (!read_size) return AVERROR_EOF;
 	return read_size;
 }
-int64_t seek_network_stream(void *cacher_, s64 offset, int whence) { // size or AVERROR_EOF
+static int64_t seek_network_stream(void *cacher_, s64 offset, int whence) { // size or AVERROR_EOF
 	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
 	
 	if (whence == AVSEEK_SIZE) return cacher->get_len();
