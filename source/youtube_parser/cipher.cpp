@@ -35,7 +35,6 @@ static std::string get_initial_function_name_precise(const std::string &js) {
         R"(\bc\s*&&\s*[a-zA-Z0-9]+\.set\([^,]+\s*,\s*\([^)]*\)\s*\(\s*([a-zA-Z0-9$]+)\()",  // noqa: E501
 	};
 	for (auto pattern_str : function_patterns) {
-		// std::cerr << pattern_str << std::endl;
 		std::regex pattern(pattern_str);
 		std::smatch match_res;
 		if (std::regex_search(js, match_res, pattern))
@@ -86,7 +85,7 @@ yt_cipher_transform_procedure yt_get_transform_plan(const std::string &js) {
 		if (!isdigit(c) && !isalpha(c) && c != '_' && c != '$') break;
 		var_name.push_back(c);
 	}
-	debug("var name : " + var_name);
+	// debug("var name : " + var_name);
 	
 	// search for the definition of var_name, create the map of its member function names and operation types
 	std::map<std::string, int> operation_map;

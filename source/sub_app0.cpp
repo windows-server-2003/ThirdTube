@@ -86,36 +86,6 @@ bool Sapp0_query_running_flag(void)
 	return vid_main_run;
 }
 
-std::string download_video_page(std::string url) {
-	constexpr int BLOCK = 0x40000; // 256 KB
-	APT_SetAppCpuTimeLimit(25);
-	network_waiting_status = "Accessing video page";
-	// set 3DS user-agent to elicit Youtube's support (low-
-	auto network_res = access_http(url, {{"User-Agent", "Mozilla/5.0 (Nintendo 3DS; U; ; ja) Version/1.7567.JP"}});
-	std::string res;
-	if (network_res.first == "") {
-		network_waiting_status = "Downloading video page";
-		std::vector<u8> buffer(BLOCK);
-		std::vector<u8> res_vec;
-		while (1) {
-			u32 len_read;
-			Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
-			res_vec.insert(res_vec.end(), buffer.begin(), buffer.begin() + len_read);
-			if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
-		}
-		
-		httpcCloseContext(&network_res.second);
-		res = std::string(res_vec.begin(), res_vec.end());
-	} else {
-		Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "failed accessing video page : " + network_res.first);
-		network_waiting_status = "Failed accessing video page";
-		vid_play_request = false;
-	}
-	
-	APT_SetAppCpuTimeLimit(80);
-	return res;
-}
-
 void Sapp0_decode_thread(void* arg)
 {
 	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Thread started.");
@@ -190,19 +160,36 @@ void Sapp0_decode_thread(void* arg)
 			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
 			*/
-			std::string url_const = "https://www.youtube.com/watch?v=t8JXBtezzOc";
-			auto video_page = download_video_page(url_const);
-			
-			if (vid_play_request) {
-				network_waiting_status = "parsing html";
-				YouTubeVideoInfo video_info = parse_youtube_html(video_page);
-				network_waiting_status = NULL;
-				network_cacher_data->change_url(video_info.audio_stream_url);
-				result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
-				Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_network_stream()..." + result.string + result.error_description, result.code);
-				if(result.code != 0)
+			std::string video_url = "https://www.youtube.com/watch?v=7yjzo8qnenk";
+			{ // input video id
+				SwkbdState keyboard;
+				swkbdInit(&keyboard, SWKBD_TYPE_WESTERN, 2, 11);
+				swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY);
+				swkbdSetValidation(&keyboard, SWKBD_FIXEDLEN, 0, 0);
+				swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
+				swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
+				char video_id[64];
+				auto button_pressed = swkbdInputText(&keyboard, video_id, 12);
+				if (button_pressed == SWKBD_BUTTON_RIGHT) video_url = std::string("https://www.youtube.com/watch?v=") + video_id;
+				else {
 					vid_play_request = false;
+					continue;
+				}
 			}
+			
+			network_waiting_status = "loading video page";
+			YouTubeVideoInfo video_info = parse_youtube_html(video_url);
+			if (video_info.error != "") {
+				network_waiting_status = "failed loading video page";
+				vid_play_request = false;
+				continue;
+			}
+			network_waiting_status = NULL;
+			network_cacher_data->change_url(video_info.audio_stream_url);
+			result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_network_stream()..." + result.string + result.error_description, result.code);
+			if(result.code != 0)
+				vid_play_request = false;
 			
 
 			if(has_audio && vid_play_request)

@@ -14,9 +14,47 @@
 #include <fstream> // <-------
 #include <sstream> // <-------
 #define debug(s) std::cerr << (s) << std::endl
-#else
+
+std::string http_get(const std::string &url) {
+	static const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
+	
+	system(("wget --user-agent=\"" + user_agent + "\" \"" + url + "\" -O wget_tmp.txt").c_str());
+	std::ifstream file("wget_tmp.txt");
+	std::stringstream sstream;
+	sstream << file.rdbuf();
+	return sstream.str();
+}
+
+#else // if it's a 3ds...
 #include "headers.hpp"
 #define debug(s) Util_log_save("yt-parser", (s));
+
+std::string http_get(const std::string &url) {
+	constexpr int BLOCK = 0x40000; // 256 KB
+	APT_SetAppCpuTimeLimit(25);
+	debug("accessing...");
+	// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
+	auto network_res = access_http(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
+	std::string res;
+	if (network_res.first == "") {
+		debug("downloading...");
+		std::vector<u8> buffer(BLOCK);
+		std::vector<u8> res_vec;
+		while (1) {
+			u32 len_read;
+			Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
+			res_vec.insert(res_vec.end(), buffer.begin(), buffer.begin() + len_read);
+			if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
+		}
+		
+		httpcCloseContext(&network_res.second);
+		res = std::string(res_vec.begin(), res_vec.end());
+	} else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "failed accessing : " + network_res.first);
+	
+	APT_SetAppCpuTimeLimit(80);
+	return res;
+}
+
 #endif
 
 
@@ -118,7 +156,6 @@ static Json to_json(const std::string &html, size_t start) {
 		if (error != "") return error_json(error);
 		return res;
 	} else {
-		std::cerr << start << " " << html[start] << " " << std::to_string(html[start]) << std::endl;
 		return error_json("{ or ' expected");
 	}
 }
@@ -131,7 +168,6 @@ static Json get_succeeding_json_regexes(const std::string &html, std::vector<con
 			size_t start = match_res.suffix().first - html.begin() - 1;
 			auto res = to_json(html, start);
 			if (res["Error"] == Json()) return res;
-			std::cerr << res["Error"].dump() << std::endl;
 		}
 	}
 	return Json();
@@ -164,6 +200,7 @@ static Json get_ytplayer_config(const std::string &html) {
 	return Json::object{{{"Error", "failed to get ytplayer config"}}};
 }
 
+std::map<std::string, yt_cipher_transform_procedure> transform_proc_cache;
 bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 	Json player_response = initial_player_response(html);
 	Json player_config = get_ytplayer_config(html);
@@ -173,46 +210,41 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 	for (auto i : player_response["streamingData"]["formats"].array_items()) formats.push_back(i);
 	for (auto i : player_response["streamingData"]["adaptiveFormats"].array_items()) formats.push_back(i);
 	// for obfuscated signature
-	std::string js_content;
-	yt_cipher_transform_procedure transform_plan;
+	std::string js_url;
 	for (auto &i : formats) { // handle decipher
-		// std::cerr << i["itag"].int_value() << " " << i["mimeType"].dump() << std::endl;
 		if (i["url"] != Json()) continue;
 		// annoying
-		if (!transform_plan.size()) { // download base js & get transform plan
+		// get the url of base js
+		if (!js_url.size()) {
 			// get base js url
-			std::string js_url;
 			if (player_config["assets"]["js"] != Json()) js_url = player_config["assets"]["js"] != Json();
 			else {
 				std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
 				std::smatch match_res;
 				if (std::regex_search(html, match_res, pattern)) js_url = match_res[1].str();
 				else {
-					debug("could not find js url");
+					debug("could not find base js url");
 					return false;
 				}
 			}
-			js_url = "https://youtube.com" + js_url;
-#   		ifdef _WIN32
-				std::cerr << js_url << std::endl;
-				system(("wget \"" + js_url + "\" -O test.js").c_str());
-				{
-					std::ifstream file("test.js");
-					std::stringstream sstream;
-					sstream << file.rdbuf();
-					js_content = sstream.str();
-				}
-#   		else
-#   		endif
-			debug(js_content.size());
-			debug(js_url);
-			transform_plan = yt_get_transform_plan(js_content);
-			if (!transform_plan.size()) return false; // failed to get transform plan
-			for (auto i : transform_plan) debug(std::to_string(i.first) + " " + std::to_string(i.second));
+			js_url = "https://www.youtube.com" + js_url;
 		}
+		// get transform procedure
+		yt_cipher_transform_procedure transform_procedure;
+		if (!transform_proc_cache.count(js_url)) {
+			std::string js_content = http_get(js_url);
+			if (!js_content.size()) {
+				debug("base js download failed");
+				return false;
+			}
+			transform_proc_cache[js_url] = transform_procedure = yt_get_transform_plan(js_content);
+			if (!transform_procedure.size()) return false; // failed to get transform plan
+			// for (auto i : transform_procedure) debug(std::to_string(i.first) + " " + std::to_string(i.second));
+		} else transform_procedure = transform_proc_cache[js_url];
+		
 		auto cipher_params = parse_parameters(i["cipher"] != Json() ? i["cipher"].string_value() : i["signatureCipher"].string_value());
 		auto tmp = i.object_items();
-		tmp["url"] = Json(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + yt_deobfuscate_signature(cipher_params["s"], transform_plan));
+		tmp["url"] = Json(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + yt_deobfuscate_signature(cipher_params["s"], transform_procedure));
 		i = Json(tmp);
 		
 	}
@@ -240,8 +272,7 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 	return true;
 }
 
-YouTubeVideoInfo parse_youtube_html(const std::string &html) {
-	YouTubeVideoInfo res;
+static void extract_metadata(YouTubeVideoInfo &res, const std::string &html) {
 	Json initial_data = get_initial_data(html);
 	
 	Json metadata_renderer;
@@ -253,19 +284,12 @@ YouTubeVideoInfo parse_youtube_html(const std::string &html) {
 					metadata_renderer = i["slimVideoMetadataRenderer"];
 			}
 		}
-		
-		std::cerr << get_text_from_object(metadata_renderer["title"]) << std::endl;
-		std::cout << metadata_renderer.dump() << std::endl;
-		// std::cout << get_text_from_object(metadata_renderer["description"]) << std::endl;
 	}
-	
-	extract_stream(res, html);
 	
 	res.title = get_text_from_object(metadata_renderer["title"]);
 	{ // set author
 		res.author.name = metadata_renderer["owner"]["slimOwnerRenderer"]["channelName"].string_value();
 		res.author.url = metadata_renderer["owner"]["slimOwnerRenderer"]["channelUrl"].string_value();
-		// res.author.icon_url = 
 		int max_height = -1;
 		for (auto i : metadata_renderer["owner"]["slimOwnerRenderer"]["thumbnail"]["thumbnails"].array_items()) {
 			if (max_height < i["height"].int_value()) {
@@ -274,6 +298,32 @@ YouTubeVideoInfo parse_youtube_html(const std::string &html) {
 			}
 		}
 	}
+}
+
+static std::string convert_url_to_mobile(std::string url) {
+	// strip out of http:// or https://
+	{
+		auto pos = url.find("://");
+		if (pos != std::string::npos) url = url.substr(pos + 3, url.size());
+	}
+	if (url.substr(0, 4) == "www.") url = "m." + url.substr(4, url.size());
+	return "https://" + url;
+}
+
+YouTubeVideoInfo parse_youtube_html(std::string url) {
+	YouTubeVideoInfo res;
+	
+	url = convert_url_to_mobile(url);
+	
+	std::string html = http_get(url);
+	if (!html.size()) {
+		res.error = "failed to download video page";
+		return res;
+	}
+	
+	extract_stream(res, html);
+	extract_metadata(res, html);
+	
 	debug(res.title);
 	debug(res.author.name);
 	debug(res.author.url);
@@ -283,10 +333,9 @@ YouTubeVideoInfo parse_youtube_html(const std::string &html) {
 }
 #ifdef _WIN32
 int main() {
-	std::ifstream file("test.html");
-	std::stringstream sstream;
-	sstream << file.rdbuf();
-	parse_youtube_html(sstream.str());
+	std::string url;
+	std::cin >> url;
+	parse_youtube_html(url);
 	return 0;
 }
 #endif
