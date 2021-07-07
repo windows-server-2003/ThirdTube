@@ -4,61 +4,63 @@
 
 #include "sub_app0.hpp"
 
-bool vid_main_run = false;
-bool vid_thread_run = false;
-bool vid_already_init = false;
-bool vid_thread_suspend = true;
-bool convert_thread_running = false;
-bool vid_play_request = false;
-bool vid_change_video_request = false;
-bool vid_detail_mode = false;
-bool vid_pausing = false;
-bool vid_seek_request = false;
-bool vid_linear_filter = true;
-bool vid_show_controls = false;
-bool vid_allow_skip_frames = false;
-double vid_time[2][320];
-double vid_copy_time[2] = { 0, 0, };
-double vid_audio_time = 0;
-double vid_video_time = 0;
-double vid_convert_time = 0;
-double vid_frametime = 0;
-double vid_framerate = 0;
-int vid_sample_rate = 0;
-double vid_duration = 0;
-double vid_zoom = 1;
-double vid_x = 0;
-double vid_y = 15;
-double vid_current_pos = 0;
-double vid_seek_pos = 0;
-double vid_min_time = 0;
-double vid_max_time = 0;
-double vid_total_time = 0;
-double vid_recent_time[90];
-double vid_recent_total_time = 0;
-int vid_total_frames = 0;
-int vid_width = 0;
-int vid_height = 0;
-int vid_tex_width[4] = { 0, 0, 0, 0, };
-int vid_tex_height[4] = { 0, 0, 0, 0, };
-int vid_lr_count = 0;
-int vid_cd_count = 0;
-std::string vid_file = "";
-std::string vid_dir = "";
-std::string vid_video_format = "n/a";
-std::string vid_audio_format = "n/a";
-std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
-Image_data vid_image[8];
-C2D_Image vid_banner[2];
-C2D_Image vid_control[2];
-Thread vid_decode_thread, vid_convert_thread;
-
 namespace SubApp0 {
+	bool vid_main_run = false;
+	bool vid_thread_run = false;
+	bool vid_already_init = false;
+	bool vid_thread_suspend = true;
+	volatile bool vid_play_request = false;
+	volatile bool vid_seek_request = false;
+	volatile bool vid_change_video_request = false;
+	bool vid_detail_mode = false;
+	bool vid_pausing = false;
+	bool vid_linear_filter = true;
+	bool vid_show_controls = false;
+	bool vid_allow_skip_frames = false;
+	double vid_time[2][320];
+	double vid_copy_time[2] = { 0, 0, };
+	double vid_audio_time = 0;
+	double vid_video_time = 0;
+	double vid_convert_time = 0;
+	double vid_frametime = 0;
+	double vid_framerate = 0;
+	int vid_sample_rate = 0;
+	double vid_duration = 0;
+	double vid_zoom = 1;
+	double vid_x = 0;
+	double vid_y = 15;
+	double vid_current_pos = 0;
+	volatile double vid_seek_pos = 0;
+	double vid_min_time = 0;
+	double vid_max_time = 0;
+	double vid_total_time = 0;
+	double vid_recent_time[90];
+	double vid_recent_total_time = 0;
+	int vid_total_frames = 0;
+	int vid_width = 0;
+	int vid_height = 0;
+	int vid_tex_width[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	int vid_tex_height[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	int vid_lr_count = 0;
+	int vid_cd_count = 0;
+	int vid_mvd_image_num = 0;
+	std::string vid_file = "";
+	std::string vid_dir = "";
+	std::string vid_video_format = "n/a";
+	std::string vid_audio_format = "n/a";
+	std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
+	Image_data vid_image[8];
+	C2D_Image vid_banner[2];
+	C2D_Image vid_control[2];
+	Thread vid_decode_thread, vid_convert_thread;
+
 	Thread video_downloader_thread;
 	Thread audio_downloader_thread;
 	NetworkStreamCacherData *video_cacher_data = NULL;
 	NetworkStreamCacherData *audio_cacher_data = NULL;
 	NetworkDecoder network_decoder;
+	Handle network_decoder_critical_lock; // locked when seeking or deiniting
+	Handle video_request_lock; // locked for very very short time, while decoder is backing up seek/video change request and removing the flag
 };
 using namespace SubApp0;
 
@@ -71,9 +73,11 @@ const char *get_network_waiting_status() {
 
 void Sapp0_callback(std::string file, std::string dir)
 {
+	svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
 	vid_file = file;
 	vid_dir = dir;
 	vid_change_video_request = true;
+	svcReleaseMutex(video_request_lock);
 }
 
 void Sapp0_cancel(void)
@@ -89,6 +93,13 @@ bool Sapp0_query_init_flag(void)
 bool Sapp0_query_running_flag(void)
 {
 	return vid_main_run;
+}
+
+static void send_seek_request(double pos) {
+	svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
+	vid_seek_pos = pos;
+	vid_seek_request = true;
+	svcReleaseMutex(video_request_lock);
 }
 
 void Sapp0_decode_thread(void* arg)
@@ -128,6 +139,7 @@ void Sapp0_decode_thread(void* arg)
 			vid_zoom = 1;
 			vid_width = 0;
 			vid_height = 0;
+			vid_mvd_image_num = 0;
 			vid_video_format = "n/a";
 			vid_audio_format = "n/a";
 			vid_change_video_request = false;
@@ -140,7 +152,7 @@ void Sapp0_decode_thread(void* arg)
 			for(int i = 0; i < 90; i++)
 				vid_recent_time[i] = 0;
 			
-			for(int i = 0; i < 4; i++)
+			for(int i = 0; i < 8; i++)
 			{
 				vid_tex_width[i] = 0;
 				vid_tex_height[i] = 0;
@@ -170,6 +182,7 @@ void Sapp0_decode_thread(void* arg)
 				swkbdSetValidation(&keyboard, SWKBD_FIXEDLEN, 0, 0);
 				swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
 				swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
+				swkbdSetInitialText(&keyboard, "t8JXBtezzOc");
 				APT_SetAppCpuTimeLimit(50);
 				char video_id[64];
 				auto button_pressed = swkbdInputText(&keyboard, video_id, 12);
@@ -193,7 +206,7 @@ void Sapp0_decode_thread(void* arg)
 			
 			video_cacher_data->change_url(video_info.video_stream_url);
 			audio_cacher_data->change_url(video_info.audio_stream_url);
-			result = network_decoder.init(video_cacher_data, audio_cacher_data);
+			result = network_decoder.init(video_cacher_data, audio_cacher_data, true);
 			
 			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
@@ -244,22 +257,24 @@ void Sapp0_decode_thread(void* arg)
 			osTickCounterUpdate(&counter1);
 			while (vid_play_request)
 			{
-				if(vid_seek_request)
-				{
-					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "seek reqeust caught... : " + std::to_string(vid_seek_pos));
-					while (convert_thread_running) usleep(10000);
-					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "confirmed the stop of convert thread...");
+				if (vid_seek_request && !vid_change_video_request) {
 					Util_speaker_clear_buffer(0);
-					result = network_decoder.seek(vid_seek_pos * 1000);
-					Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
-					vid_seek_request = false;
-					if (result.code != 0) {
-						vid_play_request = false;
-						break;
+					svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
+					while (vid_seek_request && !vid_change_video_request && vid_play_request) {
+						svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
+						double seek_pos_bak = vid_seek_pos;
+						vid_seek_request = false;
+						svcReleaseMutex(video_request_lock);
+						
+						result = network_decoder.seek(seek_pos_bak * 1000);
+						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
+						if (vid_seek_request) {
+							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "ANOTHER SEEK WHILE SEEKING");
+						}
 					}
-					osTickCounterUpdate(&counter1);
+					svcReleaseMutex(network_decoder_critical_lock);
 				}
-				if (vid_change_video_request) break;
+				if (vid_change_video_request || !vid_play_request) break;
 				
 				std::string type = network_decoder.next_decode_type();
 				if (type == "audio") {
@@ -339,8 +354,9 @@ void Sapp0_decode_thread(void* arg)
 			
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "speaker exited, waiting for convert thread");
 			// make sure the convert thread stops before closing network_decoder
-			while (convert_thread_running) usleep(10000);
+			svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
 			network_decoder.deinit();
+			svcReleaseMutex(network_decoder_critical_lock);
 
 			vid_pausing = false;
 			vid_seek_request = false;
@@ -371,14 +387,15 @@ void Sapp0_convert_thread(void* arg)
 	{	
 		if (vid_play_request && !vid_seek_request && !vid_change_video_request)
 		{
+			svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max());
 			while(vid_play_request && !vid_seek_request && !vid_change_video_request)
 			{
-				convert_thread_running = true;
+				bool video_need_free = false;
 				double pts;
 				do {
 					osTickCounterUpdate(&counter1);
 					osTickCounterUpdate(&counter0);
-					result = network_decoder.get_decoded_video_frame(vid_width, vid_height, &yuv_video, &pts);
+					result = network_decoder.get_decoded_video_frame(vid_width, vid_height, network_decoder.hw_decoder_enabled ? &video : &yuv_video, &pts);
 					osTickCounterUpdate(&counter0);
 					if (result.code != DEF_ERR_NEED_MORE_INPUT) break;
 					if (vid_pausing) usleep(10000);
@@ -395,7 +412,10 @@ void Sapp0_convert_thread(void* arg)
 				vid_copy_time[0] = osTickCounterRead(&counter0);
 				
 				osTickCounterUpdate(&counter0);
-				result = Util_converter_yuv420p_to_bgr565(yuv_video, &video, vid_width, vid_height);
+				if (!network_decoder.hw_decoder_enabled) {
+					result = Util_converter_yuv420p_to_bgr565(yuv_video, &video, vid_width, vid_height);
+					video_need_free = true;
+				}
 				osTickCounterUpdate(&counter0);
 				vid_convert_time = osTickCounterRead(&counter0);
 				
@@ -406,33 +426,33 @@ void Sapp0_convert_thread(void* arg)
 				{
 					if(vid_width > 1024 && vid_height > 1024)
 					{
-						vid_tex_width[0] = 1024;
-						vid_tex_width[1] = vid_width - 1024;
-						vid_tex_width[2] = 1024;
-						vid_tex_width[3] = vid_width - 1024;
-						vid_tex_height[0] = 1024;
-						vid_tex_height[1] = 1024;
-						vid_tex_height[2] = vid_height - 1024;
-						vid_tex_height[3] = vid_height - 1024;
+						vid_tex_width[vid_mvd_image_num * 4 + 0] = 1024;
+						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width - 1024;
+						vid_tex_width[vid_mvd_image_num * 4 + 2] = 1024;
+						vid_tex_width[vid_mvd_image_num * 4 + 3] = vid_width - 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 0] = 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 1] = 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 2] = vid_height - 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 3] = vid_height - 1024;
 					}
 					else if(vid_width > 1024)
 					{
-						vid_tex_width[0] = 1024;
-						vid_tex_width[1] = vid_width - 1024;
-						vid_tex_height[0] = vid_height;
-						vid_tex_height[1] = vid_height;
+						vid_tex_width[vid_mvd_image_num * 4 + 0] = 1024;
+						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width - 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 0] = vid_height;
+						vid_tex_height[vid_mvd_image_num * 4 + 1] = vid_height;
 					}
 					else if(vid_height > 1024)
 					{
-						vid_tex_width[0] = vid_width;
-						vid_tex_width[1] = vid_width;
-						vid_tex_height[0] = 1024;
-						vid_tex_height[1] = vid_height - 1024;
+						vid_tex_width[vid_mvd_image_num * 4 + 0] = vid_width;
+						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width;
+						vid_tex_height[vid_mvd_image_num * 4 + 0] = 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 1] = vid_height - 1024;
 					}
 					else
 					{
-						vid_tex_width[0] = vid_width;
-						vid_tex_height[0] = vid_height;
+						vid_tex_width[vid_mvd_image_num * 4 + 0] = vid_width;
+						vid_tex_height[vid_mvd_image_num * 4 + 0] = vid_height;
 					}
 					
 					// we don't want to include the sleep time in the performance profiling
@@ -450,61 +470,60 @@ void Sapp0_convert_thread(void* arg)
 						while (pts - cur_sound_pos > 0.005 && vid_play_request && !vid_seek_request && !vid_change_video_request) {
 							usleep((pts - cur_sound_pos - 0.005) * 1000000);
 							cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
-							if (cur_sound_pos < 0) {
-								Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "sound pos detection FAILED");
-								break;
-							}
+							if (cur_sound_pos < 0) break;
 						}
 					}
 					
 					osTickCounterUpdate(&counter0);
 					osTickCounterUpdate(&counter1);
 					
-					result = Draw_set_texture_data(&vid_image[0], video, vid_width, vid_height, 1024, 1024, GPU_RGB565);
+					result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width, vid_height, 1024, 1024, GPU_RGB565);
 					if(result.code != 0)
 						Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 
 					if(vid_width > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[1], video, vid_width, vid_height, 1024, 0, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width, vid_height, 1024, 0, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 					if(vid_height > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[2], video, vid_width, vid_height, 0, 1024, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width, vid_height, 0, 1024, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 					if(vid_width > 1024 && vid_height > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[3], video, vid_width, vid_height, 1024, 1024, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width, vid_height, 1024, 1024, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+					}
+
+					if (network_decoder.hw_decoder_enabled) {
+						vid_mvd_image_num = !vid_mvd_image_num;
 					}
 
 					osTickCounterUpdate(&counter0);
 					vid_copy_time[1] += osTickCounterRead(&counter0);
 					
-					free(yuv_video);
-					free(video);
-					yuv_video = NULL;
-					video = NULL;
 					var_need_reflesh = true;
 				}
 				else
 					Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Util_converter_yuv420p_to_bgr565()..." + result.string + result.error_description, result.code);
 
+				if (video_need_free) free(video);
+				video = NULL;
+				yuv_video = NULL; // this is the result of network_decoder.get_decoded_video_frame(), so it should not be freed
+				
 				osTickCounterUpdate(&counter1);
 				cur_convert_time += osTickCounterRead(&counter1);
 				vid_time[1][319] = cur_convert_time;
 				for(int i = 1; i < 320; i++)
 					vid_time[1][i - 1] = vid_time[1][i];
 			}
-			convert_thread_running = false;
-		}
-		else
-			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
+			svcReleaseMutex(network_decoder_critical_lock);
+		} else usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 
 		while (vid_thread_suspend)
 			usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
@@ -535,8 +554,12 @@ void Sapp0_init(void)
 	bool new_3ds = false;
 	Result_with_string result;
 	
-	APT_CheckNew3DS(&new_3ds);
 	vid_thread_run = true;
+	
+	svcCreateMutex(&network_decoder_critical_lock, false);
+	svcCreateMutex(&video_request_lock, false);
+	
+	APT_CheckNew3DS(&new_3ds);
 	if(new_3ds)
 	{
 		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
@@ -560,7 +583,7 @@ void Sapp0_init(void)
 	for(int i = 0; i < 90; i++)
 		vid_recent_time[i] = 0;
 
-	for(int i = 0; i < 4; i++)
+	for(int i = 0; i < 8; i++)
 	{
 		vid_tex_width[i] = 0;
 		vid_tex_height[i] = 0;
@@ -578,7 +601,7 @@ void Sapp0_init(void)
 	vid_copy_time[1] = 0;
 	vid_convert_time = 0;
 
-	for(int i = 0 ; i < 4; i++)
+	for(int i = 0 ; i < 8; i++)
 	{
 		result = Draw_c2d_image_init(&vid_image[i], 1024, 1024, GPU_RGB565);
 		if(result.code != 0)
@@ -649,7 +672,7 @@ void Sapp0_exit(void)
 	Draw_free_texture(61);
 	Draw_free_texture(62);
 
-	for(int i = 0; i < 4; i++)
+	for(int i = 0; i < 8; i++)
 		Draw_c2d_image_free(vid_image[i]);
 	
 	Util_log_save(DEF_SAPP0_EXIT_STR, "Exited.");
@@ -662,6 +685,8 @@ void Sapp0_main(void)
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	Util_hid_key_flag_reset();
+	
+	int image_num = network_decoder.hw_decoder_enabled ? !vid_mvd_image_num : 0;
 
 	if (var_night_mode)
 	{
@@ -678,13 +703,13 @@ void Sapp0_main(void)
 		if(vid_play_request)
 		{
 			//video
-			Draw_texture(vid_image[0].c2d, vid_x, vid_y, vid_tex_width[0] * vid_zoom, vid_tex_height[0] * vid_zoom);
+			Draw_texture(vid_image[image_num * 4 + 0].c2d, vid_x, vid_y, vid_tex_width[image_num * 4 + 0] * vid_zoom, vid_tex_height[image_num * 4 + 0] * vid_zoom);
 			if(vid_width > 1024)
-				Draw_texture(vid_image[1].c2d, (vid_x + vid_tex_width[0] * vid_zoom), vid_y, vid_tex_width[1] * vid_zoom, vid_tex_height[1] * vid_zoom);
+				Draw_texture(vid_image[image_num * 4 + 1].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom), vid_y, vid_tex_width[image_num * 4 + 1] * vid_zoom, vid_tex_height[image_num * 4 + 1] * vid_zoom);
 			if(vid_height > 1024)
-				Draw_texture(vid_image[2].c2d, vid_x, (vid_y + vid_tex_width[0] * vid_zoom), vid_tex_width[2] * vid_zoom, vid_tex_height[2] * vid_zoom);
+				Draw_texture(vid_image[image_num * 4 + 2].c2d, vid_x, (vid_y + vid_tex_width[image_num * 4 + 0] * vid_zoom), vid_tex_width[image_num * 4 + 2] * vid_zoom, vid_tex_height[image_num * 4 + 2] * vid_zoom);
 			if(vid_width > 1024 && vid_height > 1024)
-				Draw_texture(vid_image[3].c2d, (vid_x + vid_tex_width[0] * vid_zoom), (vid_y + vid_tex_height[0] * vid_zoom), vid_tex_width[3] * vid_zoom, vid_tex_height[3] * vid_zoom);
+				Draw_texture(vid_image[image_num * 4 + 3].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom), (vid_y + vid_tex_height[image_num * 4 + 0] * vid_zoom), vid_tex_width[image_num * 4 + 3] * vid_zoom, vid_tex_height[image_num * 4 + 3] * vid_zoom);
 		}
 		else
 			Draw_texture(vid_banner[var_night_mode], 0, 15, 400, 225);
@@ -708,17 +733,18 @@ void Sapp0_main(void)
 		Draw(vid_video_format, 0, 10, 0.5, 0.5, color);
 		Draw(vid_audio_format, 0, 20, 0.5, 0.5, color);
 		Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, 30, 0.5, 0.5, color);
+		Draw(std::string("HW Decoder : ") + (network_decoder.hw_decoder_enabled ? "Enabled" : "Disabled"), 0, 40, 0.5, 0.5, color);
 
 		if(vid_play_request)
 		{
 			//video
-			Draw_texture(vid_image[0].c2d, vid_x - 40, vid_y - 240, vid_tex_width[0] * vid_zoom, vid_tex_height[0] * vid_zoom);
+			Draw_texture(vid_image[image_num * 4 + 0].c2d, vid_x - 40, vid_y - 240, vid_tex_width[image_num * 4 + 0] * vid_zoom, vid_tex_height[image_num * 4 + 0] * vid_zoom);
 			if(vid_width > 1024)
-				Draw_texture(vid_image[1].c2d, (vid_x + vid_tex_width[0] * vid_zoom) - 40, vid_y - 240, vid_tex_width[1] * vid_zoom, vid_tex_height[1] * vid_zoom);
+				Draw_texture(vid_image[image_num * 4 + 1].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 40, vid_y - 240, vid_tex_width[image_num * 4 + 1] * vid_zoom, vid_tex_height[image_num * 4 + 1] * vid_zoom);
 			if(vid_height > 1024)
-				Draw_texture(vid_image[2].c2d, vid_x - 40, (vid_y + vid_tex_width[0] * vid_zoom) - 240, vid_tex_width[2] * vid_zoom, vid_tex_height[2] * vid_zoom);
+				Draw_texture(vid_image[image_num * 4 + 2].c2d, vid_x - 40, (vid_y + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 2] * vid_zoom, vid_tex_height[image_num * 4 + 2] * vid_zoom);
 			if(vid_width > 1024 && vid_height > 1024)
-				Draw_texture(vid_image[3].c2d, (vid_x + vid_tex_width[0] * vid_zoom) - 40, (vid_y + vid_tex_height[0] * vid_zoom) - 240, vid_tex_width[3] * vid_zoom, vid_tex_height[3] * vid_zoom);
+				Draw_texture(vid_image[image_num * 4 + 3].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 40, (vid_y + vid_tex_height[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 3] * vid_zoom, vid_tex_height[image_num * 4 + 3] * vid_zoom);
 		}
 
 		//controls
@@ -832,8 +858,7 @@ void Sapp0_main(void)
 		}
 		else if(key.p_touch && key.touch_x >= 5 && key.touch_x <= 314 && key.touch_y >= 195 && key.touch_y <= 204)
 		{
-			vid_seek_pos = (vid_duration * 1000) * (((double)key.touch_x - 5) / 310);
-			vid_seek_request = true;
+			send_seek_request((vid_duration * 1000) * (((double)key.touch_x - 5) / 310));
 			var_need_reflesh = true;
 		}
 		else if(key.p_touch && key.touch_x >= 165 && key.touch_x <= 309 && key.touch_y >= 165 && key.touch_y <= 174)
@@ -844,7 +869,7 @@ void Sapp0_main(void)
 		else if(key.p_touch && key.touch_x >= 10 && key.touch_x <= 154 && key.touch_y >= 180 && key.touch_y <= 189)
 		{
 			vid_linear_filter = !vid_linear_filter;
-			for(int i = 0; i < 4; i++)
+			for(int i = 0; i < 8; i++)
 				Draw_c2d_image_set_filter(&vid_image[i], vid_linear_filter);
 
 			var_need_reflesh = true;
