@@ -74,21 +74,16 @@ namespace network_decoder_ {
 
 class NetworkDecoder {
 private :
-	NetworkStreamCacherData *video_cacher;
-	NetworkStreamCacherData *audio_cacher;
-	AVFormatContext *video_format_context = NULL;
-	AVFormatContext *audio_format_context = NULL;
-	AVIOContext *video_io_context = NULL;
-	AVIOContext *audio_io_context = NULL;
-	AVCodecContext *video_decoder_context = NULL;
-	AVCodecContext *audio_decoder_context = NULL;
+	static constexpr int VIDEO = 0;
+	static constexpr int AUDIO = 1;
+	NetworkStreamCacherData *network_cacher[2] = {NULL, NULL};
+	AVFormatContext *format_context[2] = {NULL, NULL};
+	AVIOContext *io_context[2] = {NULL, NULL};
+	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
-	const AVCodec *video_codec = NULL;
-	const AVCodec *audio_codec = NULL;
-	AVPacket *video_tmp_packet = NULL;
-	AVPacket *audio_tmp_packet = NULL;
-	bool video_eof = false;
-	bool audio_eof = false;
+	const AVCodec *codec[2] = {NULL, NULL};
+	AVPacket *tmp_packet[2] = {NULL, NULL};
+	bool eof[2] = {false, false};
 	network_decoder_::output_buffer<AVFrame *> video_tmp_frames;
 	network_decoder_::output_buffer<u8 *> video_mvd_tmp_frames;
 	u8 *mvd_frame = NULL; // internal buffer written directly by GPU
@@ -97,10 +92,10 @@ private :
 	std::multiset<double> buffered_pts_list; // used for HW decoder to determine the pts when outputting a frame
 	bool mvd_first = false;
 	
-	Result_with_string init_(NetworkStreamCacherData *, AVFormatContext *&, AVIOContext *&, AVMediaType);
+	Result_with_string init_(int, AVMediaType);
 	Result_with_string init_video_decoder(bool &);
 	Result_with_string init_audio_decoder();
-	Result_with_string read_packet(AVFormatContext *, AVPacket *&);
+	Result_with_string read_packet(int type);
 	Result_with_string mvd_decode(int *width, int *height);
 public :
 	bool hw_decoder_enabled = false;
@@ -126,16 +121,8 @@ public :
 	};
 	AudioFormatInfo get_audio_info();
 	
-	Result_with_string read_video_packet() {
-		Result_with_string res = read_packet(video_format_context, video_tmp_packet);
-		video_eof = (res.code != 0);
-		return res;
-	}
-	Result_with_string read_audio_packet() {
-		Result_with_string res = read_packet(audio_format_context, audio_tmp_packet);
-		audio_eof = (res.code != 0);
-		return res;
-	}
+	Result_with_string read_video_packet() { return read_packet(VIDEO); }
+	Result_with_string read_audio_packet() { return read_packet(AUDIO); }
 	std::string next_decode_type();
 	
 	
