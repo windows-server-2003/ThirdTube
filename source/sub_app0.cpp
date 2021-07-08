@@ -4,6 +4,8 @@
 
 #include "sub_app0.hpp"
 
+#define REQUEST_HW_DECODER true
+
 namespace SubApp0 {
 	bool vid_main_run = false;
 	bool vid_thread_run = false;
@@ -77,6 +79,7 @@ void Sapp0_callback(std::string file, std::string dir)
 	vid_file = file;
 	vid_dir = dir;
 	vid_change_video_request = true;
+	network_decoder.set_locked(true);
 	svcReleaseMutex(video_request_lock);
 }
 
@@ -99,6 +102,8 @@ static void send_seek_request(double pos) {
 	svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
 	vid_seek_pos = pos;
 	vid_seek_request = true;
+	if (network_decoder.ready) // avoid locking while initing
+		network_decoder.set_locked(true);
 	svcReleaseMutex(video_request_lock);
 }
 
@@ -143,6 +148,7 @@ void Sapp0_decode_thread(void* arg)
 			vid_video_format = "n/a";
 			vid_audio_format = "n/a";
 			vid_change_video_request = false;
+			vid_seek_request = false;
 			vid_play_request = true;
 			vid_total_time = 0;
 			vid_total_frames = 0;
@@ -206,7 +212,7 @@ void Sapp0_decode_thread(void* arg)
 			
 			video_cacher_data->change_url(video_info.video_stream_url);
 			audio_cacher_data->change_url(video_info.audio_stream_url);
-			result = network_decoder.init(video_cacher_data, audio_cacher_data, true);
+			result = network_decoder.init(video_cacher_data, audio_cacher_data, REQUEST_HW_DECODER);
 			
 			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
@@ -264,7 +270,20 @@ void Sapp0_decode_thread(void* arg)
 						svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
 						double seek_pos_bak = vid_seek_pos;
 						vid_seek_request = false;
+						network_decoder.set_locked(false);
 						svcReleaseMutex(video_request_lock);
+						
+						if (network_decoder.need_reinit) {
+							Util_log_save("decoder", "reinit needed, performing...");
+							network_decoder.deinit();
+							result = network_decoder.init(video_cacher_data, audio_cacher_data, REQUEST_HW_DECODER);
+							if (result.code != 0) {
+								if (network_decoder.get_locked()) continue; // someone locked while reinit, another seek request is made
+								Util_log_save("decoder", "reinit failed without lock (unknown reason)");
+								vid_play_request = false;
+								break;
+							}
+						}
 						
 						result = network_decoder.seek(seek_pos_bak * 1000);
 						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
@@ -357,7 +376,8 @@ void Sapp0_decode_thread(void* arg)
 			svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
 			network_decoder.deinit();
 			svcReleaseMutex(network_decoder_critical_lock);
-
+			
+			var_need_reflesh = true;
 			vid_pausing = false;
 			vid_seek_request = false;
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "deinit complete");

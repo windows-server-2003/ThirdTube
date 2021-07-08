@@ -6,7 +6,11 @@
 extern "C" void memcpy_asm(u8*, u8*, int);
 
 void NetworkDecoder::deinit() {
+	ready = false;
+	
 	for (int type = 0; type < 2; type++) {
+		delete opaque[type];
+		opaque[type] = NULL;
 		avcodec_free_context(&decoder_context[type]);
 		if (io_context[type]) av_freep(&io_context[type]->buffer);
 		av_freep(&io_context[type]);
@@ -25,17 +29,26 @@ void NetworkDecoder::deinit() {
 	swr_free(&swr_context);
 }
 
-static int read_network_stream(void *cacher_, u8 *buf, int buf_size_) { // size or AVERROR_EOF
-	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
+static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size or AVERROR_EOF
+	NetworkDecoder *decoder = ((std::pair<NetworkDecoder *, NetworkStreamCacherData *> *) opaque)->first;
+	NetworkStreamCacherData *cacher = ((std::pair<NetworkDecoder *, NetworkStreamCacherData *> *) opaque)->second;
 	size_t buf_size = buf_size_;
 	
 	// network_waiting_status = cacher->waiting_status;
 	while (!cacher->latest_inited()) {
+		if (cacher->is_locked) {
+			decoder->need_reinit = true;
+			return AVERROR_EOF;
+		}
 		// network_waiting_status = cacher->waiting_status;
 		usleep(200000);
 		if (cacher->has_error()) return AVERROR_EOF;
 	}
 	while (!cacher->is_data_available(cacher->head, std::min(buf_size, cacher->get_len() - cacher->head))) {
+		if (cacher->is_locked) {
+			decoder->need_reinit = true;
+			return AVERROR_EOF;
+		}
 		// network_waiting_status = cacher->waiting_status;
 		usleep(10000);
 	}
@@ -48,8 +61,9 @@ static int read_network_stream(void *cacher_, u8 *buf, int buf_size_) { // size 
 	if (!read_size) return AVERROR_EOF;
 	return read_size;
 }
-static int64_t seek_network_stream(void *cacher_, s64 offset, int whence) { // size or AVERROR_EOF
-	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
+static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // size or AVERROR_EOF
+	NetworkDecoder *decoder = ((std::pair<NetworkDecoder *, NetworkStreamCacherData *> *) opaque)->first;
+	NetworkStreamCacherData *cacher = ((std::pair<NetworkDecoder *, NetworkStreamCacherData *> *) opaque)->second;
 	
 	if (whence == AVSEEK_SIZE) return cacher->get_len();
 	
@@ -61,6 +75,10 @@ static int64_t seek_network_stream(void *cacher_, s64 offset, int whence) { // s
 	if (new_pos > cacher->get_len()) return -1;
 	
 	while (!cacher->latest_inited()) {
+		if (cacher->is_locked) {
+			decoder->need_reinit = true;
+			return -1;
+		}
 		// network_waiting_status = cacher->waiting_status;
 		usleep(200000);
 		if (cacher->has_error()) return -1;
@@ -78,7 +96,9 @@ Result_with_string NetworkDecoder::init_(int type, AVMediaType expected_codec_ty
 	int ffmpeg_result;
 	
 	network_cacher[type]->head = 0;
+	network_cacher[type]->is_locked = false;
 	
+	opaque[type] = new std::pair<NetworkDecoder *, NetworkStreamCacherData *>(this, network_cacher[type]);
 	unsigned char *buffer = (unsigned char *) av_malloc(NETWORK_BUFFER_SIZE);
 	if (!buffer) {
 		result.error_description = "network buffer allocation failed";
@@ -86,7 +106,7 @@ Result_with_string NetworkDecoder::init_(int type, AVMediaType expected_codec_ty
 		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
 		return result;
 	}
-	io_context[type] = avio_alloc_context(buffer, NETWORK_BUFFER_SIZE, 0, network_cacher[type], read_network_stream, NULL, seek_network_stream);
+	io_context[type] = avio_alloc_context(buffer, NETWORK_BUFFER_SIZE, 0, opaque[type], read_network_stream, NULL, seek_network_stream);
 	if (!io_context[type]) {
 		result.error_description = "IO context allocation failed";
 		result.code = DEF_ERR_OUT_OF_MEMORY;
@@ -239,6 +259,7 @@ Result_with_string NetworkDecoder::init_audio_decoder() {
 Result_with_string NetworkDecoder::init(NetworkStreamCacherData *video_cacher, NetworkStreamCacherData *audio_cacher, bool request_hw_decoder) {
 	Result_with_string result;
 	
+	need_reinit = false;
 	this->network_cacher[VIDEO] = video_cacher;
 	this->network_cacher[AUDIO] = audio_cacher;
 	
@@ -285,6 +306,7 @@ Result_with_string NetworkDecoder::init(NetworkStreamCacherData *video_cacher, N
 		return result;
 	}
 	
+	ready = true;
 	return result;
 }
 NetworkDecoder::VideoFormatInfo NetworkDecoder::get_video_info() {

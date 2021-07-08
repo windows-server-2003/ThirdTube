@@ -29,6 +29,7 @@ public :
 	
 	// actually public variables
 	size_t head = 0; // head as seen from ffmpeg
+	volatile bool is_locked = false;
 	
 	NetworkStreamCacherData ();
 	
