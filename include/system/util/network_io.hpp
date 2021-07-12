@@ -4,7 +4,7 @@
 
 // one instance per one url (once constructed, the url is not changeable)
 struct NetworkStream {
-	static constexpr size_t BLOCK_SIZE = 0x20000;
+	static constexpr size_t BLOCK_SIZE = 0x20000; // 128 KiB
 	size_t block_num = 0;
 	std::string url;
 	Handle downloaded_data_lock; // std::map needs locking when searching and inserting at the same time
@@ -40,7 +40,7 @@ struct NetworkStream {
 class NetworkStreamDownloader {
 private :
 	static constexpr size_t BLOCK_SIZE = NetworkStream::BLOCK_SIZE;
-	static constexpr size_t MAX_FORWARD_READ_BLOCKS = 100;
+	static constexpr size_t MAX_FORWARD_READ_BLOCKS = 50;
 	Handle streams_lock;
 	std::vector<NetworkStream *> streams;
 	
@@ -49,6 +49,7 @@ public :
 	NetworkStreamDownloader ();
 	
 	// returns the stream id of the added stream
+	// the pointer must be one that has been new-ed : it will be deleted once quit_request is made
 	size_t add_stream(NetworkStream *stream);
 	
 	void request_thread_exit() { thread_exit_reqeusted = true; }

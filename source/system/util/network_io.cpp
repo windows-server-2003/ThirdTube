@@ -104,15 +104,20 @@ void NetworkStreamDownloader::downloader_thread() {
 		svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
 		// back up 'read_head's as those can be changed from another thread
 		std::vector<size_t> read_heads(streams.size());
-		for (size_t i = 0; i < streams.size(); i++) read_heads[i] = streams[i]->read_head;
+		for (size_t i = 0; i < streams.size(); i++) if (streams[i]) read_heads[i] = streams[i]->read_head;
 		
 		
 		// find the stream to download next
 		double margin_percentage_min = 1000;
 		for (size_t i = 0; i < streams.size(); i++) {
+			if (!streams[i]) continue;
 			if (streams[i]->error) continue;
 			if (streams[i]->suspend_request) continue;
-			if (streams[i]->quit_request) continue;
+			if (streams[i]->quit_request) {
+				delete streams[i];
+				streams[i] = NULL;
+				continue;
+			}
 			
 			size_t read_head_block = read_heads[i] / BLOCK_SIZE;
 			size_t first_not_downloaded_block = read_head_block;
@@ -139,7 +144,6 @@ void NetworkStreamDownloader::downloader_thread() {
 			usleep(50000);
 			continue;
 		}
-		Util_log_save("net/dl", "dl next : " + std::to_string(cur_stream_index) + " " + std::to_string(margin_percentage_min));
 		NetworkStream *cur_stream = streams[cur_stream_index];
 		svcReleaseMutex(streams_lock);
 		
@@ -150,6 +154,7 @@ void NetworkStreamDownloader::downloader_thread() {
 			cur_stream->error = true;
 			continue;
 		}
+		Util_log_save("net/dl", "dl next : " + std::to_string(cur_stream_index) + " " + std::to_string(block_reading));
 		
 		size_t start = block_reading * BLOCK_SIZE;
 		size_t end = std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len);
@@ -177,13 +182,15 @@ void NetworkStreamDownloader::downloader_thread() {
 		}
 	}
 	Util_log_save(LOG_THREAD_STR, "Exit, deiniting...");
-	for (auto stream : streams) {
+	for (auto stream : streams) if (stream) {
 		stream->quit_request = true;
 	}
 }
 void NetworkStreamDownloader::delete_all() {
-	for (auto stream : streams) delete stream;
-	streams.clear();
+	for (auto &stream : streams) {
+		delete stream;
+		stream = NULL;
+	}
 }
 
 

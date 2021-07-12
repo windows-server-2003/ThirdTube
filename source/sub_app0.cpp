@@ -285,6 +285,8 @@ void Sapp0_decode_thread(void* arg)
 						
 						result = network_decoder.seek(seek_pos_bak * 1000);
 						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
+						if (network_decoder.is_locked) continue; // if seek failed because of the lock, we can ignore it
+						if (result.code != 0) vid_play_request = false;
 						if (vid_seek_request) {
 							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "ANOTHER SEEK WHILE SEEKING");
 						}
@@ -365,7 +367,7 @@ void Sapp0_decode_thread(void* arg)
 			
 			if (cur_video_stream) cur_video_stream->quit_request = true;
 			if (cur_audio_stream) cur_audio_stream->quit_request = true;
-			// those pointers are stored in stream_downloader, so they could be deleted at some point(not yet implemented)
+			// those pointers are stored in stream_downloader, so they will be deleted at some point
 			cur_video_stream = NULL;
 			cur_audio_stream = NULL;
 			

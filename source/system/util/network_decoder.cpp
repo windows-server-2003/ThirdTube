@@ -18,9 +18,9 @@ void NetworkDecoder::deinit() {
 		avformat_close_input(&format_context[type]);
 	}
 	if (hw_decoder_enabled) {
+		mvdstdExit();
 		for (auto i : video_mvd_tmp_frames.deinit()) free(i);
 		linearFree(mvd_frame);
-		mvdstdExit();
 		buffered_pts_list.clear();
 	} else {
 		for (auto i : video_tmp_frames.deinit()) av_frame_free(&i);
@@ -39,26 +39,35 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	while (!stream->is_data_available(stream->read_head, std::min(buf_size, stream->len - stream->read_head))) {
 		if (decoder->is_locked) {
 			decoder->need_reinit = true;
-			return AVERROR_EOF;
+			goto fail;
 		}
 		if (!cpu_limited) {
 			cpu_limited = true;
 			add_cpu_limit(25);
 		}
 		usleep(20000);
-		if (stream->error || stream->quit_request) return AVERROR_EOF;
+		if (stream->error || stream->quit_request) goto fail;
 	}
 	if (cpu_limited) {
 		cpu_limited = false;
 		remove_cpu_limit(25);
 	}
 	
-	auto tmp = stream->get_data(stream->read_head, std::min(buf_size, stream->len - stream->read_head));
-	size_t read_size = tmp.size();
-	stream->read_head += read_size;
-	memcpy(buf, &tmp[0], read_size);
-	if (!read_size) return AVERROR_EOF;
-	return read_size;
+	{
+		auto tmp = stream->get_data(stream->read_head, std::min(buf_size, stream->len - stream->read_head));
+		size_t read_size = tmp.size();
+		stream->read_head += read_size;
+		memcpy(buf, &tmp[0], read_size);
+		if (!read_size) return AVERROR_EOF;
+		return read_size;
+	}
+	
+	fail :
+	if (cpu_limited) {
+		cpu_limited = false;
+		remove_cpu_limit(25);
+	}
+	return AVERROR_EOF;
 }
 static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // size or AVERROR_EOF
 	NetworkDecoder *decoder = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->first;
