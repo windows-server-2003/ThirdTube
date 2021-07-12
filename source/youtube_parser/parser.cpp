@@ -42,7 +42,7 @@
 
 	std::string http_get(const std::string &url) {
 		constexpr int BLOCK = 0x40000; // 256 KB
-		APT_SetAppCpuTimeLimit(25);
+		add_cpu_limit(25);
 		debug("accessing...");
 		// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
 		auto network_res = access_http(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
@@ -62,7 +62,7 @@
 			res = std::string(res_vec.begin(), res_vec.end());
 		} else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "failed accessing : " + network_res.first);
 		
-		APT_SetAppCpuTimeLimit(80);
+		remove_cpu_limit(25);
 		return res;
 	}
 
@@ -264,9 +264,11 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 	for (auto i : formats) {
 		auto mime_type = i["mimeType"].string_value();
 		if (mime_type.substr(0, 5) == "video") {
+			if (mime_type.find("audio") != std::string::npos) continue;
 			// H.264 is virtually the only playable video codec
 			if (mime_type.find("avc1") != std::string::npos) video_formats.push_back(i);
 		} else if (mime_type.substr(0, 5) == "audio") {
+			if (mime_type.find("video") != std::string::npos) continue;
 			// We can modify ffmpeg to support opus
 			if (mime_type.find("mp4a") != std::string::npos) audio_formats.push_back(i);
 		} else {} // ???
@@ -274,29 +276,31 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 	// audio
 	{
 		int max_bitrate = -1;
-		std::string best_audio_stream_url;
 		for (auto i : audio_formats) {
 			int cur_bitrate = i["bitrate"].int_value();
 			if (max_bitrate < cur_bitrate) {
 				max_bitrate = cur_bitrate;
-				best_audio_stream_url = i["url"].string_value();
+				res.audio_stream_url = i["url"].string_value();
+				res.audio_stream_len = stoll(i["contentLength"].string_value());
 			}
 		}
-		res.audio_stream_url = best_audio_stream_url;
 	}
 	// video
 	{
-		std::vector<std::string> recommended_quality = {"240p", "144p", "360p"};
-		u8 found = recommended_quality.size();
+		std::vector<int> recommended_itags = {134, 134, 160, 133};
+		u8 found = recommended_itags.size();
 		for (auto i : video_formats) {
-			std::string cur_quality = i["qualityLabel"].string_value();
-			for (size_t j = 0; j < recommended_quality.size(); j++) if (cur_quality == recommended_quality[j] && found > j) {
+			int cur_itag = i["itag"].int_value();
+			for (size_t j = 0; j < recommended_itags.size(); j++) if (cur_itag == recommended_itags[j] && found > j) {
 				found = j;
 				res.video_stream_url = i["url"].string_value();
+				res.video_stream_len = stoll(i["contentLength"].string_value());
 			}
 		}
-		if (found == recommended_quality.size() && video_formats.size()) // recommended resolution not found, pick random one
+		if (found == recommended_itags.size() && video_formats.size()) { // recommended resolution not found, pick random one
 			res.video_stream_url = video_formats[0]["url"].string_value();
+			res.video_stream_len = stoll(video_formats[0]["contentLength"].string_value());
+		}
 	}
 	return true;
 }
@@ -358,6 +362,7 @@ YouTubeVideoInfo parse_youtube_html(std::string url) {
 	debug(res.author.url);
 	debug(res.author.icon_url);
 	debug(res.audio_stream_url);
+	debug(res.video_stream_url);
 	return res;
 }
 #ifdef _WIN32

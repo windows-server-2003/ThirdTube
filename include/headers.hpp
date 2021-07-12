@@ -32,4 +32,5 @@
 #include "system/util/swkbd.hpp"
 #include "system/util/util.hpp"
 #include "system/menu.hpp"
+#include "system/cpu_limit.hpp"
 #include "youtube_parser/parser.hpp"

@@ -2,81 +2,202 @@
 #include <cassert>
 
 
-NetworkStreamCacherData::NetworkStreamCacherData () { // the url is actually accessed in the downloader thread
-	svcCreateMutex(&resource_locker, false);
-}
-void NetworkStreamCacherData::lock() {
-	svcWaitSynchronization(resource_locker, std::numeric_limits<s64>::max());
-}
-void NetworkStreamCacherData::release() {
-	svcReleaseMutex(resource_locker);
-}
-bool NetworkStreamCacherData::latest_inited() {
-	lock();
-	bool res = inited_once && !(url_change_resolving || unseen_change_request);
-	release();
-	return res;
-}
-std::string NetworkStreamCacherData::url() {
-	return cur_inited_url; // assuming that latest_inited() is true, there's no need to lock
-}
-void NetworkStreamCacherData::change_url(std::string url) {
-	lock();
-	url_change_request = url;
-	unseen_change_request = true;
-	release();
-}
-bool NetworkStreamCacherData::has_error() { return error; }
-size_t NetworkStreamCacherData::get_len() { return length; }
-void NetworkStreamCacherData::set_download_start(size_t start) {
-	lock();
-	start_change_request = start;
-	release();
-}
+// --------------------------------
+// NetworkStream implementation
+// --------------------------------
 
-bool NetworkStreamCacherData::is_data_available(size_t start, size_t size) {
-	if (!size) return true;
-	lock();
-	
+NetworkStream::NetworkStream(std::string url, size_t len) : url(url), len(len) {
+	block_num = (len + BLOCK_SIZE - 1) / BLOCK_SIZE;
+	svcCreateMutex(&downloaded_data_lock, false);
+}
+bool NetworkStream::is_data_available(size_t start, size_t size) {
+	if (start + size > len) return false;
 	size_t end = start + size - 1;
-	bool ok = true;
-	for (size_t block = start / BLOCK_SIZE; block <= end / BLOCK_SIZE; block++) if (!downloaded_data.count(block)) {
-		ok = false;
+	size_t start_block = start / BLOCK_SIZE;
+	size_t end_block = end / BLOCK_SIZE;
+	
+	bool res = true;
+	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	for (size_t block = start_block; block <= end_block; block++) if (!downloaded_data.count(block)) {
+		res = false;
 		break;
 	}
-	
-	release();
-	
-	return ok;
+	svcReleaseMutex(downloaded_data_lock);
+	return res;
 }
-std::vector<u8> NetworkStreamCacherData::get_data(size_t start, size_t size) {
+std::vector<u8> NetworkStream::get_data(size_t start, size_t size) {
 	if (!size) return {};
+	size_t end = start + size - 1;
+	size_t start_block = start / BLOCK_SIZE;
+	size_t end_block = end / BLOCK_SIZE;
 	std::vector<u8> res;
 	
-	lock();
-	
-	size_t end = start + size - 1;
-	auto itr = downloaded_data.find(start / BLOCK_SIZE);
+	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	auto itr = downloaded_data.find(start_block);
 	assert(itr != downloaded_data.end());
-	for (size_t block = start / BLOCK_SIZE; block <= end / BLOCK_SIZE; block++) {
+	for (size_t block = start_block; block <= end_block; block++) {
 		assert(itr->first == block);
 		size_t cur_l = std::max(start, block * BLOCK_SIZE) - block * BLOCK_SIZE;
 		size_t cur_r = std::min(end + 1, (block + 1) * BLOCK_SIZE) - block * BLOCK_SIZE;
 		res.insert(res.end(), itr->second.begin() + cur_l, itr->second.begin() + cur_r);
 		itr++;
 	}
-	
-	release();
-	
+	svcReleaseMutex(downloaded_data_lock);
 	return res;
 }
-void NetworkStreamCacherData::exit() {
-	should_be_running = false;
+void NetworkStream::set_data(size_t block, const std::vector<u8> &data) {
+	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	downloaded_data[block] = data;
+	svcReleaseMutex(downloaded_data_lock);
+}
+double NetworkStream::get_download_percentage() {
+	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	double res = (double) downloaded_data.size() * BLOCK_SIZE / len * 100;
+	svcReleaseMutex(downloaded_data_lock);
+	return res;
+}
+std::vector<double> NetworkStream::get_download_percentage_list(size_t res_len) {
+	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	std::vector<double> res(res_len);
+	auto itr = downloaded_data.begin();
+	for (size_t i = 0; i < res_len; i++) {
+		size_t l = (u64) len * i / res_len;
+		size_t r = std::min<u32>(len, (u64) len * (i + 1) / res_len);
+		while (itr != downloaded_data.end()) {
+			size_t il = itr->first * BLOCK_SIZE;
+			size_t ir = std::min((itr->first + 1) * BLOCK_SIZE, len);
+			if (ir <= l) itr++;
+			else if (il >= r) break;
+			else {
+				res[i] += std::min(ir, r) - std::max(il, l);
+				if (ir >= r) break;
+				else itr++;
+			}
+		}
+		res[i] /= r - l;
+		res[i] *= 100;
+	}
+	svcReleaseMutex(downloaded_data_lock);
+	return res;
 }
 
 
+// --------------------------------
+// NetworkStreamDownloader implementation
+// --------------------------------
+
+NetworkStreamDownloader::NetworkStreamDownloader() {
+	svcCreateMutex(&streams_lock, false);
+}
+size_t NetworkStreamDownloader::add_stream(NetworkStream *stream) {
+	svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
+	streams.push_back(stream);
+	svcReleaseMutex(streams_lock);
+	return streams.size() - 1;
+}
 
 
+#define LOG_THREAD_STR "net/dl"
+void NetworkStreamDownloader::downloader_thread() {
+	while (!thread_exit_reqeusted) {
+		size_t cur_stream_index = (size_t) -1; // the index of the stream on which we will perform a download in this loop
+		svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
+		// back up 'read_head's as those can be changed from another thread
+		std::vector<size_t> read_heads(streams.size());
+		for (size_t i = 0; i < streams.size(); i++) read_heads[i] = streams[i]->read_head;
+		
+		
+		// find the stream to download next
+		double margin_percentage_min = 1000;
+		for (size_t i = 0; i < streams.size(); i++) {
+			if (streams[i]->error) continue;
+			if (streams[i]->suspend_request) continue;
+			if (streams[i]->quit_request) continue;
+			
+			size_t read_head_block = read_heads[i] / BLOCK_SIZE;
+			size_t first_not_downloaded_block = read_head_block;
+			while (first_not_downloaded_block < streams[i]->block_num && streams[i]->downloaded_data.count(first_not_downloaded_block)) {
+				first_not_downloaded_block++;
+				if (first_not_downloaded_block == read_head_block + MAX_FORWARD_READ_BLOCKS) break;
+			}
+			if (first_not_downloaded_block == streams[i]->block_num) continue; // no need to download this stream for now
+			
+			if (first_not_downloaded_block == read_head_block + MAX_FORWARD_READ_BLOCKS) continue; // no need to download this stream for now
+			
+			double margin_percentage;
+			if (first_not_downloaded_block == read_head_block) margin_percentage = 0;
+			else margin_percentage = (double) (first_not_downloaded_block * BLOCK_SIZE - read_heads[i]) / streams[i]->len * 100;
+			// Util_log_save("net/dl", std::to_string(margin_percentage_min) + " " + std::to_string(margin_percentage) + " " + std::to_string(streams[i]->len) + " " + std::to_string(first_not_downloaded_block));
+			if (margin_percentage_min > margin_percentage) {
+				margin_percentage_min = margin_percentage;
+				cur_stream_index = i;
+			}
+		}
+		
+		if (cur_stream_index == (size_t) -1) {
+			svcReleaseMutex(streams_lock);
+			usleep(50000);
+			continue;
+		}
+		Util_log_save("net/dl", "dl next : " + std::to_string(cur_stream_index) + " " + std::to_string(margin_percentage_min));
+		NetworkStream *cur_stream = streams[cur_stream_index];
+		svcReleaseMutex(streams_lock);
+		
+		size_t block_reading = read_heads[cur_stream_index] / BLOCK_SIZE;
+		while (block_reading < cur_stream->block_num && cur_stream->downloaded_data.count(block_reading)) block_reading++;
+		if (block_reading == cur_stream->block_num) { // something unexpected happened
+			Util_log_save(LOG_THREAD_STR, "unexpected error (trying to read beyond the end of the stream)");
+			cur_stream->error = true;
+			continue;
+		}
+		
+		size_t start = block_reading * BLOCK_SIZE;
+		size_t end = std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len);
+		size_t expected_len = end - start;
+		auto network_result = access_http(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}});
+		
+		if (network_result.first == "") {
+			auto context = network_result.second;
+			std::vector<u8> data(expected_len);
+			u32 len_read;
+				Util_log_save("net/dl", "dl");
+			httpcDownloadData(&context, &data[0], expected_len, &len_read);
+				Util_log_save("net/dl", "dl ok");
+			if (len_read != expected_len) {
+				Util_log_save(LOG_THREAD_STR, "size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(len_read));
+				cur_stream->error = true;
+				httpcCloseContext(&context);
+				continue;
+			}
+			cur_stream->set_data(block_reading, data);
+			httpcCloseContext(&context);
+		} else {
+			Util_log_save("net/dl", "access failed : " + network_result.first);
+			cur_stream->error = true;
+		}
+	}
+	Util_log_save(LOG_THREAD_STR, "Exit, deiniting...");
+	for (auto stream : streams) {
+		stream->quit_request = true;
+	}
+}
+void NetworkStreamDownloader::delete_all() {
+	for (auto stream : streams) delete stream;
+	streams.clear();
+}
+
+
+// --------------------------------
+// other functions implementation
+// --------------------------------
+
+void network_downloader_thread(void *downloader_) {
+	NetworkStreamDownloader *downloader = (NetworkStreamDownloader *) downloader_;
+	
+	downloader->downloader_thread();
+	
+	threadExit(0);
+}
 
 // return.first : error message, an empty string if the operation suceeded without an error
 // return.second : the acquired http context, should neither be used nor closed if return.first isn't empty
@@ -93,19 +214,24 @@ std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::
 		if (!request_headers.count("User-Agent")) ret = httpcAddRequestHeaderField(&context, "User-Agent", "httpc-example/1.0.0");
 		for (auto i : request_headers) ret = httpcAddRequestHeaderField(&context, i.first.c_str(), i.second.c_str());
 
+	Util_log_save("http", "begin req");
 		ret = httpcBeginRequest(&context);
+	Util_log_save("http", "begin req ok");
 		if (ret != 0) {
 			httpcCloseContext(&context);
 			return {"httpcBeginRequest() failed : " + std::to_string(ret), context};
 		}
 
+	Util_log_save("http", "get st");
 		ret = httpcGetResponseStatusCode(&context, &statuscode);
+	Util_log_save("http", "get st ok");
 		if (ret != 0) {
 			httpcCloseContext(&context);
 			return {"httpcGetResponseStatusCode() failed : " + std::to_string(ret), context};
 		}
 
 		if ((statuscode >= 301 && statuscode <= 303) || (statuscode >= 307 && statuscode <= 308)) {
+	Util_log_save("http", "redir");
 			char newurl[0x1000];
 			ret = httpcGetResponseHeader(&context, "Location", newurl, 0x1000);
 			Util_log_save("httpc", "redirect");
@@ -123,139 +249,3 @@ std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::
 
 
 
-
-#define LOG_THREAD_STR "dl thread"
-
-void network_downloader_thread(void *cacher_) {
-	NetworkStreamCacherData *cacher = (NetworkStreamCacherData *) cacher_;
-	constexpr size_t BLOCK_SIZE = NetworkStreamCacherData::BLOCK_SIZE;
-	
-	
-	std::string cur_url = "";
-	httpcContext context;
-	bool context_alive = false;
-	size_t block_num = 0;
-	size_t cur_head_block = 0;
-	size_t connection_head_block = 0;
-	while (cacher->should_be_running) {
-		// look for url change request
-		int fix_cputime_limit = -1;
-		cacher->lock();
-		if (cacher->unseen_change_request) {
-			cacher->unseen_change_request = false;
-			cacher->url_change_resolving = true;
-			cacher->cur_inited_url = cacher->url_change_request;
-			cur_url = std::move(cacher->url_change_request);
-			cacher->release();
-			// init stuff
-			cacher->error = false;
-			cacher->downloaded_data = {};
-			cacher->start_change_request = (size_t) -1;
-			cacher->download_percent = 0;
-			cur_head_block = 0;
-			connection_head_block = 0;
-			
-			// clean up previous connection
-			if (context_alive) {
-				cacher->waiting_status = "cleaning up the previous network";
-				httpcCancelConnection(&context);
-				httpcCloseContext(&context);
-				context_alive = false;
-			}
-			
-			cacher->waiting_status = "accessing the stream";
-			APT_SetAppCpuTimeLimit(25); // we apply an aggresive cputime limit to maximize the download speed
-			fix_cputime_limit = 80; // revert it after downloading the first block
-			auto network_res = access_http(cur_url, {});
-			if (network_res.first == "") {
-				context = network_res.second;
-				{
-					cacher->waiting_status = "getting stream size";
-					u32 tmp;
-					httpcGetDownloadSizeState(&context, NULL, &tmp);
-					cacher->length = tmp;
-				}
-				block_num = (cacher->length + BLOCK_SIZE - 1) / BLOCK_SIZE;
-				context_alive = true;
-			} else {
-				Util_log_save(LOG_THREAD_STR, network_res.first);
-				cacher->error = true;
-				continue;
-			}
-			
-			cacher->lock();
-			cacher->inited_once = true;
-			cacher->url_change_resolving = false;
-		}
-		// seek request
-		if (cacher->start_change_request != (size_t) -1) {
-			cur_head_block = cacher->start_change_request / BLOCK_SIZE;
-			cacher->start_change_request = (size_t) -1;
-		}
-		cacher->release();
-		cacher->waiting_status = NULL;
-		
-		
-		if (cacher->downloaded_data.size() < block_num) { // there's something to download
-			while (cur_head_block < block_num && cacher->downloaded_data.count(cur_head_block)) cur_head_block++;
-			if (cur_head_block == block_num) cur_head_block = 0;
-			while (cur_head_block < block_num && cacher->downloaded_data.count(cur_head_block)) cur_head_block++;
-			
-			if (connection_head_block != cur_head_block) { // establish a new connection
-				if (context_alive) {
-					cacher->waiting_status = "cleaning up the previous network";
-					httpcCancelConnection(&context);
-					httpcCloseContext(&context);
-					context_alive = false;
-				}
-				
-				connection_head_block = cur_head_block;
-				size_t start = cur_head_block * BLOCK_SIZE;
-				cacher->waiting_status = "accessing the stream";
-				APT_SetAppCpuTimeLimit(25); // we apply an aggresive cputime limit to maximize the download speed
-				fix_cputime_limit = 80; // revert it after downloading the first block
-				while (1) {
-					auto network_res = access_http(cur_url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(cacher->length - 1)}});
-					if (network_res.first == "") {
-						context = network_res.second;
-						context_alive = true;
-						break;
-					}
-					Util_log_save(LOG_THREAD_STR, "reconnect failed : " + std::to_string(start) + "-" + std::to_string(cacher->length - 1));
-					Util_log_save(LOG_THREAD_STR, "errmsg : " + network_res.first);
-					Util_log_save(LOG_THREAD_STR, "trying again in 5 s");
-					usleep(5000000);
-				}
-			}
-			size_t expected_len = std::min(BLOCK_SIZE, cacher->length - cur_head_block * BLOCK_SIZE);
-			cacher->waiting_status = "downloading the content of the stream";
-			std::vector<u8> data(expected_len);
-			u32 len_read;
-			httpcDownloadData(&context, &data[0], expected_len, &len_read);
-			if (len_read != expected_len)
-				Util_log_save(LOG_THREAD_STR, "warining:size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(len_read));
-			if (fix_cputime_limit != -1) APT_SetAppCpuTimeLimit(fix_cputime_limit);
-			
-			cacher->lock();
-			cacher->downloaded_data[cur_head_block] = std::move(data);
-			cacher->release();
-			
-			cur_head_block++;
-			connection_head_block++;
-			
-			cacher->download_percent = cacher->downloaded_data.size() * 100 / block_num;
-			cacher->waiting_status = NULL;
-		} else usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
-		
-	}
-	
-	if (context_alive) {
-		httpcCancelConnection(&context);
-		httpcCloseContext(&context);
-		context_alive = false;
-	}
-	
-	
-	Util_log_save(LOG_THREAD_STR, "Thread exit.");
-	threadExit(0);
-}

@@ -56,10 +56,10 @@ namespace SubApp0 {
 	C2D_Image vid_control[2];
 	Thread vid_decode_thread, vid_convert_thread;
 
-	Thread video_downloader_thread;
-	Thread audio_downloader_thread;
-	NetworkStreamCacherData *video_cacher_data = NULL;
-	NetworkStreamCacherData *audio_cacher_data = NULL;
+	Thread stream_downloader_thread;
+	NetworkStream *cur_video_stream = NULL;
+	NetworkStream *cur_audio_stream = NULL;
+	NetworkStreamDownloader stream_downloader;
 	NetworkDecoder network_decoder;
 	Handle network_decoder_critical_lock; // locked when seeking or deiniting
 	Handle video_request_lock; // locked for very very short time, while decoder is backing up seek/video change request and removing the flag
@@ -79,7 +79,7 @@ void Sapp0_callback(std::string file, std::string dir)
 	vid_file = file;
 	vid_dir = dir;
 	vid_change_video_request = true;
-	network_decoder.set_locked(true);
+	network_decoder.is_locked = true;
 	svcReleaseMutex(video_request_lock);
 }
 
@@ -103,7 +103,7 @@ static void send_seek_request(double pos) {
 	vid_seek_pos = pos;
 	vid_seek_request = true;
 	if (network_decoder.ready) // avoid locking while initing
-		network_decoder.set_locked(true);
+		network_decoder.is_locked = true;
 	svcReleaseMutex(video_request_lock);
 }
 
@@ -126,9 +126,6 @@ void Sapp0_decode_thread(void* arg)
 	TickCounter counter0, counter1;
 	osTickCounterStart(&counter0);
 	osTickCounterStart(&counter1);
-	
-	if(type == "1")
-		APT_SetAppCpuTimeLimit(80);
 
 	while (vid_thread_run)
 	{
@@ -189,10 +186,10 @@ void Sapp0_decode_thread(void* arg)
 				swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
 				swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
 				swkbdSetInitialText(&keyboard, "t8JXBtezzOc");
-				APT_SetAppCpuTimeLimit(50);
 				char video_id[64];
+				add_cpu_limit(50);
 				auto button_pressed = swkbdInputText(&keyboard, video_id, 12);
-				APT_SetAppCpuTimeLimit(80);
+				remove_cpu_limit(50);
 				if (button_pressed == SWKBD_BUTTON_RIGHT) video_url = std::string("https://www.youtube.com/watch?v=") + video_id;
 				else {
 					vid_play_request = false;
@@ -209,10 +206,11 @@ void Sapp0_decode_thread(void* arg)
 			}
 			network_waiting_status = NULL;
 			
-			
-			video_cacher_data->change_url(video_info.video_stream_url);
-			audio_cacher_data->change_url(video_info.audio_stream_url);
-			result = network_decoder.init(video_cacher_data, audio_cacher_data, REQUEST_HW_DECODER);
+			cur_video_stream = new NetworkStream(video_info.video_stream_url, video_info.video_stream_len);
+			cur_audio_stream = new NetworkStream(video_info.audio_stream_url, video_info.audio_stream_len);
+			stream_downloader.add_stream(cur_video_stream);
+			stream_downloader.add_stream(cur_audio_stream);
+			result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
 			
 			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
@@ -270,15 +268,15 @@ void Sapp0_decode_thread(void* arg)
 						svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
 						double seek_pos_bak = vid_seek_pos;
 						vid_seek_request = false;
-						network_decoder.set_locked(false);
+						network_decoder.is_locked = false;
 						svcReleaseMutex(video_request_lock);
 						
 						if (network_decoder.need_reinit) {
 							Util_log_save("decoder", "reinit needed, performing...");
 							network_decoder.deinit();
-							result = network_decoder.init(video_cacher_data, audio_cacher_data, REQUEST_HW_DECODER);
+							result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
 							if (result.code != 0) {
-								if (network_decoder.get_locked()) continue; // someone locked while reinit, another seek request is made
+								if (network_decoder.is_locked) continue; // someone locked while reinit, another seek request is made
 								Util_log_save("decoder", "reinit failed without lock (unknown reason)");
 								vid_play_request = false;
 								break;
@@ -365,6 +363,12 @@ void Sapp0_decode_thread(void* arg)
 			}
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
 			
+			if (cur_video_stream) cur_video_stream->quit_request = true;
+			if (cur_audio_stream) cur_audio_stream->quit_request = true;
+			// those pointers are stored in stream_downloader, so they could be deleted at some point(not yet implemented)
+			cur_video_stream = NULL;
+			cur_audio_stream = NULL;
+			
 			while (Util_speaker_is_playing(0) && vid_play_request) usleep(10000);
 			Util_speaker_exit(0);
 			
@@ -439,7 +443,6 @@ void Sapp0_convert_thread(void* arg)
 				osTickCounterUpdate(&counter0);
 				vid_convert_time = osTickCounterRead(&counter0);
 				
-				
 				double cur_convert_time = 0;
 				
 				if(result.code == 0)
@@ -487,8 +490,8 @@ void Sapp0_convert_thread(void* arg)
 					if (cur_sound_pos < 0) { // sound is not playing, probably because the video is lagging behind, so draw immediately
 						
 					} else {
-						while (pts - cur_sound_pos > 0.005 && vid_play_request && !vid_seek_request && !vid_change_video_request) {
-							usleep((pts - cur_sound_pos - 0.005) * 1000000);
+						while (pts - cur_sound_pos > 0.003 && vid_play_request && !vid_seek_request && !vid_change_video_request) {
+							usleep((pts - cur_sound_pos - 0.0015) * 1000000);
 							cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
 							if (cur_sound_pos < 0) break;
 						}
@@ -582,18 +585,18 @@ void Sapp0_init(void)
 	APT_CheckNew3DS(&new_3ds);
 	if(new_3ds)
 	{
+		add_cpu_limit(70);
 		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
 	else
 	{
+		add_cpu_limit(80);
 		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
-	video_cacher_data = new NetworkStreamCacherData();
-	audio_cacher_data = new NetworkStreamCacherData();
-	video_downloader_thread = threadCreate(network_downloader_thread, video_cacher_data, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
-	audio_downloader_thread = threadCreate(network_downloader_thread, audio_cacher_data, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+	stream_downloader = NetworkStreamDownloader();
+	stream_downloader_thread = threadCreate(network_downloader_thread, &stream_downloader, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
 	vid_total_time = 0;
 	vid_total_frames = 0;
@@ -676,18 +679,16 @@ void Sapp0_exit(void)
 	vid_thread_run = false;
 	vid_play_request = false;
 
-	video_cacher_data->exit();
-	audio_cacher_data->exit();
+	if (cur_audio_stream) cur_audio_stream->quit_request = true;
+	if (cur_video_stream) cur_video_stream->quit_request = true;
+	stream_downloader.request_thread_exit();
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(video_downloader_thread, time_out));
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(audio_downloader_thread, time_out));
+	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(stream_downloader_thread, time_out));
 	threadFree(vid_decode_thread);
 	threadFree(vid_convert_thread);
-	threadFree(video_downloader_thread);
-	threadFree(audio_downloader_thread);
-	free(video_cacher_data);
-	free(audio_cacher_data);
+	threadFree(stream_downloader_thread);
+	stream_downloader.delete_all();
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
@@ -744,16 +745,20 @@ void Sapp0_main(void)
 		Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
 		{
 			const char *message = get_network_waiting_status();
-			if (message) Draw(message, 0, 150, 0.5, 0.5, color);
+			if (message) Draw(message, 0, 140, 0.5, 0.5, color);
 		}
-		Draw("Video Download : " + std::to_string((int) std::round(video_cacher_data->download_percent)) + "%", 0, 150, 0.5, 0.5, color);
-		Draw("Audio Download : " + std::to_string((int) std::round(audio_cacher_data->download_percent)) + "%", 0, 160, 0.5, 0.5, color);
 
 		//codec info
 		Draw(vid_video_format, 0, 10, 0.5, 0.5, color);
 		Draw(vid_audio_format, 0, 20, 0.5, 0.5, color);
 		Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, 30, 0.5, 0.5, color);
 		Draw(std::string("HW Decoder : ") + (network_decoder.hw_decoder_enabled ? "Enabled" : "Disabled"), 0, 40, 0.5, 0.5, color);
+		
+		{
+			u32 cpu_limit;
+			APT_GetAppCpuTimeLimit(&cpu_limit);
+			Draw("CPU Limit : " + std::to_string(cpu_limit), 0, 50, 0.5, 0.5, color);
+		}
 
 		if(vid_play_request)
 		{
@@ -784,6 +789,40 @@ void Sapp0_main(void)
 		Draw_texture(var_square_image[0], DEF_DRAW_GREEN, 5, 195, 310, 10);
 		if(vid_duration != 0)
 			Draw_texture(var_square_image[0], 0xFF800080, 5, 195, 310 * (vid_current_pos / vid_duration), 10);
+		
+		// debug 
+		auto cur_video_stream_bak = cur_video_stream;
+		auto cur_audio_stream_bak = cur_audio_stream;
+		if (cur_video_stream_bak) {
+			Draw("Video Download : " + std::to_string((int) std::round(cur_video_stream_bak->get_download_percentage())) + "%", 0, 150, 0.5, 0.5, color);
+			int sample = 50;
+			auto percentage_list = cur_video_stream_bak->get_download_percentage_list(sample);
+			int bar_len = 310;
+			for (int i = 0; i < sample; i++) {
+				int a = 0xFF;
+				int r = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int g = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int b = 0xA0 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int xl = 5 + bar_len * i / sample;
+				int xr = 5 + bar_len * (i + 1) / sample;
+				Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl , 205, xr - xl, 3);
+			}
+		}
+		if (cur_audio_stream_bak) {
+			Draw("Audio Download : " + std::to_string((int) std::round(cur_audio_stream_bak->get_download_percentage())) + "%", 0, 160, 0.5, 0.5, color);
+			int sample = 50;
+			auto percentage_list = cur_audio_stream_bak->get_download_percentage_list(sample);
+			int bar_len = 310;
+			for (int i = 0; i < sample; i++) {
+				int a = 0xFF;
+				int r = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int g = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int b = 0xC0 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int xl = 5 + bar_len * i / sample;
+				int xr = 5 + bar_len * (i + 1) / sample;
+				Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl , 208, xr - xl, 3);
+			}
+		}
 
 		if(vid_detail_mode)
 		{

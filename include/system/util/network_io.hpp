@@ -2,6 +2,70 @@
 #include <vector>
 #include <map>
 
+// one instance per one url (once constructed, the url is not changeable)
+struct NetworkStream {
+	static constexpr size_t BLOCK_SIZE = 0x20000;
+	size_t block_num = 0;
+	std::string url;
+	Handle downloaded_data_lock; // std::map needs locking when searching and inserting at the same time
+	std::map<size_t, std::vector<u8> > downloaded_data;
+	
+	
+	// anything above here is not supposed to be used from outside network_io.cpp and network_io.hpp
+	size_t len = 0;
+	volatile bool suspend_request = false;
+	volatile bool quit_request = false;
+	volatile bool error = false;
+	volatile size_t read_head = 0;
+	
+	NetworkStream (std::string url, size_t len);
+	
+	double get_download_percentage();
+	std::vector<double> get_download_percentage_list(size_t res_len);
+	
+	// check if the data of the current stream of range [start, start + size) is already downloaded and available
+	bool is_data_available(size_t start, size_t size);
+	
+	// this function must only be called when is_data_available(start, size) returns true
+	// returns the data of the stream of range [start, start + size)
+	std::vector<u8> get_data(size_t start, size_t size);
+	
+	// this function is supposed to be called from NetworkStreamDownloader::*
+	void set_data(size_t block, const std::vector<u8> &data);
+};
+
+
+// each instance of this class is paired with one downloader thread
+// it owns NetworkStream instances, and the one with the least margin (as in proportion to the length of the entire stream) is the target of next downloading
+class NetworkStreamDownloader {
+private :
+	static constexpr size_t BLOCK_SIZE = NetworkStream::BLOCK_SIZE;
+	static constexpr size_t MAX_FORWARD_READ_BLOCKS = 100;
+	Handle streams_lock;
+	std::vector<NetworkStream *> streams;
+	
+	bool thread_exit_reqeusted = false;
+public :
+	NetworkStreamDownloader ();
+	
+	// returns the stream id of the added stream
+	size_t add_stream(NetworkStream *stream);
+	
+	void request_thread_exit() { thread_exit_reqeusted = true; }
+	void delete_all();
+	
+	void downloader_thread();
+};
+// 'arg' should be a pointer to an instance of NetworkStreamDownloader
+void network_downloader_thread(void *arg);
+
+// it's just useful
+std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::string, std::string> request_headers);
+
+
+
+
+
 // one url at a time per instance of this class
 class NetworkStreamCacherData {
 private :
@@ -65,8 +129,6 @@ public :
 	void exit();
 };
 
-// it's just useful
-std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::string, std::string> request_headers);
 
 // 'arg' should be a pointer to a **fresh** NetworkStreamCacherData instance
 void network_downloader_thread(void *arg);

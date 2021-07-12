@@ -76,8 +76,8 @@ class NetworkDecoder {
 private :
 	static constexpr int VIDEO = 0;
 	static constexpr int AUDIO = 1;
-	NetworkStreamCacherData *network_cacher[2] = {NULL, NULL};
-	std::pair<NetworkDecoder *, NetworkStreamCacherData *> *opaque[2] = {NULL, NULL};
+	NetworkStream *network_stream[2] = {NULL, NULL};
+	std::pair<NetworkDecoder *, NetworkStream *> *opaque[2] = {NULL, NULL};
 	AVFormatContext *format_context[2] = {NULL, NULL};
 	AVIOContext *io_context[2] = {NULL, NULL};
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
@@ -100,11 +100,12 @@ private :
 	Result_with_string mvd_decode(int *width, int *height);
 public :
 	bool hw_decoder_enabled = false;
+	volatile bool is_locked = false;
 	volatile bool need_reinit = false;
 	volatile bool ready = false;
 	
 	void deinit();
-	Result_with_string init(NetworkStreamCacherData *video_cacher, NetworkStreamCacherData *audio_cacher, bool request_hw_decoder);
+	Result_with_string init(NetworkStream *video_stream, NetworkStream *audio_stream, bool request_hw_decoder);
 	
 	struct VideoFormatInfo {
 		int width;
@@ -142,12 +143,5 @@ public :
 	
 	// seek both audio and video
 	Result_with_string seek(s64 microseconds);
-	
-	void set_locked(bool locked) {
-		for (int type = 0; type < 2; type++) if (network_cacher[type]) network_cacher[type]->is_locked = locked;
-	}
-	bool get_locked() {
-		return network_cacher[VIDEO]->is_locked || network_cacher[AUDIO]->is_locked;
-	}
 };
 
