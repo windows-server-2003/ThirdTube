@@ -264,11 +264,9 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 	for (auto i : formats) {
 		auto mime_type = i["mimeType"].string_value();
 		if (mime_type.substr(0, 5) == "video") {
-			if (mime_type.find("audio") != std::string::npos) continue;
 			// H.264 is virtually the only playable video codec
 			if (mime_type.find("avc1") != std::string::npos) video_formats.push_back(i);
 		} else if (mime_type.substr(0, 5) == "audio") {
-			if (mime_type.find("video") != std::string::npos) continue;
 			// We can modify ffmpeg to support opus
 			if (mime_type.find("mp4a") != std::string::npos) audio_formats.push_back(i);
 		} else {} // ???
@@ -300,6 +298,11 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 		if (found == recommended_itags.size() && video_formats.size()) { // recommended resolution not found, pick random one
 			res.video_stream_url = video_formats[0]["url"].string_value();
 			res.video_stream_len = stoll(video_formats[0]["contentLength"].string_value());
+		}
+		// search for itag 18
+		for (auto i : video_formats) if (i["itag"].int_value() == 18) {
+			res.both_stream_url = i["url"].string_value();
+			res.both_stream_len = stoll(i["contentLength"].string_value());
 		}
 	}
 	return true;

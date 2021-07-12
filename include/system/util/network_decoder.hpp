@@ -4,6 +4,7 @@
 #include "system/types.hpp"
 #include <vector>
 #include <set>
+#include <deque>
 
 extern "C" {
 #include "libavcodec/avcodec.h"
@@ -76,15 +77,17 @@ class NetworkDecoder {
 private :
 	static constexpr int VIDEO = 0;
 	static constexpr int AUDIO = 1;
+	static constexpr int BOTH = 0;
+	bool video_audio_seperate = false;
 	NetworkStream *network_stream[2] = {NULL, NULL};
 	std::pair<NetworkDecoder *, NetworkStream *> *opaque[2] = {NULL, NULL};
 	AVFormatContext *format_context[2] = {NULL, NULL};
 	AVIOContext *io_context[2] = {NULL, NULL};
+	int stream_index[2] = {0, 0};
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
 	const AVCodec *codec[2] = {NULL, NULL};
-	AVPacket *tmp_packet[2] = {NULL, NULL};
-	bool eof[2] = {false, false};
+	std::deque<AVPacket *> packet_buffer[2];
 	network_decoder_::output_buffer<AVFrame *> video_tmp_frames;
 	network_decoder_::output_buffer<u8 *> video_mvd_tmp_frames;
 	u8 *mvd_frame = NULL; // internal buffer written directly by GPU
@@ -98,6 +101,7 @@ private :
 	Result_with_string init_audio_decoder();
 	Result_with_string read_packet(int type);
 	Result_with_string mvd_decode(int *width, int *height);
+	AVStream *get_stream(int type) { return format_context[video_audio_seperate ? type : BOTH]->streams[stream_index[type]]; }
 public :
 	bool hw_decoder_enabled = false;
 	volatile bool is_locked = false;
@@ -106,6 +110,7 @@ public :
 	
 	void deinit();
 	Result_with_string init(NetworkStream *video_stream, NetworkStream *audio_stream, bool request_hw_decoder);
+	Result_with_string init(NetworkStream *both_stream, bool request_hw_decoder);
 	
 	struct VideoFormatInfo {
 		int width;
@@ -125,8 +130,6 @@ public :
 	};
 	AudioFormatInfo get_audio_info();
 	
-	Result_with_string read_video_packet() { return read_packet(VIDEO); }
-	Result_with_string read_audio_packet() { return read_packet(AUDIO); }
 	std::string next_decode_type();
 	
 	

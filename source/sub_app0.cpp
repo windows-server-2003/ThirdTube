@@ -211,6 +211,10 @@ void Sapp0_decode_thread(void* arg)
 			stream_downloader.add_stream(cur_video_stream);
 			stream_downloader.add_stream(cur_audio_stream);
 			result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
+			/*
+			cur_video_stream = new NetworkStream(video_info.both_stream_url, video_info.both_stream_len);
+			stream_downloader.add_stream(cur_video_stream);
+			result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);*/
 			
 			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
@@ -274,9 +278,10 @@ void Sapp0_decode_thread(void* arg)
 						if (network_decoder.need_reinit) {
 							Util_log_save("decoder", "reinit needed, performing...");
 							network_decoder.deinit();
-							result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
+							if (cur_audio_stream) result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
+							else result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
 							if (result.code != 0) {
-								if (network_decoder.is_locked) continue; // someone locked while reinit, another seek request is made
+								if (network_decoder.need_reinit) continue; // someone locked while reinit, another seek request is made
 								Util_log_save("decoder", "reinit failed without lock (unknown reason)");
 								vid_play_request = false;
 								break;
@@ -301,8 +306,6 @@ void Sapp0_decode_thread(void* arg)
 					result = network_decoder.decode_audio(&audio_size, &audio, &pos);
 					osTickCounterUpdate(&counter0);
 					vid_audio_time = osTickCounterRead(&counter0);
-					
-					network_decoder.read_audio_packet(); // refill
 					
 					if (!std::isnan(pos) && !std::isinf(pos))
 						vid_current_pos = pos;
@@ -331,7 +334,7 @@ void Sapp0_decode_thread(void* arg)
 					
 					// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoded a video packet at " + std::to_string(pos));
 					while (result.code == DEF_ERR_NEED_MORE_OUTPUT && vid_play_request && !vid_seek_request && !vid_change_video_request) {
-							// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "video queue full");
+						// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "video queue full");
 						usleep(10000);
 						osTickCounterUpdate(&counter0);
 						result = network_decoder.decode_video(&w, &h, &key, &pos);
@@ -355,8 +358,6 @@ void Sapp0_decode_thread(void* arg)
 					for (int i = 1; i < 320; i++) vid_time[0][i - 1] = vid_time[0][i];
 					
 					if (vid_play_request && !vid_seek_request && !vid_change_video_request) {
-						network_decoder.read_video_packet(); // refill
-						
 						if (result.code != 0)
 							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
 					}
@@ -488,7 +489,7 @@ void Sapp0_convert_thread(void* arg)
 					
 					// sync with sound
 					double cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
-					
+					// Util_log_save("conv", "pos : " + std::to_string(pts) + " / " + std::to_string(cur_sound_pos));
 					if (cur_sound_pos < 0) { // sound is not playing, probably because the video is lagging behind, so draw immediately
 						
 					} else {
@@ -587,7 +588,7 @@ void Sapp0_init(void)
 	APT_CheckNew3DS(&new_3ds);
 	if(new_3ds)
 	{
-		add_cpu_limit(70);
+		add_cpu_limit(50);
 		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}

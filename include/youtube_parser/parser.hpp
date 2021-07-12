@@ -13,5 +13,7 @@ struct YouTubeVideoInfo {
 	size_t audio_stream_len;
 	std::string video_stream_url;
 	size_t video_stream_len;
+	std::string both_stream_url;
+	size_t both_stream_len;
 };
 YouTubeVideoInfo parse_youtube_html(std::string url);
