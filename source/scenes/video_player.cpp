@@ -54,6 +54,7 @@ namespace VideoPlayer {
 	std::string vid_audio_format = "n/a";
 	std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
 	Image_data vid_image[8];
+	Image_data author_icon_image;
 	C2D_Image vid_banner[2];
 	C2D_Image vid_control[2];
 	Thread vid_decode_thread, vid_convert_thread;
@@ -200,6 +201,14 @@ static void decode_thread(void* arg)
 				}
 				if(result.code == 0) {
 					vid_play_request = true;
+					// draw icon
+					int icon_w, icon_h;
+					u8 *author_icon_decoded = Image_decode(&video_info.author.icon.data[0], video_info.author.icon.data.size(), &icon_w, &icon_h);
+					if (author_icon_decoded) {
+						result = Draw_set_texture_data(&author_icon_image, author_icon_decoded, icon_w, icon_h, 256, 256, GPU_RGB565);
+						free(author_icon_decoded);
+						author_icon_decoded = NULL;
+					} else Util_log_save("dec", "Image_decode() failed");
 					break;
 				}
 				deinit_streams();
@@ -624,6 +633,13 @@ void VideoPlayer_init(void)
 			vid_thread_run = false;
 		}
 	}
+	result = Draw_c2d_image_init(&author_icon_image, 256, 256, GPU_RGB565);
+	if(result.code != 0)
+	{
+		Util_err_set_error_message(DEF_ERR_OUT_OF_LINEAR_MEMORY_STR, "", DEF_SAPP0_INIT_STR, DEF_ERR_OUT_OF_LINEAR_MEMORY);
+		Util_err_set_error_show_flag(true);
+		vid_thread_run = false;
+	}
 
 	result = Draw_load_texture("romfs:/gfx/draw/video_player/banner.t3x", 61, vid_banner, 0, 2);
 	Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
@@ -692,6 +708,7 @@ void VideoPlayer_exit(void)
 
 	for(int i = 0; i < 8; i++)
 		Draw_c2d_image_free(vid_image[i]);
+	Draw_c2d_image_free(author_icon_image);
 	
 	Util_log_save(DEF_SAPP0_EXIT_STR, "Exited.");
 }
@@ -742,22 +759,24 @@ Intent VideoPlayer_draw(void)
 
 		Draw_screen_ready(1, back_color);
 
-		Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
+		// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
 		{
 			const char *message = get_network_waiting_status();
 			if (message) Draw(message, 0, 140, 0.5, 0.5, color);
 		}
 
 		//codec info
+		// TODO : move these to debug tab
+		/*
 		Draw(vid_video_format, 0, 10, 0.5, 0.5, color);
 		Draw(vid_audio_format, 0, 20, 0.5, 0.5, color);
 		Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, 30, 0.5, 0.5, color);
-		Draw(std::string("HW Decoder : ") + (network_decoder.hw_decoder_enabled ? "Enabled" : "Disabled"), 0, 40, 0.5, 0.5, color);
+		Draw(std::string("HW Decoder : ") + (network_decoder.hw_decoder_enabled ? "Enabled" : "Disabled"), 0, 40, 0.5, 0.5, color);*/
 		
 		{
 			u32 cpu_limit;
 			APT_GetAppCpuTimeLimit(&cpu_limit);
-			Draw("CPU Limit : " + std::to_string(cpu_limit), 0, 50, 0.5, 0.5, color);
+			Draw("CPU Limit : " + std::to_string(cpu_limit), 0, 60, 0.5, 0.5, color);
 		}
 
 		if(vid_play_request)
@@ -770,6 +789,8 @@ Intent VideoPlayer_draw(void)
 				Draw_texture(vid_image[image_num * 4 + 2].c2d, vid_x - 40, (vid_y + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 2] * vid_zoom, vid_tex_height[image_num * 4 + 2] * vid_zoom);
 			if(vid_width > 1024 && vid_height > 1024)
 				Draw_texture(vid_image[image_num * 4 + 3].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 40, (vid_y + vid_tex_height[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 3] * vid_zoom, vid_tex_height[image_num * 4 + 3] * vid_zoom);
+			
+			Draw_texture(author_icon_image.c2d, 0, 0, 48, 48);
 		}
 
 		//controls

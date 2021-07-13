@@ -281,6 +281,7 @@ YouTubeSearchResult parse_search(std::string url) {
 	debug(res.estimated_result_num);*/
 	return res;
 }
+/*
 #ifdef _WIN32
 int main() {
 	std::string url;
@@ -288,5 +289,5 @@ int main() {
 	parse_search(url);
 	return 0;
 }
-#endif
+#endif*/
 

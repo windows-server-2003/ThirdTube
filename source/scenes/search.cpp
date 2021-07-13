@@ -245,7 +245,7 @@ Intent Search_draw(void)
 		}
 		if (!ignore && key.touch_y == -1 && last_touch_y != -1 && first_touch_x != -1) {
 			if (last_touch_y + scroll_offset >= 20 && (size_t) last_touch_y + scroll_offset < 20 + search_result_bak.results.size() * FONT_VERTICAL_INTERVAL) {
-				if (!list_scrolling) {
+				if (!list_scrolling && list_grabbed) {
 					int index = (last_touch_y + scroll_offset - 20) / FONT_VERTICAL_INTERVAL;
 					intent.next_scene = SceneType::VIDEO_PLAYER;
 					intent.arg = search_result_bak.results[index].url;

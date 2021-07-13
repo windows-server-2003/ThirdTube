@@ -1,5 +1,6 @@
 #pragma once
 
+
 struct YouTubeSearchResult {
 	struct VideoInfo {
 		std::string url;
@@ -19,7 +20,14 @@ struct YouTubeVideoInfo {
 	struct Channel {
 		std::string name;
 		std::string url;
-		std::string icon_url;
+		
+		struct Icon {
+			std::string url;
+			int width;
+			int height;
+			std::vector<uint8_t> data;
+		};
+		Icon icon;
 	};
 	std::string error;
 	std::string title;

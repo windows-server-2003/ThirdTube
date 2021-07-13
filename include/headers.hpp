@@ -20,7 +20,7 @@
 #include "system/util/log.hpp"
 #include "system/util/camera.hpp"
 #include "system/util/converter.hpp"
-#include "system/util/decoder.hpp"
+#include "system/util/image.hpp"
 #include "system/util/network_decoder.hpp"
 #include "system/util/network_io.hpp"
 #include "system/util/encoder.hpp"

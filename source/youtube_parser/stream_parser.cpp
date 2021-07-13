@@ -314,13 +314,28 @@ static void extract_metadata(YouTubeVideoInfo &res, const std::string &html) {
 	auto extract_owner = [&] (Json slimOwnerRenderer) {
 		res.author.name = slimOwnerRenderer["channelName"].string_value();
 		res.author.url = slimOwnerRenderer["channelUrl"].string_value();
-		int max_height = -1;
+		
+		YouTubeVideoInfo::Channel::Icon icon_48;
+		int max_width = -1;
+		YouTubeVideoInfo::Channel::Icon icon_largest;
 		for (auto icon : slimOwnerRenderer["thumbnail"]["thumbnails"].array_items()) {
-			if (max_height < icon["height"].int_value()) {
-				max_height = icon["height"].int_value();
-				res.author.icon_url = icon["url"].string_value();
+			if (icon["height"].int_value() >= 256) continue; // too large
+			if (icon["height"].int_value() == 48) {
+				icon_48.url = icon["url"].string_value();
+				icon_48.width = icon["width"].int_value();
+				icon_48.height = icon["height"].int_value();
+			}
+			if (max_width < icon["height"].int_value()) {
+				max_width = icon["height"].int_value();
+				icon_largest.url = icon["url"].string_value();
+				icon_largest.width = icon["width"].int_value();
+				icon_largest.height = icon["height"].int_value();
 			}
 		}
+		res.author.icon = icon_48.url != "" ? icon_48 : icon_largest;
+		
+		auto icon_data = http_get(res.author.icon.url);
+		res.author.icon.data = std::vector<u8>(icon_data.begin(), icon_data.end());
 	};
 	
 	bool ok = false;
@@ -378,7 +393,7 @@ YouTubeVideoInfo parse_video_page(std::string url) {
 	debug(res.title);
 	debug(res.author.name);
 	debug(res.author.url);
-	debug(res.author.icon_url);
+	debug(res.author.icon.url);
 	debug(res.audio_stream_url);
 	debug(res.video_stream_url);
 	debug(res.both_stream_url);
