@@ -197,29 +197,38 @@ void Sapp0_decode_thread(void* arg)
 				}
 			}
 			
-			network_waiting_status = "loading video page";
-			YouTubeVideoInfo video_info = parse_youtube_html(video_url);
-			if (video_info.error != "") {
-				network_waiting_status = "failed loading video page";
-				vid_play_request = false;
-				continue;
+			// video page parsing sometimes randomly fails, so try several times
+			vid_play_request = false;
+			for (int i = 0; i < 3; i++) {
+				network_waiting_status = "loading video page";
+				YouTubeVideoInfo video_info = parse_youtube_html(video_url);
+				if (video_info.error != "") {
+					result.error_description = video_info.error;
+					continue;
+				}
+				
+				cur_video_stream = new NetworkStream(video_info.video_stream_url, video_info.video_stream_len);
+				cur_audio_stream = new NetworkStream(video_info.audio_stream_url, video_info.audio_stream_len);
+				stream_downloader.add_stream(cur_video_stream);
+				stream_downloader.add_stream(cur_audio_stream);
+				result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
+				if(result.code == 0) {
+					vid_play_request = true;
+					break;
+				}
+				cur_video_stream->quit_request = true;
+				cur_audio_stream->quit_request = true;
+				network_decoder.deinit(); 
 			}
-			network_waiting_status = NULL;
-			
-			cur_video_stream = new NetworkStream(video_info.video_stream_url, video_info.video_stream_len);
-			cur_audio_stream = new NetworkStream(video_info.audio_stream_url, video_info.audio_stream_len);
-			stream_downloader.add_stream(cur_video_stream);
-			stream_downloader.add_stream(cur_audio_stream);
-			result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
 			/*
 			cur_video_stream = new NetworkStream(video_info.both_stream_url, video_info.both_stream_len);
 			stream_downloader.add_stream(cur_video_stream);
-			result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);*/
+			result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
 			
 			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
 			if(result.code != 0)
-				vid_play_request = false;
+				vid_play_request = false;*/
 			
 			if (vid_play_request) {
 				{

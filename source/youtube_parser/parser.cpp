@@ -381,6 +381,7 @@ YouTubeVideoInfo parse_youtube_html(std::string url) {
 	debug(res.author.icon_url);
 	debug(res.audio_stream_url);
 	debug(res.video_stream_url);
+	debug(res.both_stream_url);
 	return res;
 }
 #ifdef _WIN32
