@@ -184,6 +184,33 @@ void Util_hid_key_flag_reset(void)
 	hid_count = 0;
 }
 
+static void Util_hid_key_pressed_flag_reset() {
+	hid_key_A_press = false;
+	hid_key_B_press = false;
+	hid_key_X_press = false;
+	hid_key_Y_press = false;
+	hid_key_C_UP_press = false;
+	hid_key_C_DOWN_press = false;
+	hid_key_C_RIGHT_press = false;
+	hid_key_C_LEFT_press = false;
+	hid_key_D_UP_press = false;
+	hid_key_D_DOWN_press = false;
+	hid_key_D_RIGHT_press = false;
+	hid_key_D_LEFT_press = false;
+	hid_key_L_press = false;
+	hid_key_R_press = false;
+	hid_key_ZL_press = false;
+	hid_key_ZR_press = false;
+	hid_key_START_press = false;
+	hid_key_SELECT_press = false;
+	hid_key_CS_UP_press = false;
+	hid_key_CS_DOWN_press = false;
+	hid_key_CS_RIGHT_press = false;
+	hid_key_CS_LEFT_press = false;
+	hid_key_touch_press = false;
+}
+
+
 void Util_hid_scan_hid_thread(void* arg)
 {
 	Util_log_save(hid_scan_hid_thread_string, "Thread started.");
@@ -416,8 +443,11 @@ void Util_hid_scan_hid_thread(void* arg)
 			|| hid_key_X_held || hid_key_Y_held || hid_key_D_DOWN_held || hid_key_D_RIGHT_held
 			|| hid_key_D_LEFT_held || hid_key_C_UP_held || hid_key_C_DOWN_held || hid_key_C_RIGHT_held
 			|| hid_key_C_LEFT_held || hid_key_D_UP_held || hid_key_touch_held || hid_key_ZL_held
-			|| hid_key_ZR_held || hid_key_L_held || hid_key_R_held)
+			|| hid_key_ZR_held || hid_key_L_held || hid_key_R_held) {
+			
+			if (var_afk_time > var_time_to_turn_off_lcd) Util_hid_key_pressed_flag_reset(); // the tap to awake the lcd should not be caught in most cases
 			var_afk_time = 0;
+		}
 
 		if (hid_key_D_UP_held || hid_key_D_DOWN_held || hid_key_D_RIGHT_held || hid_key_D_LEFT_held
 			|| hid_key_C_UP_held || hid_key_C_DOWN_held || hid_key_C_RIGHT_held || hid_key_C_LEFT_held

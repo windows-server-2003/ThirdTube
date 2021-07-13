@@ -145,7 +145,7 @@ static void draw_search_result(const YouTubeSearchResult &result, Hid_info key) 
 			int y_r = RESULT_Y_LOW + (i + 1) * FONT_VERTICAL_INTERVAL - scroll_offset;
 			if (y_r <= RESULT_Y_LOW || y_l >= RESULT_Y_HIGH) continue;
 			
-			if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r && !list_scrolling) {
+			if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r && list_grabbed && !list_scrolling) {
 				Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 0, y_l, 320, FONT_VERTICAL_INTERVAL);
 			}
 			
@@ -225,7 +225,7 @@ Intent Search_draw(void)
 		if (key.p_touch) {
 			first_touch_x = key.touch_x;
 			first_touch_y = key.touch_y;
-			if (first_touch_y >= RESULT_Y_LOW && first_touch_y < RESULT_Y_HIGH) list_grabbed = true;
+			if (first_touch_y >= RESULT_Y_LOW && first_touch_y < RESULT_Y_HIGH && var_afk_time <= var_time_to_turn_off_lcd) list_grabbed = true;
 		} else if (list_grabbed && !list_scrolling && key.touch_y != -1 && std::abs(key.touch_y - first_touch_y) >= 4) {
 			list_scrolling = true;
 			scroll_offset += first_touch_y - key.touch_y;
