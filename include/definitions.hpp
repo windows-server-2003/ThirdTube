@@ -12,7 +12,7 @@
 #define DEF_HTTP_USER_AGENT (std::string)"video player for 3ds v1.1.0"
 #define DEF_CURRENT_APP_VER (std::string)"v1.1.0"
 #define DEF_CURRENT_APP_VER_INT 1041
-#define DEF_ENABLE_SUB_APP0
+// #define DEF_ENABLE_SUB_APP0
 //#define DEF_ENABLE_SUB_APP1
 //#define DEF_ENABLE_SUB_APP2
 //#define DEF_ENABLE_SUB_APP3
@@ -31,70 +31,7 @@
 #define DEF_SAPP0_DECODE_THREAD_STR (std::string)"Vid/Decode thread"
 #define DEF_SAPP0_CONVERT_THREAD_STR (std::string)"Vid/Convert thread"
 
-//video player(mvd)
-#define DEF_SAPP1_NUM_OF_MSG 13
-#define DEF_SAPP1_NAME (std::string)"mvd test"
-#define DEF_SAPP1_VER (std::string)"v1.1.1"
-#define DEF_SAPP1_MAIN_STR (std::string)"Vid/Main"
-#define DEF_SAPP1_INIT_STR (std::string)"Vid/Init"
-#define DEF_SAPP1_EXIT_STR (std::string)"Vid/Exit"
-#define DEF_SAPP1_DECODE_THREAD_STR (std::string)"Vid/Decode thread"
-#define DEF_SAPP1_CONVERT_THREAD_STR (std::string)"Vid/Convert thread"
-
-//sample app 2
-#define DEF_SAPP2_NUM_OF_MSG 1
-#define DEF_SAPP2_NAME (std::string)"sample 2"
-#define DEF_SAPP2_VER (std::string)"v0.0.1"
-#define DEF_SAPP2_MAIN_STR (std::string)"Sapp2/Main"
-#define DEF_SAPP2_INIT_STR (std::string)"Sapp2/Init"
-#define DEF_SAPP2_EXIT_STR (std::string)"Sapp2/Exit"
-#define DEF_SAPP2_THREAD_STR (std::string)"Sapp2/Sub thread"
-
-//sample app 3
-#define DEF_SAPP3_NUM_OF_MSG 1
-#define DEF_SAPP3_NAME (std::string)"sample 3"
-#define DEF_SAPP3_VER (std::string)"v0.0.1"
-#define DEF_SAPP3_MAIN_STR (std::string)"Sapp3/Main"
-#define DEF_SAPP3_INIT_STR (std::string)"Sapp3/Init"
-#define DEF_SAPP3_EXIT_STR (std::string)"Sapp3/Exit"
-#define DEF_SAPP3_THREAD_STR (std::string)"Sapp3/Sub thread"
-
-//sample app 4
-#define DEF_SAPP4_NUM_OF_MSG 1
-#define DEF_SAPP4_NAME (std::string)"sample 4"
-#define DEF_SAPP4_VER (std::string)"v0.0.1"
-#define DEF_SAPP4_MAIN_STR (std::string)"Sapp4/Main"
-#define DEF_SAPP4_INIT_STR (std::string)"Sapp4/Init"
-#define DEF_SAPP4_EXIT_STR (std::string)"Sapp4/Exit"
-#define DEF_SAPP4_THREAD_STR (std::string)"Sapp4/Sub thread"
-
-//sample app 5
-#define DEF_SAPP5_NUM_OF_MSG 1
-#define DEF_SAPP5_NAME (std::string)"sample 5"
-#define DEF_SAPP5_VER (std::string)"v0.0.1"
-#define DEF_SAPP5_MAIN_STR (std::string)"Sapp5/Main"
-#define DEF_SAPP5_INIT_STR (std::string)"Sapp5/Init"
-#define DEF_SAPP5_EXIT_STR (std::string)"Sapp5/Exit"
-#define DEF_SAPP5_THREAD_STR (std::string)"Sapp5/Sub thread"
-
-//sample app 6
-#define DEF_SAPP6_NUM_OF_MSG 1
-#define DEF_SAPP6_NAME (std::string)"sample 6"
-#define DEF_SAPP6_VER (std::string)"v0.0.1"
-#define DEF_SAPP6_MAIN_STR (std::string)"Sapp6/Main"
-#define DEF_SAPP6_INIT_STR (std::string)"Sapp6/Init"
-#define DEF_SAPP6_EXIT_STR (std::string)"Sapp6/Exit"
-#define DEF_SAPP6_THREAD_STR (std::string)"Sapp6/Sub thread"
-
-//sample app 7
-#define DEF_SAPP7_NUM_OF_MSG 1
-#define DEF_SAPP7_NAME (std::string)"sample 7"
-#define DEF_SAPP7_VER (std::string)"v0.0.1"
-#define DEF_SAPP7_MAIN_STR (std::string)"Sapp7/Main"
-#define DEF_SAPP7_INIT_STR (std::string)"Sapp7/Init"
-#define DEF_SAPP7_EXIT_STR (std::string)"Sapp7/Exit"
-#define DEF_SAPP7_THREAD_STR (std::string)"Sapp7/Sub thread"
-
+#define DEF_SEARCH_NUM_OF_MSG 1
 
 //menu
 #define DEF_MENU_NUM_OF_MSG 5
@@ -134,6 +71,7 @@
 #define DEF_DRAW_WHITE 0xFFFFFFFF
 #define DEF_DRAW_AQUA 0xFFFFFF00
 #define DEF_DRAW_YELLOW 0xFF00C5FF
+#define DEF_DRAW_BROWN 0xFF734E30
 #define DEF_DRAW_WEAK_RED 0x500000FF
 #define DEF_DRAW_WEAK_GREEN 0x5000FF00
 #define DEF_DRAW_WEAK_BLUE 0x50FF0000

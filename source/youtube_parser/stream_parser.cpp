@@ -25,7 +25,7 @@
 
 #	define debug(s) std::cerr << (s) << std::endl
 
-	std::string http_get(const std::string &url) {
+	static std::string http_get(const std::string &url) {
 		static const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
 		
 		system(("wget --user-agent=\"" + user_agent + "\" \"" + url + "\" -O wget_tmp.txt").c_str());
@@ -40,7 +40,7 @@
 #	include "headers.hpp"
 #	define debug(s) Util_log_save("yt-parser", (s));
 
-	std::string http_get(const std::string &url) {
+	static std::string http_get(const std::string &url) {
 		constexpr int BLOCK = 0x40000; // 256 KB
 		add_cpu_limit(25);
 		debug("accessing...");
@@ -361,7 +361,7 @@ static std::string convert_url_to_mobile(std::string url) {
 	return "https://" + url;
 }
 
-YouTubeVideoInfo parse_youtube_html(std::string url) {
+YouTubeVideoInfo parse_video_page(std::string url) {
 	YouTubeVideoInfo res;
 	
 	url = convert_url_to_mobile(url);
@@ -388,7 +388,7 @@ YouTubeVideoInfo parse_youtube_html(std::string url) {
 int main() {
 	std::string url;
 	std::cin >> url;
-	parse_youtube_html(url);
+	parse_video_page(url);
 	return 0;
 }
 #endif

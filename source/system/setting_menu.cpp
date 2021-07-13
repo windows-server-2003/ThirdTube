@@ -53,17 +53,16 @@ bool Sem_query_running_flag(void)
 
 void Sem_suspend(void)
 {
-	Menu_resume();
 	sem_thread_suspend = true;
 	sem_main_run = false;
 }
 
-void Sem_resume(void)
+void Sem_resume(std::string arg)
 {
+	(void) arg;
 	sem_thread_suspend = false;
 	sem_main_run = true;
 	var_need_reflesh = true;
-	Menu_suspend();
 }
 
 void Sem_init(void)
@@ -152,7 +151,7 @@ void Sem_init(void)
 	free(cache);
 	cache = NULL;
 
-	Sem_resume();
+	Sem_resume("");
 	sem_already_init = true;
 	Util_log_save(DEF_SEM_INIT_STR, "Initialized.");
 }
@@ -191,8 +190,11 @@ void Sem_exit(void)
 	Util_log_save(DEF_SEM_EXIT_STR, "Exited.");
 }
 
-void Sem_main(void)
+Intent Sem_draw(void)
 {
+	Intent intent;
+	intent.next_scene = SceneType::NO_CHANGE;
+	
 	int color = DEF_DRAW_BLACK;
 	int back_color = DEF_DRAW_WHITE;
 	int cache_color[DEF_EXFONT_NUM_OF_FONT_NAME];
@@ -703,8 +705,10 @@ void Sem_main(void)
 				sem_dl_file_request = true;
 				var_need_reflesh = true;
 			}
-			else if(key.p_touch && key.touch_x >= 250 && key.touch_x <= 304 && key.touch_y >= 180 && key.touch_y <= 199 && sem_update_progress == 4)
-				Menu_set_must_exit_flag(true);
+			else if(key.p_touch && key.touch_x >= 250 && key.touch_x <= 304 && key.touch_y >= 180 && key.touch_y <= 199 && sem_update_progress == 4) {
+				// Menu_set_must_exit_flag(true);
+				// <--------------------- TODO : request exit
+			}
 
 			if (key.p_touch && key.touch_x >= 17 && key.touch_x <= 250 && key.touch_y >= 15 && key.touch_y <= 34 && sem_newest_ver_data[1] == "1")
 			{
@@ -1024,6 +1028,8 @@ void Sem_main(void)
 
 	if(Util_log_query_log_show_flag())
 		Util_log_main(key);
+	
+	return intent;
 }
 
 void Sem_encode_thread(void* arg)

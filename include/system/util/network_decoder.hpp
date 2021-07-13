@@ -1,7 +1,7 @@
 #pragma once
 #include "network_io.hpp"
 #include "speaker.hpp"
-#include "system/types.hpp"
+#include "types.hpp"
 #include <vector>
 #include <set>
 #include <deque>

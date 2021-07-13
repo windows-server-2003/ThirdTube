@@ -7,10 +7,7 @@ int main()
 	// Main loop
 	while (aptMainLoop())
 	{
-		if (Menu_query_must_exit_flag())
-			break;
-
-		Menu_main();
+		if (!Menu_main()) break;
 	}
 
 	Menu_exit();

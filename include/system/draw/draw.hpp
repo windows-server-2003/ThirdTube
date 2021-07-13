@@ -1,4 +1,5 @@
 #pragma once
+#include "types.hpp"
 
 double Draw_query_frametime(void);
 

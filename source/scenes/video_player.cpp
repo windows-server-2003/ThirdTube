@@ -2,12 +2,14 @@
 #include <vector>
 #include <numeric>
 
-#include "sub_app0.hpp"
+#include "scenes/video_player.hpp"
 
 #define REQUEST_HW_DECODER true
 #define VIDEO_AUDIO_SEPERATE false
+#define NEW_3DS_CPU_LIMIT 50
+#define OLD_3DS_CPU_LIMIT 80
 
-namespace SubApp0 {
+namespace VideoPlayer {
 	bool vid_main_run = false;
 	bool vid_thread_run = false;
 	bool vid_already_init = false;
@@ -65,7 +67,7 @@ namespace SubApp0 {
 	Handle network_decoder_critical_lock; // locked when seeking or deiniting
 	Handle video_request_lock; // locked for very very short time, while decoder is backing up seek/video change request and removing the flag
 };
-using namespace SubApp0;
+using namespace VideoPlayer;
 
 static const char * volatile network_waiting_status = NULL;
 const char *get_network_waiting_status() {
@@ -74,17 +76,12 @@ const char *get_network_waiting_status() {
 	// return decoder_get_network_waiting_status();
 }
 
-bool Sapp0_query_init_flag(void)
+bool VideoPlayer_query_init_flag(void)
 {
 	return vid_already_init;
 }
 
-bool Sapp0_query_running_flag(void)
-{
-	return vid_main_run;
-}
-
-void deinit_streams() {
+static void deinit_streams() {
 	svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
 	if (cur_video_stream) cur_video_stream->quit_request = true;
 	if (cur_audio_stream) cur_audio_stream->quit_request = true;
@@ -109,7 +106,7 @@ static void send_seek_request(double pos) {
 	svcReleaseMutex(video_request_lock);
 }
 
-void Sapp0_decode_thread(void* arg)
+static void decode_thread(void* arg)
 {
 	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Thread started.");
 
@@ -184,7 +181,7 @@ void Sapp0_decode_thread(void* arg)
 			vid_play_request = false;
 			for (int i = 0; i < 3; i++) {
 				network_waiting_status = "loading video page";
-				YouTubeVideoInfo video_info = parse_youtube_html(vid_url);
+				YouTubeVideoInfo video_info = parse_video_page(vid_url);
 				if (video_info.error != "") {
 					result.error_description = video_info.error;
 					continue;
@@ -388,7 +385,7 @@ void Sapp0_decode_thread(void* arg)
 	threadExit(0);
 }
 
-void Sapp0_convert_thread(void* arg)
+static void convert_thread(void* arg)
 {
 	Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Thread started.");
 	u8* yuv_video = NULL;
@@ -547,22 +544,21 @@ void Sapp0_convert_thread(void* arg)
 	threadExit(0);
 }
 
-void Sapp0_resume(void)
+void VideoPlayer_resume(std::string arg)
 {
+	if (arg != "") send_change_video_request(arg);
 	vid_thread_suspend = false;
 	vid_main_run = true;
 	var_need_reflesh = true;
-	Menu_suspend();
 }
 
-void Sapp0_suspend(void)
+void VideoPlayer_suspend(void)
 {
 	vid_thread_suspend = true;
 	vid_main_run = false;
-	Menu_resume();
 }
 
-void Sapp0_init(void)
+void VideoPlayer_init(void)
 {
 	Util_log_save(DEF_SAPP0_INIT_STR, "Initializing...");
 	bool new_3ds = false;
@@ -577,17 +573,17 @@ void Sapp0_init(void)
 	APT_CheckNew3DS(&new_3ds);
 	if(new_3ds)
 	{
-		add_cpu_limit(50);
+		add_cpu_limit(NEW_3DS_CPU_LIMIT);
 		Result mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE * 2, NULL);
 		if (mvd_result != 0) Util_log_save("init", "mvdstdInit() returned " + std::to_string(mvd_result));
-		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
-		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+		vid_decode_thread = threadCreate(decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
+		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
 	else
 	{
-		add_cpu_limit(80);
-		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
-		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+		add_cpu_limit(OLD_3DS_CPU_LIMIT);
+		vid_decode_thread = threadCreate(decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
+		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
 	stream_downloader = NetworkStreamDownloader();
 	stream_downloader_thread = threadCreate(network_downloader_thread, &stream_downloader, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
@@ -655,12 +651,12 @@ void Sapp0_init(void)
 	result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SAPP0_NUM_OF_MSG);
 	Util_log_save(DEF_SAPP0_INIT_STR, "Util_load_msg()..." + result.string + result.error_description, result.code);
 
-	Sapp0_resume();
+	VideoPlayer_resume("");
 	vid_already_init = true;
 	Util_log_save(DEF_SAPP0_INIT_STR, "Initialized.");
 }
 
-void Sapp0_exit(void)
+void VideoPlayer_exit(void)
 {
 	Util_log_save(DEF_SAPP0_EXIT_STR, "Exiting...");
 	u64 time_out = 10000000000;
@@ -681,7 +677,15 @@ void Sapp0_exit(void)
 	threadFree(stream_downloader_thread);
 	stream_downloader.delete_all();
 	
-	if (new_3ds) mvdstdExit();
+	bool new_3ds;
+	APT_CheckNew3DS(&new_3ds);
+	if (new_3ds) {
+		remove_cpu_limit(NEW_3DS_CPU_LIMIT);
+		mvdstdExit();
+	} else {
+		remove_cpu_limit(OLD_3DS_CPU_LIMIT);
+	}
+	
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
@@ -692,8 +696,11 @@ void Sapp0_exit(void)
 	Util_log_save(DEF_SAPP0_EXIT_STR, "Exited.");
 }
 
-void Sapp0_main(void)
+Intent VideoPlayer_draw(void)
 {
+	Intent intent;
+	intent.next_scene = SceneType::NO_CHANGE;
+	
 	int color = DEF_DRAW_BLACK;
 	int back_color = DEF_DRAW_WHITE;
 	Hid_info key;
@@ -879,10 +886,9 @@ void Sapp0_main(void)
 		Util_expl_main(key);
 	else
 	{
-		if (key.p_start || (key.p_touch && key.touch_x >= 110 && key.touch_x <= 230 && key.touch_y >= 220 && key.touch_y <= 240))
-			Sapp0_suspend();
-		else if(key.p_a)
-		{
+		if (key.p_start || (key.p_touch && key.touch_x >= 110 && key.touch_x <= 230 && key.touch_y >= 220 && key.touch_y <= 240)) {
+			intent.next_scene = SceneType::SEARCH;
+		} else if(key.p_a) {
 			if(vid_play_request) {
 				if (vid_pausing) Util_speaker_resume(0);
 				else Util_speaker_pause(0);
@@ -1059,4 +1065,6 @@ void Sapp0_main(void)
 
 	if(Util_log_query_log_show_flag())
 		Util_log_main(key);
+	
+	return intent;
 }

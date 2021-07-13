@@ -1,14 +1,29 @@
 #pragma once
 
-struct YoutubeChannel {
-	std::string name;
-	std::string url;
-	std::string icon_url;
+struct YouTubeSearchResult {
+	struct VideoInfo {
+		std::string url;
+		std::string title;
+		std::string duration_text;
+		std::string author;
+		std::string thumbnail_url;
+	};
+	
+	std::string error;
+	int estimated_result_num;
+	std::vector<VideoInfo> results;
 };
+YouTubeSearchResult parse_search(std::string url);
+
 struct YouTubeVideoInfo {
+	struct Channel {
+		std::string name;
+		std::string url;
+		std::string icon_url;
+	};
 	std::string error;
 	std::string title;
-	YoutubeChannel author;
+	Channel author;
 	std::string audio_stream_url;
 	size_t audio_stream_len;
 	std::string video_stream_url;
@@ -16,4 +31,4 @@ struct YouTubeVideoInfo {
 	std::string both_stream_url;
 	size_t both_stream_len;
 };
-YouTubeVideoInfo parse_youtube_html(std::string url);
+YouTubeVideoInfo parse_video_page(std::string url);
