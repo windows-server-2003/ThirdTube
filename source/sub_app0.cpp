@@ -240,6 +240,11 @@ void Sapp0_decode_thread(void* arg)
 					vid_duration = tmp.duration;
 					vid_frametime = 1000.0 / vid_framerate;;
 
+					if(vid_width % 16 != 0)
+						vid_width += 16 - vid_width % 16;
+					if(vid_height % 16 != 0)
+						vid_height += 16 - vid_height % 16;
+
 					//fit to screen size
 					while(((vid_width * vid_zoom) > 400 || (vid_height * vid_zoom) > 225) && vid_zoom > 0.05)
 						vid_zoom -= 0.001;
@@ -247,11 +252,6 @@ void Sapp0_decode_thread(void* arg)
 					vid_x = (400 - (vid_width * vid_zoom)) / 2;
 					vid_y = (225 - (vid_height * vid_zoom)) / 2;
 					vid_y += 15;
-
-					if(vid_width % 16 != 0)
-						vid_width += 16 - vid_width % 16;
-					if(vid_height % 16 != 0)
-						vid_height += 16 - vid_height % 16;
 				}
 			}
 			
@@ -722,7 +722,7 @@ void Sapp0_main(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, back_color);
+		Draw_screen_ready(0, vid_play_request ? DEF_DRAW_BLACK : back_color);
 
 		if(vid_play_request)
 		{
