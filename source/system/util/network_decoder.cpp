@@ -184,7 +184,7 @@ Result_with_string NetworkDecoder::init_video_decoder(bool &is_mvd) {
 	Result_with_string result;
 	int width, height;
 	
-	if (is_mvd && codec[VIDEO]->long_name != "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10") {
+	if (is_mvd && codec[VIDEO]->long_name != std::string("H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10")) {
 		Util_log_save("decoder", "not H.264, disabling hw decoder");
 		is_mvd = false;
 	}
