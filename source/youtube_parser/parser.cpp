@@ -311,27 +311,42 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 static void extract_metadata(YouTubeVideoInfo &res, const std::string &html) {
 	Json initial_data = get_initial_data(html);
 	
-	Json metadata_renderer;
+	auto extract_owner = [&] (Json slimOwnerRenderer) {
+		res.author.name = slimOwnerRenderer["channelName"].string_value();
+		res.author.url = slimOwnerRenderer["channelUrl"].string_value();
+		int max_height = -1;
+		for (auto icon : slimOwnerRenderer["thumbnail"]["thumbnails"].array_items()) {
+			if (max_height < icon["height"].int_value()) {
+				max_height = icon["height"].int_value();
+				res.author.icon_url = icon["url"].string_value();
+			}
+		}
+	};
+	
+	bool ok = false;
 	{
 		auto contents = initial_data["contents"]["singleColumnWatchNextResults"]["results"]["results"]["contents"];
 		for (auto content : contents.array_items()) {
 			if (content["itemSectionRenderer"] != Json()) {
-				for (auto i : content["itemSectionRenderer"]["contents"].array_items()) if (i["slimVideoMetadataRenderer"] != Json())
-					metadata_renderer = i["slimVideoMetadataRenderer"];
+				for (auto i : content["itemSectionRenderer"]["contents"].array_items()) if (i["slimVideoMetadataRenderer"] != Json()) {
+					Json metadata_renderer = i["slimVideoMetadataRenderer"];
+					res.title = get_text_from_object(metadata_renderer["title"]);
+					extract_owner(metadata_renderer["owner"]["slimOwnerRenderer"]);
+					ok = true;
+					break;
+				}
+			} else if (content["slimVideoMetadataSectionRenderer"] != Json()) {
+				for (auto i : content["slimVideoMetadataSectionRenderer"]["contents"].array_items()) {
+					if (i["slimVideoInformationRenderer"] != Json()) {
+						res.title = get_text_from_object(i["slimVideoInformationRenderer"]["title"]);
+					}
+					if (i["slimOwnerRenderer"] != Json()) {
+						extract_owner(i["slimOwnerRenderer"]);
+					}
+				}
+				ok = true;
 			}
-		}
-	}
-	
-	res.title = get_text_from_object(metadata_renderer["title"]);
-	{ // set author
-		res.author.name = metadata_renderer["owner"]["slimOwnerRenderer"]["channelName"].string_value();
-		res.author.url = metadata_renderer["owner"]["slimOwnerRenderer"]["channelUrl"].string_value();
-		int max_height = -1;
-		for (auto i : metadata_renderer["owner"]["slimOwnerRenderer"]["thumbnail"]["thumbnails"].array_items()) {
-			if (max_height < i["height"].int_value()) {
-				max_height = i["height"].int_value();
-				res.author.icon_url = i["url"].string_value();
-			}
+			if (ok) break;
 		}
 	}
 }
