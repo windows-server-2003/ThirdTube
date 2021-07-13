@@ -5,6 +5,7 @@
 #include "sub_app0.hpp"
 
 #define REQUEST_HW_DECODER true
+#define VIDEO_AUDIO_SEPERATE false
 
 namespace SubApp0 {
 	bool vid_main_run = false;
@@ -46,8 +47,7 @@ namespace SubApp0 {
 	int vid_lr_count = 0;
 	int vid_cd_count = 0;
 	int vid_mvd_image_num = 0;
-	std::string vid_file = "";
-	std::string vid_dir = "";
+	static std::string vid_url = "";
 	std::string vid_video_format = "n/a";
 	std::string vid_audio_format = "n/a";
 	std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
@@ -57,6 +57,7 @@ namespace SubApp0 {
 	Thread vid_decode_thread, vid_convert_thread;
 
 	Thread stream_downloader_thread;
+	Handle streams_lock;
 	NetworkStream *cur_video_stream = NULL;
 	NetworkStream *cur_audio_stream = NULL;
 	NetworkStreamDownloader stream_downloader;
@@ -73,21 +74,6 @@ const char *get_network_waiting_status() {
 	// return decoder_get_network_waiting_status();
 }
 
-void Sapp0_callback(std::string file, std::string dir)
-{
-	svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
-	vid_file = file;
-	vid_dir = dir;
-	vid_change_video_request = true;
-	network_decoder.is_locked = true;
-	svcReleaseMutex(video_request_lock);
-}
-
-void Sapp0_cancel(void)
-{
-
-}
-
 bool Sapp0_query_init_flag(void)
 {
 	return vid_already_init;
@@ -96,6 +82,22 @@ bool Sapp0_query_init_flag(void)
 bool Sapp0_query_running_flag(void)
 {
 	return vid_main_run;
+}
+
+void deinit_streams() {
+	svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
+	if (cur_video_stream) cur_video_stream->quit_request = true;
+	if (cur_audio_stream) cur_audio_stream->quit_request = true;
+	cur_video_stream = cur_audio_stream = NULL;
+	svcReleaseMutex(streams_lock);
+}
+
+static void send_change_video_request(std::string url) {
+	svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
+	vid_url = url;
+	vid_change_video_request = true;
+	network_decoder.is_locked = true;
+	svcReleaseMutex(video_request_lock);
 }
 
 static void send_seek_request(double pos) {
@@ -177,58 +179,40 @@ void Sapp0_decode_thread(void* arg)
 			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
 			*/
-			std::string video_url;
-			{ // input video id
-				SwkbdState keyboard;
-				swkbdInit(&keyboard, SWKBD_TYPE_WESTERN, 2, 11);
-				swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY);
-				swkbdSetValidation(&keyboard, SWKBD_FIXEDLEN, 0, 0);
-				swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
-				swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
-				swkbdSetInitialText(&keyboard, "t8JXBtezzOc");
-				char video_id[64];
-				add_cpu_limit(50);
-				auto button_pressed = swkbdInputText(&keyboard, video_id, 12);
-				remove_cpu_limit(50);
-				if (button_pressed == SWKBD_BUTTON_RIGHT) video_url = std::string("https://www.youtube.com/watch?v=") + video_id;
-				else {
-					vid_play_request = false;
-					continue;
-				}
-			}
 			
 			// video page parsing sometimes randomly fails, so try several times
 			vid_play_request = false;
 			for (int i = 0; i < 3; i++) {
 				network_waiting_status = "loading video page";
-				YouTubeVideoInfo video_info = parse_youtube_html(video_url);
+				YouTubeVideoInfo video_info = parse_youtube_html(vid_url);
 				if (video_info.error != "") {
 					result.error_description = video_info.error;
 					continue;
 				}
 				
-				cur_video_stream = new NetworkStream(video_info.video_stream_url, video_info.video_stream_len);
-				cur_audio_stream = new NetworkStream(video_info.audio_stream_url, video_info.audio_stream_len);
-				stream_downloader.add_stream(cur_video_stream);
-				stream_downloader.add_stream(cur_audio_stream);
-				result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
+				if (VIDEO_AUDIO_SEPERATE) {
+					cur_video_stream = new NetworkStream(video_info.video_stream_url, video_info.video_stream_len);
+					cur_audio_stream = new NetworkStream(video_info.audio_stream_url, video_info.audio_stream_len);
+					stream_downloader.add_stream(cur_video_stream);
+					stream_downloader.add_stream(cur_audio_stream);
+					result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
+				} else {
+					cur_video_stream = new NetworkStream(video_info.both_stream_url, video_info.both_stream_len);
+					stream_downloader.add_stream(cur_video_stream);
+					result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
+				}
 				if(result.code == 0) {
 					vid_play_request = true;
 					break;
 				}
-				cur_video_stream->quit_request = true;
-				cur_audio_stream->quit_request = true;
+				deinit_streams();
 				network_decoder.deinit(); 
 			}
-			/*
-			cur_video_stream = new NetworkStream(video_info.both_stream_url, video_info.both_stream_len);
-			stream_downloader.add_stream(cur_video_stream);
-			result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
 			
 			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
 			if(result.code != 0)
-				vid_play_request = false;*/
+				vid_play_request = false;
 			
 			if (vid_play_request) {
 				{
@@ -375,12 +359,7 @@ void Sapp0_decode_thread(void* arg)
 			}
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
 			
-			if (cur_video_stream) cur_video_stream->quit_request = true;
-			if (cur_audio_stream) cur_audio_stream->quit_request = true;
-			// those pointers are stored in stream_downloader, so they will be deleted at some point
-			cur_video_stream = NULL;
-			cur_audio_stream = NULL;
-			
+			deinit_streams();
 			while (Util_speaker_is_playing(0) && vid_play_request) usleep(10000);
 			Util_speaker_exit(0);
 			
@@ -593,11 +572,14 @@ void Sapp0_init(void)
 	
 	svcCreateMutex(&network_decoder_critical_lock, false);
 	svcCreateMutex(&video_request_lock, false);
+	svcCreateMutex(&streams_lock, false);
 	
 	APT_CheckNew3DS(&new_3ds);
 	if(new_3ds)
 	{
 		add_cpu_limit(50);
+		Result mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE * 2, NULL);
+		if (mvd_result != 0) Util_log_save("init", "mvdstdInit() returned " + std::to_string(mvd_result));
 		vid_decode_thread = threadCreate(Sapp0_decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(Sapp0_convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
@@ -667,8 +649,6 @@ void Sapp0_init(void)
 	vid_zoom = 1;
 	vid_width = 0;
 	vid_height = 0;
-	vid_file = "";
-	vid_dir = "";
 	vid_video_format = "n/a";
 	vid_audio_format = "n/a";
 
@@ -691,8 +671,7 @@ void Sapp0_exit(void)
 	vid_thread_run = false;
 	vid_play_request = false;
 
-	if (cur_audio_stream) cur_audio_stream->quit_request = true;
-	if (cur_video_stream) cur_video_stream->quit_request = true;
+	deinit_streams();
 	stream_downloader.request_thread_exit();
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
@@ -701,6 +680,8 @@ void Sapp0_exit(void)
 	threadFree(vid_convert_thread);
 	threadFree(stream_downloader_thread);
 	stream_downloader.delete_all();
+	
+	if (new_3ds) mvdstdExit();
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
@@ -803,6 +784,7 @@ void Sapp0_main(void)
 			Draw_texture(var_square_image[0], 0xFF800080, 5, 195, 310 * (vid_current_pos / vid_duration), 10);
 		
 		// debug 
+		svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
 		auto cur_video_stream_bak = cur_video_stream;
 		auto cur_audio_stream_bak = cur_audio_stream;
 		if (cur_video_stream_bak) {
@@ -835,6 +817,7 @@ void Sapp0_main(void)
 				Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl , 208, xr - xl, 3);
 			}
 		}
+		svcReleaseMutex(streams_lock);
 
 		if(vid_detail_mode)
 		{
@@ -918,9 +901,25 @@ void Sapp0_main(void)
 		}
 		else if(key.p_x)
 		{
+			/*
 			Util_expl_set_show_flag(true);
 			Util_expl_set_callback(Sapp0_callback);
-			Util_expl_set_cancel_callback(Sapp0_cancel);
+			Util_expl_set_cancel_callback(Sapp0_cancel);*/
+			{ // input video id
+				SwkbdState keyboard;
+				swkbdInit(&keyboard, SWKBD_TYPE_WESTERN, 2, 11);
+				swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY);
+				swkbdSetValidation(&keyboard, SWKBD_FIXEDLEN, 0, 0);
+				swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
+				swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
+				swkbdSetInitialText(&keyboard, "t8JXBtezzOc");
+				char video_id[64];
+				add_cpu_limit(50);
+				auto button_pressed = swkbdInputText(&keyboard, video_id, 12);
+				remove_cpu_limit(50);
+				if (button_pressed == SWKBD_BUTTON_RIGHT) send_change_video_request(std::string("https://www.youtube.com/watch?v=") + video_id);
+			}
+			
 		}
 		else if(key.p_y)
 		{

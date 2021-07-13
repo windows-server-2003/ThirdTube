@@ -19,7 +19,6 @@ void NetworkDecoder::deinit() {
 		avformat_close_input(&format_context[type]);
 	}
 	if (hw_decoder_enabled) {
-		mvdstdExit();
 		for (auto i : video_mvd_tmp_frames.deinit()) free(i);
 		linearFree(mvd_frame);
 		mvd_frame = NULL;
@@ -272,13 +271,7 @@ Result_with_string NetworkDecoder::init(NetworkStream *video_stream, NetworkStre
 	this->network_stream[VIDEO] = video_stream;
 	this->network_stream[AUDIO] = audio_stream;
 	
-	if (request_hw_decoder) {
-		Result mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE * 2, NULL);
-		if (mvd_result != 0) {
-			Util_log_save("network decoder", "mvdstdInit() failed : ", mvd_result);
-			request_hw_decoder = false; // continue init with HW decoder disabled
-		} else mvd_first = true;
-	}
+	if (request_hw_decoder) mvd_first = true;
 	hw_decoder_enabled = request_hw_decoder;
 	
 	result = init_(VIDEO, AVMEDIA_TYPE_VIDEO);
