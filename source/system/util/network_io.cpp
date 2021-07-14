@@ -159,7 +159,7 @@ void NetworkStreamDownloader::downloader_thread() {
 		size_t start = block_reading * BLOCK_SIZE;
 		size_t end = std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len);
 		size_t expected_len = end - start;
-		auto network_result = access_http(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}});
+		auto network_result = access_http_get(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}});
 		
 		if (network_result.first == "") {
 			auto context = network_result.second;
@@ -208,7 +208,7 @@ void network_downloader_thread(void *downloader_) {
 
 // return.first : error message, an empty string if the operation suceeded without an error
 // return.second : the acquired http context, should neither be used nor closed if return.first isn't empty
-std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::string, std::string> request_headers) {
+std::pair<std::string, httpcContext> access_http_get(std::string url, std::map<std::string, std::string> request_headers) {
 	httpcContext context;
 	
 	u32 statuscode = 0;
@@ -239,6 +239,55 @@ std::pair<std::string, httpcContext> access_http(std::string url, std::map<std::
 
 		if ((statuscode >= 301 && statuscode <= 303) || (statuscode >= 307 && statuscode <= 308)) {
 	Util_log_save("http", "redir");
+			char newurl[0x1000];
+			ret = httpcGetResponseHeader(&context, "Location", newurl, 0x1000);
+			Util_log_save("httpc", "redirect");
+			url = std::string(newurl);
+			httpcCloseContext(&context); // close this context before we try the next
+		}
+	} while ((statuscode >= 301 && statuscode <= 303) || (statuscode >= 307 && statuscode <= 308));
+
+	if (statuscode / 100 != 2) { // allow any statuscode between 200 and 299
+		httpcCloseContext(&context);
+		return {"the website returned " + std::to_string(statuscode), context};
+	}
+	return {"", context};
+}
+
+// return.first : error message, an empty string if the operation suceeded without an error
+// return.second : the acquired http context, should neither be used nor closed if return.first isn't empty
+std::pair<std::string, httpcContext> access_http_post(std::string url, std::vector<u8> content, std::map<std::string, std::string> request_headers) {
+	httpcContext context;
+	
+	u32 statuscode = 0;
+	Result ret = 0;
+	do {
+		ret = httpcOpenContext(&context, HTTPC_METHOD_POST, url.c_str(), 0);
+		ret = httpcSetSSLOpt(&context, SSLCOPT_DisableVerify); // to access https:// websites
+		ret = httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_ENABLED);
+		ret = httpcAddRequestHeaderField(&context, "Connection", "Keep-Alive");
+		if (!request_headers.count("User-Agent")) ret = httpcAddRequestHeaderField(&context, "User-Agent", "httpc-example/1.0.0");
+		for (auto i : request_headers) ret = httpcAddRequestHeaderField(&context, i.first.c_str(), i.second.c_str());
+		httpcAddPostDataRaw(&context, (u32 *) &content[0], content.size());
+
+		Util_log_save("http/post", "begin req");
+		ret = httpcBeginRequest(&context);
+		Util_log_save("http/post", "begin req ok");
+		if (ret != 0) {
+			httpcCloseContext(&context);
+			return {"httpcBeginRequest() failed : " + std::to_string(ret), context};
+		}
+
+		Util_log_save("http/post", "get st");
+		ret = httpcGetResponseStatusCode(&context, &statuscode);
+		Util_log_save("http/post", "get st ok : " + std::to_string(statuscode));
+		if (ret != 0) {
+			httpcCloseContext(&context);
+			return {"httpcGetResponseStatusCode() failed : " + std::to_string(ret), context};
+		}
+
+		if ((statuscode >= 301 && statuscode <= 303) || (statuscode >= 307 && statuscode <= 308)) {
+			Util_log_save("http/post", "redir");
 			char newurl[0x1000];
 			ret = httpcGetResponseHeader(&context, "Location", newurl, 0x1000);
 			Util_log_save("httpc", "redirect");

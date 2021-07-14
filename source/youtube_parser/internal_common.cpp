@@ -12,13 +12,25 @@ namespace youtube_parser {
 		sstream << file.rdbuf();
 		return sstream.str();
 	}
+	std::string http_post_json(const std::string &url, const std::string &json) {
+		{
+			std::ofstream file("post_tmp.txt");
+			file << json;
+		}
+		system(("curl -X POST -H \"Content-Type: application/json\" " + url + " -o curl_tmp.txt --data-binary \"@post_tmp.txt\"").c_str());
+		
+		std::ifstream file("curl_tmp.txt");
+		std::stringstream sstream;
+		sstream << file.rdbuf();
+		return sstream.str();
+	}
 #else
 	std::string http_get(const std::string &url) {
 		constexpr int BLOCK = 0x40000; // 256 KB
 		add_cpu_limit(25);
 		debug("accessing...");
 		// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
-		auto network_res = access_http(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
+		auto network_res = access_http_get(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
 		std::string res;
 		if (network_res.first == "") {
 			debug("downloading...");
@@ -36,6 +48,27 @@ namespace youtube_parser {
 		} else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "failed accessing : " + network_res.first);
 		
 		remove_cpu_limit(25);
+		return res;
+	}
+	std::string http_post_json(const std::string &url, const std::string &json) {
+		auto network_res = access_http_post(url, std::vector<u8>(json.begin(), json.end()),
+			{{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"},
+			{"Content-Type", "application/json"}});
+		
+		std::string res;
+		if (network_res.first == "") {
+			constexpr int BLOCK = 0x40000; // 256 KB
+			std::vector<u8> buffer(BLOCK);
+			std::vector<u8> res_vec;
+			while (1) {
+				u32 len_read;
+				Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
+				res_vec.insert(res_vec.end(), buffer.begin(), buffer.begin() + len_read);
+				if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
+			}
+			res = std::string(res_vec.begin(), res_vec.end());
+			httpcCloseContext(&network_res.second);
+		} else Util_log_save("yt-parser/continue", "post err : " + network_res.first);
 		return res;
 	}
 #endif

@@ -68,7 +68,7 @@ static std::vector<u8> http_get(const std::string &url) {
 	add_cpu_limit(30);
 	Util_log_save("thumb-dl", "accessing...");
 	// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
-	auto network_res = access_http(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
+	auto network_res = access_http_get(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
 	std::vector<u8> res;
 	if (network_res.first == "") {
 		Util_log_save("thumb-dl", "downloading...");

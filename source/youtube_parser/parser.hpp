@@ -32,8 +32,13 @@ struct YouTubeSearchResult {
 	std::string error;
 	int estimated_result_num;
 	std::vector<Item> results;
+	
+	std::string continue_token;
+	std::string continue_key;
 };
 YouTubeSearchResult youtube_parse_search(std::string url);
+// takes the previous result, returns the new result with both old items and new items
+YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result);
 
 struct YouTubeVideoDetail {
 	std::string error;

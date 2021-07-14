@@ -10,6 +10,7 @@
 #define FONT_VERTICAL_INTERVAL 60
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
+#define LOAD_MORE_HEIGHT 30
 
 
 namespace Search {
@@ -20,11 +21,11 @@ namespace Search {
 	Handle resource_lock;
 	std::string cur_search_word = "CITRUS";
 	bool search_request = false;
+	bool load_more_request = false; // 
 	YouTubeSearchResult search_result;
 	Thread search_thread;
 	
 	int scroll_offset = 0;
-	int scroll_max = 0;
 	
 	
 	int last_touch_x = -1;
@@ -48,13 +49,20 @@ static void send_search_request(std::string search_word) {
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	cur_search_word = search_word;
 	search_request = true;
+	load_more_request = false;
 	for (auto i : search_result.results) {
 		if (i.type == YouTubeSearchResult::Item::VIDEO) cancel_request_thumbnail(i.video.thumbnail_url);
 	}
 	search_result = YouTubeSearchResult(); // reset to empty results
 	reset_hid_state();
-	scroll_max = 0;
 	scroll_offset = 0;
+	svcReleaseMutex(resource_lock);
+}
+static void send_load_more_request() {
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (search_result.results.size()) { // you can't load more items on empty search results
+		load_more_request = true;
+	}
 	svcReleaseMutex(resource_lock);
 }
 
@@ -80,10 +88,24 @@ static void search_thread_func(void* arg) {
 			svcReleaseMutex(resource_lock);
 			
 			scroll_offset = 0;
-			scroll_max = std::max(0, (int) new_result.results.size() * FONT_VERTICAL_INTERVAL - (RESULT_Y_HIGH - RESULT_Y_LOW));
 			reset_hid_state();
 			
 			search_request = false;
+		} else if (load_more_request) {
+			auto new_result = youtube_continue_search(search_result);
+			
+			// if another search was made and load_more_request was thus disabled, we should not modify the cleared result
+			if (load_more_request) {
+				svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+				if (new_result.error != "") search_result.error = new_result.error;
+				else {
+					for (size_t i = search_result.results.size(); i < new_result.results.size(); i++)
+						if (new_result.results[i].type == YouTubeSearchResult::Item::VIDEO) request_thumbnail(new_result.results[i].video.thumbnail_url);
+					search_result = new_result;
+				}
+				svcReleaseMutex(resource_lock);
+			}
+			load_more_request = false;
 		} else usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 		
 		while (thread_suspend)
@@ -120,7 +142,9 @@ void Search_init(void)
 	
 	reset_hid_state();
 	scroll_offset = 0;
-	scroll_max = 0;
+	search_result = YouTubeSearchResult();
+	search_request = false;
+	load_more_request = false;
 	
 	// result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SEARCH_NUM_OF_MSG);
 	// Util_log_save(DEF_SAPP0_INIT_STR, "Util_load_msg()..." + result.string + result.error_description, result.code);
@@ -261,6 +285,18 @@ static void draw_search_result(const YouTubeSearchResult &result, Hid_info key, 
 				Draw("channel : " + cur_channel.name, 0, y_l, 0.5, 0.5, color);
 			}
 		}
+		// draw load-more margin
+		{
+			std::string draw_str = "";
+			if (load_more_request) draw_str = "Loading...";
+			else if (result.error != "") draw_str = result.error;
+			
+			int y = RESULT_Y_LOW + result.results.size() * FONT_VERTICAL_INTERVAL - scroll_offset;
+			if (y < RESULT_Y_HIGH) {
+				int width = Draw_get_width(draw_str, 0.5, 0.5);
+				Draw(draw_str, (320 - width) / 2, y, 0.5, 0.5, color);
+			}
+		}
 	} else if (search_request) {
 		Draw("Loading", 0, RESULT_Y_LOW, 0.5, 0.5, color);
 		
@@ -330,6 +366,7 @@ Intent Search_draw(void)
 		Util_expl_main(key);
 		reset_hid_state();
 	} else {
+		int scroll_max = std::max(0, (int) search_result.results.size() * FONT_VERTICAL_INTERVAL - (RESULT_Y_HIGH - RESULT_Y_LOW) + LOAD_MORE_HEIGHT);
 		if (key.p_touch) {
 			first_touch_x = key.touch_x;
 			first_touch_y = key.touch_y;
@@ -384,6 +421,8 @@ Intent Search_draw(void)
 				/*
 				intent.next_scene = SceneType::VIDEO_PLAYER;
 				var_need_reflesh = true;*/
+			} else if (RESULT_Y_LOW + search_result.results.size() * FONT_VERTICAL_INTERVAL - scroll_offset < RESULT_Y_HIGH && !load_more_request) {
+				send_load_more_request();
 			} else if(key.h_touch || key.p_touch)
 				var_need_reflesh = true;
 		}
