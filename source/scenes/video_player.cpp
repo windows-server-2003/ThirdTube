@@ -560,7 +560,10 @@ static void convert_thread(void* arg)
 
 void VideoPlayer_resume(std::string arg)
 {
-	if (arg != "") send_change_video_request(arg);
+	if (arg != "") {
+		if (arg != vid_url) send_change_video_request(arg);
+		else if (!vid_play_request) vid_play_request = true;
+	}
 	vid_thread_suspend = false;
 	vid_main_run = true;
 	var_need_reflesh = true;
