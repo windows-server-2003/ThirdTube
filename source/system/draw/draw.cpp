@@ -383,7 +383,7 @@ float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 	bool reverse = false;
 	bool found = false;
 	bool font_loaded[2] = { Exfont_is_loaded_system_font(0), Exfont_is_loaded_system_font(1), };//JPN, CHN
-	float width = 0, height = 0, original_x, y_offset;
+	float original_x;
 	int previous_num = -3;
 	int memcmp_result = -1;
 	int count = 0;
@@ -536,6 +536,7 @@ float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 
 			C2D_TextBufClear(c2d_buf);
 			C2D_TextFontParse(&c2d_text, system_fonts[font_num_list[1][i]], c2d_buf, draw_part_text[1][i].c_str());
+			float width, height;
 			C2D_TextGetDimensions(&c2d_text, text_size_x, text_size_y, &width, &height);
 			x += width;
 		}

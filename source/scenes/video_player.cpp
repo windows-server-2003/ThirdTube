@@ -120,7 +120,6 @@ static void decode_thread(void* arg)
 	int audio_size = 0;
 	int w = 0;
 	int h = 0;
-	int skip = 0;
 	double pos = 0;
 	bool key = false;
 	u8* audio = NULL;
@@ -134,7 +133,6 @@ static void decode_thread(void* arg)
 	{
 		if(vid_play_request || vid_change_video_request)
 		{
-			skip = 0;
 			vid_x = 0;
 			vid_y = 15;
 			vid_frametime = 0;
@@ -185,7 +183,7 @@ static void decode_thread(void* arg)
 			vid_play_request = false;
 			for (int i = 0; i < 3; i++) {
 				network_waiting_status = "loading video page";
-				YouTubeVideoDetail tmp_video_info = parse_video_page(vid_url);
+				YouTubeVideoDetail tmp_video_info = youtube_parse_video_page(vid_url);
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_info = tmp_video_info;
 				svcReleaseMutex(small_resource_lock);

@@ -130,9 +130,6 @@ void Menu_exit(void)
 
 bool Menu_main(void)
 {
-	int color = DEF_DRAW_BLACK;
-	int back_color = DEF_DRAW_WHITE;
-
 	sprintf(var_status, "%02dfps %04d/%02d/%02d %02d:%02d:%02d ", (int)Draw_query_fps(), var_years, var_months, var_days, var_hours, var_minutes, var_seconds);
 	if(var_debug_mode)
 		var_need_reflesh = true;

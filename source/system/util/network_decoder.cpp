@@ -75,6 +75,8 @@ static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // si
 	NetworkDecoder *decoder = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->first;
 	NetworkStream *stream = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->second;
 	
+	(void) decoder;
+	
 	if (whence == AVSEEK_SIZE) return stream->len;
 	
 	size_t new_pos = 0;

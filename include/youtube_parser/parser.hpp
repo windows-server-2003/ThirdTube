@@ -33,7 +33,7 @@ struct YouTubeSearchResult {
 	int estimated_result_num;
 	std::vector<Item> results;
 };
-YouTubeSearchResult parse_search(std::string url);
+YouTubeSearchResult youtube_parse_search(std::string url);
 
 struct YouTubeVideoDetail {
 	std::string error;
@@ -46,4 +46,4 @@ struct YouTubeVideoDetail {
 	std::string both_stream_url;
 	size_t both_stream_len;
 };
-YouTubeVideoDetail parse_video_page(std::string url);
+YouTubeVideoDetail youtube_parse_video_page(std::string url);

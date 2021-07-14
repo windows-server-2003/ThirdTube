@@ -70,7 +70,7 @@ static void search_thread_func(void* arg) {
 				search_url.push_back("0123456789ABCDEF"[(u8) c % 16]);
 			}
 			add_cpu_limit(25);
-			YouTubeSearchResult new_result = parse_search(search_url);
+			YouTubeSearchResult new_result = youtube_parse_search(search_url);
 			remove_cpu_limit(25);
 			
 			svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
@@ -114,7 +114,6 @@ void Search_suspend(void)
 void Search_init(void)
 {
 	Util_log_save("search/init", "Initializing...");
-	bool new_3ds = false;
 	Result_with_string result;
 	
 	svcCreateMutex(&resource_lock, false);
@@ -236,7 +235,7 @@ static std::vector<std::string> truncate_str(std::string input_str, int max_widt
 	}
 }
 
-static void draw_search_result(const YouTubeSearchResult &result, Hid_info key) {
+static void draw_search_result(const YouTubeSearchResult &result, Hid_info key, int color) {
 	if (result.results.size()) {
 		for (size_t i = 0; i < result.results.size(); i++) {
 			int y_l = RESULT_Y_LOW + i * FONT_VERTICAL_INTERVAL - scroll_offset;
@@ -252,20 +251,20 @@ static void draw_search_result(const YouTubeSearchResult &result, Hid_info key) 
 				// title
 				auto title_lines = truncate_str(cur_video.title, 320 - (THUMBNAIL_WIDTH + 3), 0.5, 0.5);
 				for (size_t line = 0; line < title_lines.size(); line++) {
-					Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + line * 13, 0.5, 0.5, DEF_DRAW_BLACK);
+					Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + line * 13, 0.5, 0.5, color);
 				}
-				// Draw(std::to_string(Draw_get_width(cur_video.title, 0.5, 0.5)), THUMBNAIL_WIDTH + 3, y_l + 10, 0.5, 0.5, DEF_DRAW_BLACK);
+				// Draw(std::to_string(Draw_get_width(cur_video.title, 0.5, 0.5)), THUMBNAIL_WIDTH + 3, y_l + 10, 0.5, 0.5, color);
 				// thumbnail
 				draw_thumbnail(cur_video.thumbnail_url, 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 			} else if (result.results[i].type == YouTubeSearchResult::Item::CHANNEL) {
 				auto cur_channel = result.results[i].channel;
-				Draw("channel : " + cur_channel.name, 0, y_l, 0.5, 0.5, DEF_DRAW_BLACK);
+				Draw("channel : " + cur_channel.name, 0, y_l, 0.5, 0.5, color);
 			}
 		}
 	} else if (search_request) {
-		Draw("Loading", 0, RESULT_Y_LOW, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw("Loading", 0, RESULT_Y_LOW, 0.5, 0.5, color);
 		
-	} else Draw("Empty", 0, RESULT_Y_LOW, 0.5, 0.5, DEF_DRAW_BLACK);
+	} else Draw("Empty", 0, RESULT_Y_LOW, 0.5, 0.5, color);
 }
 
 Intent Search_draw(void)
@@ -297,19 +296,19 @@ Intent Search_draw(void)
 			Util_log_draw();
 
 		Draw_top_ui();
-		Draw("Press START to exit the app", 0, 225, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw("Press START to exit the app", 0, 225, 0.5, 0.5, color);
 
 		Draw_screen_ready(1, back_color);
 		
 		// (!) : I don't know how to draw textures truncated, so I will just fill the margin with white again
-		draw_search_result(search_result_bak, key);
-		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 0, 0, 320, RESULT_Y_LOW - 1);
-		Draw_texture(var_square_image[0], DEF_DRAW_BROWN, 0, RESULT_Y_LOW - 1, 320, 1);
-		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 0, RESULT_Y_HIGH + 1, 320, 240 - RESULT_Y_HIGH - 1);
+		draw_search_result(search_result_bak, key, color);
+		Draw_texture(var_square_image[0], back_color, 0, 0, 320, RESULT_Y_LOW - 1);
+		Draw_texture(var_square_image[0], color, 0, RESULT_Y_LOW - 1, 320, 1);
+		Draw_texture(var_square_image[0], back_color, 0, RESULT_Y_HIGH + 1, 320, 240 - RESULT_Y_HIGH - 1);
 
 		// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
 		
-		Draw("Search scene (Press A to search)", 0, 0, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw("Search scene (Press A to search)", 0, 0, 0.5, 0.5, color);
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
