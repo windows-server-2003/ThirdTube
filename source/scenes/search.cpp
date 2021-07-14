@@ -6,7 +6,7 @@
 #include "youtube_parser/parser.hpp"
 
 #define RESULT_Y_LOW 20
-#define RESULT_Y_HIGH 220
+#define RESULT_Y_HIGH 240
 #define FONT_VERTICAL_INTERVAL 60
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -145,6 +145,97 @@ void Search_exit(void)
 	Util_log_save("search/exit", "Exited.");
 }
 
+// truncate and wrap into two lines if necessary
+static std::vector<std::string> truncate_str(std::string input_str, int max_width, double x_size, double y_size) {
+	if (input_str == "") return {""};
+	
+	std::vector<std::string> input(128);
+	{
+		int out_num;
+		Exfont_text_parse(input_str, &input[0], 128, &out_num);
+		input.resize(out_num);
+	}
+	if (!input.size()) return {""};
+	std::vector<std::vector<std::string> > words; // each word is considered not separable
+	for (size_t i = 0; i < (int) input.size(); i++) {
+		bool seperate;
+		if (!i) seperate = true;
+		else {
+			std::string last_char = words.back().back();
+			seperate = last_char.size() != 1 || input[i].size() != 1 || last_char == " " || input[i] == " ";
+		}
+		if (seperate) words.push_back({input[i]});
+		else words.back().push_back(input[i]);
+	}
+	
+	int n = words.size();
+	int first_line_word_num = 0;
+	{ // binary search the number of words that fit in the first line
+		int l = 0;
+		int r = n + 1;
+		while (r - l > 1) {
+			int m = l + ((r - l) >> 1);
+			std::string query_text;
+			for (int i = 0; i < m; i++) for (auto j : words[i]) query_text += j;
+			if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
+			else r = m;
+		}
+		first_line_word_num = l;
+	}
+	std::string tmp;
+	for (auto i : words) {
+		for (auto j : i) tmp += j;
+		tmp += " | ";
+	}
+	
+	if (!first_line_word_num) { // can't even accommodate the first word -> partially display the word and add "..."
+		std::vector<std::string> first_word = words[0];
+		int l = 0;
+		int r = first_word.size();
+		while (r - l > 1) { // binary search the number of characters that fit in the first line
+			int m = l + ((r - l) >> 1);
+			std::string query_text;
+			for (int i = 0; i < m; i++) query_text += first_word[i];
+			query_text += "...";
+			if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
+			else r = m;
+		}
+		std::string first_line;
+		for (int i = 0; i < l; i++) first_line += first_word[i];
+		first_line += "...";
+		return {first_line};
+	} else {
+		std::string first_line;
+		for (int i = 0; i < first_line_word_num; i++) for (auto j : words[i]) first_line += j;
+		words.erase(words.begin(), words.begin() + first_line_word_num);
+		if (!words.size()) return {first_line}; // the first line accommodated the entire string
+		std::vector<std::string> remaining_str; // ignore the word unit from here
+		for (auto i : words) for (auto j : i) remaining_str.push_back(j);
+		
+		// check if the entire remaining string fit in the second line
+		{
+			std::string tmp_str;
+			for (auto i : remaining_str) tmp_str += i;
+			if (Draw_get_width(tmp_str, x_size, y_size) <= max_width) return {first_line, tmp_str};
+		}
+		// binary search the number of words that fit in the second line with "..."
+		int l = 0;
+		int r = remaining_str.size();
+		while (r - l > 1) {
+			int m = l + ((r - l) >> 1);
+			std::string query_text;
+			for (int i = 0; i < m; i++) query_text += remaining_str[i];
+			query_text += "...";
+			if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
+			else r = m;
+		}
+		std::string second_line;
+		for (int i = 0; i < l; i++) second_line += remaining_str[i];
+		second_line += "...";
+		return {first_line, second_line};
+	}
+}
+
 static void draw_search_result(const YouTubeSearchResult &result, Hid_info key) {
 	if (result.results.size()) {
 		for (size_t i = 0; i < result.results.size(); i++) {
@@ -158,7 +249,11 @@ static void draw_search_result(const YouTubeSearchResult &result, Hid_info key) 
 			
 			auto cur_result = result.results[i];
 			// title
-			Draw(cur_result.title, THUMBNAIL_WIDTH + 3, y_l, 0.5, 0.5, DEF_DRAW_BLACK);
+			auto title_lines = truncate_str(cur_result.title, 320 - (THUMBNAIL_WIDTH + 3), 0.5, 0.5);
+			for (size_t line = 0; line < title_lines.size(); line++) {
+				Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + line * 13, 0.5, 0.5, DEF_DRAW_BLACK);
+			}
+			// Draw(std::to_string(Draw_get_width(cur_result.title, 0.5, 0.5)), THUMBNAIL_WIDTH + 3, y_l + 10, 0.5, 0.5, DEF_DRAW_BLACK);
 			// thumbnail
 			draw_thumbnail(cur_result.thumbnail_url, 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 		}
@@ -197,6 +292,7 @@ Intent Search_draw(void)
 			Util_log_draw();
 
 		Draw_top_ui();
+		Draw("Press START to exit the app", 0, 225, 0.5, 0.5, DEF_DRAW_BLACK);
 
 		Draw_screen_ready(1, back_color);
 		
@@ -204,7 +300,6 @@ Intent Search_draw(void)
 		draw_search_result(search_result_bak, key);
 		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 0, 0, 320, RESULT_Y_LOW - 1);
 		Draw_texture(var_square_image[0], DEF_DRAW_BROWN, 0, RESULT_Y_LOW - 1, 320, 1);
-		Draw_texture(var_square_image[0], DEF_DRAW_BROWN, 0, RESULT_Y_HIGH, 320, 1);
 		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 0, RESULT_Y_HIGH + 1, 320, 240 - RESULT_Y_HIGH - 1);
 
 		// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
@@ -217,7 +312,6 @@ Intent Search_draw(void)
 		if(Util_err_query_error_show_flag())
 			Util_err_draw();
 
-		Draw_bot_ui();
 		Draw_touch_pos();
 
 		Draw_apply_draw();
@@ -249,7 +343,7 @@ Intent Search_draw(void)
 		}
 		
 		bool ignore = false;
-		if (key.p_start || (key.p_touch && key.touch_x >= 110 && key.touch_x <= 230 && key.touch_y >= 220 && key.touch_y <= 240)) {
+		if (key.p_start) {
 			// TODO : implement confirm dialog
 			intent.next_scene = SceneType::EXIT;
 			ignore = true;

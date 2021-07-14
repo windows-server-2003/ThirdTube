@@ -35,6 +35,7 @@ std::string Exfont_text_sort(std::string sorce_part_string[], int max_loop);
 void Exfont_text_parse(std::string sorce_string, std::string part_string[], int max_loop, int* out_element);
 
 void Exfont_draw_external_fonts(std::string string, float texture_x, float texture_y, float texture_size_x, float texture_size_y, int abgr8888, float* out_width, float* out_height);
+float Exfont_get_width(std::string in_string, float texture_size_x, float texture_size_y);
 
 Result_with_string Exfont_load_exfont(int exfont_num);
 
