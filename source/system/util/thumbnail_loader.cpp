@@ -14,7 +14,7 @@ static Handle resource_lock;
 static bool lock_initialized = false;
 static std::map<std::string, int> thumbnail_request;
 static std::map<std::string, LoadedThumbnail> thumbnail_cache;
-static std::queue<std::string> load_queue;
+static std::deque<std::string> load_queue;
 
 static void lock() {
 	if (!lock_initialized) {
@@ -29,7 +29,13 @@ static void release() {
 
 void request_thumbnail(std::string url) {
 	lock();
-	load_queue.push(url);
+	load_queue.push_back(url);
+	thumbnail_request[url]++;
+	release();
+}
+void request_thumbnail_cutin(std::string url) {
+	lock();
+	load_queue.push_front(url);
 	thumbnail_request[url]++;
 	release();
 }
@@ -97,7 +103,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 		lock();
 		while (load_queue.size()) {
 			next_url = load_queue.front();
-			load_queue.pop();
+			load_queue.pop_front();
 			if (thumbnail_request.count(next_url) && !thumbnail_cache.count(next_url)) {
 				need_download = true;
 				break;

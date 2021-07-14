@@ -3,6 +3,7 @@
 
 
 void request_thumbnail(std::string url);
+void request_thumbnail_cutin(std::string url);
 
 void cancel_request_thumbnail(std::string url);
 

@@ -208,7 +208,7 @@ static void decode_thread(void* arg)
 					vid_play_request = true;
 					
 					// request icon download
-					request_thumbnail(cur_video_info.author.icon_url);
+					request_thumbnail_cutin(cur_video_info.author.icon_url);
 					icon_requested = true;
 					break;
 				}
