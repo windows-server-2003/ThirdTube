@@ -8,7 +8,10 @@ u8 *Image_decode(u8 *input, size_t input_len, int* width, int* height)
 {
 	int image_ch = 0;
 	u8 *rgb_image = stbi_load_from_memory(input, input_len, width, height, &image_ch, STBI_rgb);
-	if (!rgb_image) return NULL;
+	if (!rgb_image) {
+		Util_log_save("image-dec", "stbi load failed : " + std::string(stbi_failure_reason()));
+		return NULL;
+	}
 	u8 *bgr_image = (u8 *) malloc(*width * *height * 2);
 	if (!bgr_image) {
 		stbi_image_free(rgb_image);

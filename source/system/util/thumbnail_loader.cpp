@@ -114,21 +114,29 @@ void thumbnail_downloader_thread_func(void *arg) {
 		int w, h;
 		u8 *decoded_data = Image_decode(&encoded_data[0], encoded_data.size(), &w, &h);
 		if (decoded_data) {
+			// for video thumbnail, crop to 16:9
+			if (next_url.find("https://i.ytimg.com/vi/") != std::string::npos && h > w * 9 / 16 + 1) {
+				int new_h = w * 9 / 16 + 1;
+				int vertical_offset = (h - new_h) / 2;
+				memmove(decoded_data, decoded_data + vertical_offset * w * 2, new_h * w * 2);
+				h = new_h;
+			}
+			
 			Image_data result_image;
-			int w32 = (w + 31) / 32 * 32;
-			int h32 = (h + 31) / 32 * 32;
+			int texture_size = std::max((w + 31) / 32 * 32, (h + 31) / 32 * 32);
+			
 			Result_with_string result;
-			result = Draw_c2d_image_init(&result_image, w32, h32, GPU_RGB565);
+			result = Draw_c2d_image_init(&result_image, texture_size, texture_size, GPU_RGB565);
 			if (result.code != 0) {
 				Util_log_save("thumb-dl", "out of linearmem");
 			} else {
-				result = Draw_set_texture_data(&result_image, decoded_data, w, h, w32, h32, GPU_RGB565);
+				result = Draw_set_texture_data(&result_image, decoded_data, w, h, texture_size, texture_size, GPU_RGB565);
 				if (result.code != 0) {
 					Util_log_save("thumb-dl", "Draw_set_texture_data() failed");
 				} else {
 					lock();
 					if (thumbnail_request.count(next_url)) { // in case the request is cancelled while downloading
-						thumbnail_cache[next_url] = {w, h, w32, h32, result_image};
+						thumbnail_cache[next_url] = {w, h, texture_size, texture_size, result_image};
 						Util_log_save("thumb-dl", "successfully loaded thumbnail : " + next_url);
 					}
 					release();

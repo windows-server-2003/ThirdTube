@@ -7,7 +7,9 @@
 
 #define RESULT_Y_LOW 20
 #define RESULT_Y_HIGH 220
-#define FONT_VERTICAL_INTERVAL 15
+#define FONT_VERTICAL_INTERVAL 60
+#define THUMBNAIL_HEIGHT 54
+#define THUMBNAIL_WIDTH 96
 
 
 namespace Search {
@@ -46,6 +48,7 @@ static void send_search_request(std::string search_word) {
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	cur_search_word = search_word;
 	search_request = true;
+	for (auto i : search_result.results) cancel_request_thumbnail(i.thumbnail_url);
 	search_result = YouTubeSearchResult(); // reset to empty results
 	reset_hid_state();
 	scroll_max = 0;
@@ -70,6 +73,10 @@ static void search_thread_func(void* arg) {
 			
 			svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 			search_result = new_result;
+			for (auto i : search_result.results) {
+				request_thumbnail(i.thumbnail_url);
+				Util_log_save("search", "req thumb : " + i.thumbnail_url);
+			}
 			svcReleaseMutex(resource_lock);
 			
 			scroll_offset = 0;
@@ -150,7 +157,10 @@ static void draw_search_result(const YouTubeSearchResult &result, Hid_info key) 
 			}
 			
 			auto cur_result = result.results[i];
-			Draw(cur_result.title, 0, y_l, 0.5, 0.5, DEF_DRAW_BLACK);
+			// title
+			Draw(cur_result.title, THUMBNAIL_WIDTH + 3, y_l, 0.5, 0.5, DEF_DRAW_BLACK);
+			// thumbnail
+			draw_thumbnail(cur_result.thumbnail_url, 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 		}
 	} else if (search_request) {
 		Draw("Loading", 0, RESULT_Y_LOW, 0.5, 0.5, DEF_DRAW_BLACK);
@@ -225,7 +235,8 @@ Intent Search_draw(void)
 		if (key.p_touch) {
 			first_touch_x = key.touch_x;
 			first_touch_y = key.touch_y;
-			if (first_touch_y >= RESULT_Y_LOW && first_touch_y < RESULT_Y_HIGH && var_afk_time <= var_time_to_turn_off_lcd) list_grabbed = true;
+			if (first_touch_y >= RESULT_Y_LOW && first_touch_y < std::min<s32>(search_result_bak.results.size() * FONT_VERTICAL_INTERVAL, RESULT_Y_HIGH) &&
+				var_afk_time <= var_time_to_turn_off_lcd) list_grabbed = true;
 		} else if (list_grabbed && !list_scrolling && key.touch_y != -1 && std::abs(key.touch_y - first_touch_y) >= 4) {
 			list_scrolling = true;
 			scroll_offset += first_touch_y - key.touch_y;

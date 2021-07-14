@@ -240,20 +240,25 @@ YouTubeSearchResult parse_search(std::string url) {
 			for (auto j : i["itemSectionRenderer"]["contents"].array_items()) {
 				auto video_renderer = j["compactVideoRenderer"];
 				YouTubeSearchResult::VideoInfo cur_result;
-				cur_result.url = "https://m.youtube.com/watch?v=" + video_renderer["navigationEndpoint"]["watchEndpoint"]["videoId"].string_value();
+				std::string video_id = video_renderer["navigationEndpoint"]["watchEndpoint"]["videoId"].string_value();
+				cur_result.url = "https://m.youtube.com/watch?v=" + video_id;
 				cur_result.title = get_text_from_object(video_renderer["title"]);
 				cur_result.duration_text = get_text_from_object(video_renderer["lengthText"]);
 				cur_result.author = get_text_from_object(video_renderer["shortBylineText"]);
+				cur_result.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
+				/*
 				{ // extract thumbnail url
 					int max_width = -1;
 					for (auto thumbnail : video_renderer["thumbnail"]["thumbnails"].array_items()) {
+						if (thumbnail["url"].string_value().find("webp") != std::string::npos) continue; // we want jpeg thumbnail
 						int cur_width = thumbnail["width"].int_value();
+						if (cur_width > 256) continue; // too large
 						if (max_width < cur_width) {
 							max_width = cur_width;
 							cur_result.thumbnail_url = thumbnail["url"].string_value();
 						}
 					}
-				}
+				}*/
 				res.results.push_back(cur_result);
 			}
 		}
@@ -281,7 +286,7 @@ YouTubeSearchResult parse_search(std::string url) {
 	debug(res.estimated_result_num);*/
 	return res;
 }
-/*
+
 #ifdef _WIN32
 int main() {
 	std::string url;
@@ -289,5 +294,5 @@ int main() {
 	parse_search(url);
 	return 0;
 }
-#endif*/
+#endif
 
