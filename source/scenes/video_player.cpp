@@ -66,7 +66,7 @@ namespace VideoPlayer {
 	NetworkStreamDownloader stream_downloader;
 	
 	Handle small_resource_lock; // while decoder is backing up seek/video change request and removing the flag, assigning YouTubeVideoInfo
-	YouTubeVideoInfo cur_video_info;
+	YouTubeVideoDetail cur_video_info;
 	
 	NetworkDecoder network_decoder;
 	Handle network_decoder_critical_lock; // locked when seeking or deiniting
@@ -185,7 +185,7 @@ static void decode_thread(void* arg)
 			vid_play_request = false;
 			for (int i = 0; i < 3; i++) {
 				network_waiting_status = "loading video page";
-				YouTubeVideoInfo tmp_video_info = parse_video_page(vid_url);
+				YouTubeVideoDetail tmp_video_info = parse_video_page(vid_url);
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_info = tmp_video_info;
 				svcReleaseMutex(small_resource_lock);

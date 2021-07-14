@@ -212,7 +212,7 @@ static Json get_ytplayer_config(const std::string &html) {
 }
 
 std::map<std::string, yt_cipher_transform_procedure> transform_proc_cache;
-bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
+bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	Json player_response = initial_player_response(html);
 	Json player_config = get_ytplayer_config(html);
 	
@@ -308,7 +308,7 @@ bool extract_stream(YouTubeVideoInfo &res, const std::string &html) {
 	return true;
 }
 
-static void extract_metadata(YouTubeVideoInfo &res, const std::string &html) {
+static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 	Json initial_data = get_initial_data(html);
 	
 	auto extract_owner = [&] (Json slimOwnerRenderer) {
@@ -369,8 +369,8 @@ static std::string convert_url_to_mobile(std::string url) {
 	return "https://" + url;
 }
 
-YouTubeVideoInfo parse_video_page(std::string url) {
-	YouTubeVideoInfo res;
+YouTubeVideoDetail parse_video_page(std::string url) {
+	YouTubeVideoDetail res;
 	
 	url = convert_url_to_mobile(url);
 	

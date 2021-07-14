@@ -48,7 +48,9 @@ static void send_search_request(std::string search_word) {
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	cur_search_word = search_word;
 	search_request = true;
-	for (auto i : search_result.results) cancel_request_thumbnail(i.thumbnail_url);
+	for (auto i : search_result.results) {
+		if (i.type == YouTubeSearchResult::Item::VIDEO) cancel_request_thumbnail(i.video.thumbnail_url);
+	}
 	search_result = YouTubeSearchResult(); // reset to empty results
 	reset_hid_state();
 	scroll_max = 0;
@@ -73,10 +75,8 @@ static void search_thread_func(void* arg) {
 			
 			svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 			search_result = new_result;
-			for (auto i : search_result.results) {
-				request_thumbnail(i.thumbnail_url);
-				Util_log_save("search", "req thumb : " + i.thumbnail_url);
-			}
+			for (auto i : search_result.results)
+				if (i.type == YouTubeSearchResult::Item::VIDEO) request_thumbnail(i.video.thumbnail_url);
 			svcReleaseMutex(resource_lock);
 			
 			scroll_offset = 0;
@@ -157,7 +157,7 @@ static std::vector<std::string> truncate_str(std::string input_str, int max_widt
 	}
 	if (!input.size()) return {""};
 	std::vector<std::vector<std::string> > words; // each word is considered not separable
-	for (size_t i = 0; i < (int) input.size(); i++) {
+	for (size_t i = 0; i < input.size(); i++) {
 		bool seperate;
 		if (!i) seperate = true;
 		else {
@@ -247,15 +247,20 @@ static void draw_search_result(const YouTubeSearchResult &result, Hid_info key) 
 				Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 0, y_l, 320, FONT_VERTICAL_INTERVAL);
 			}
 			
-			auto cur_result = result.results[i];
-			// title
-			auto title_lines = truncate_str(cur_result.title, 320 - (THUMBNAIL_WIDTH + 3), 0.5, 0.5);
-			for (size_t line = 0; line < title_lines.size(); line++) {
-				Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + line * 13, 0.5, 0.5, DEF_DRAW_BLACK);
+			if (result.results[i].type == YouTubeSearchResult::Item::VIDEO) {
+				auto cur_video = result.results[i].video;
+				// title
+				auto title_lines = truncate_str(cur_video.title, 320 - (THUMBNAIL_WIDTH + 3), 0.5, 0.5);
+				for (size_t line = 0; line < title_lines.size(); line++) {
+					Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + line * 13, 0.5, 0.5, DEF_DRAW_BLACK);
+				}
+				// Draw(std::to_string(Draw_get_width(cur_video.title, 0.5, 0.5)), THUMBNAIL_WIDTH + 3, y_l + 10, 0.5, 0.5, DEF_DRAW_BLACK);
+				// thumbnail
+				draw_thumbnail(cur_video.thumbnail_url, 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+			} else if (result.results[i].type == YouTubeSearchResult::Item::CHANNEL) {
+				auto cur_channel = result.results[i].channel;
+				Draw("channel : " + cur_channel.name, 0, y_l, 0.5, 0.5, DEF_DRAW_BLACK);
 			}
-			// Draw(std::to_string(Draw_get_width(cur_result.title, 0.5, 0.5)), THUMBNAIL_WIDTH + 3, y_l + 10, 0.5, 0.5, DEF_DRAW_BLACK);
-			// thumbnail
-			draw_thumbnail(cur_result.thumbnail_url, 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 		}
 	} else if (search_request) {
 		Draw("Loading", 0, RESULT_Y_LOW, 0.5, 0.5, DEF_DRAW_BLACK);
@@ -352,9 +357,11 @@ Intent Search_draw(void)
 			if (last_touch_y + scroll_offset >= 20 && (size_t) last_touch_y + scroll_offset < 20 + search_result_bak.results.size() * FONT_VERTICAL_INTERVAL) {
 				if (!list_scrolling && list_grabbed) {
 					int index = (last_touch_y + scroll_offset - 20) / FONT_VERTICAL_INTERVAL;
-					intent.next_scene = SceneType::VIDEO_PLAYER;
-					intent.arg = search_result_bak.results[index].url;
-					ignore = true;
+					if (search_result_bak.results[index].type == YouTubeSearchResult::Item::VIDEO) {
+						intent.next_scene = SceneType::VIDEO_PLAYER;
+						intent.arg = search_result_bak.results[index].video.url;
+						ignore = true;
+					} else {} // TODO : implement
 				}
 			}
 		}

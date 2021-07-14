@@ -238,28 +238,37 @@ YouTubeSearchResult parse_search(std::string url) {
 	for (auto i : initial_data["contents"]["sectionListRenderer"]["contents"].array_items()) {
 		if (i["itemSectionRenderer"] != Json()) {
 			for (auto j : i["itemSectionRenderer"]["contents"].array_items()) {
-				auto video_renderer = j["compactVideoRenderer"];
-				YouTubeSearchResult::VideoInfo cur_result;
-				std::string video_id = video_renderer["navigationEndpoint"]["watchEndpoint"]["videoId"].string_value();
-				cur_result.url = "https://m.youtube.com/watch?v=" + video_id;
-				cur_result.title = get_text_from_object(video_renderer["title"]);
-				cur_result.duration_text = get_text_from_object(video_renderer["lengthText"]);
-				cur_result.author = get_text_from_object(video_renderer["shortBylineText"]);
-				cur_result.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
-				/*
-				{ // extract thumbnail url
-					int max_width = -1;
-					for (auto thumbnail : video_renderer["thumbnail"]["thumbnails"].array_items()) {
-						if (thumbnail["url"].string_value().find("webp") != std::string::npos) continue; // we want jpeg thumbnail
-						int cur_width = thumbnail["width"].int_value();
-						if (cur_width > 256) continue; // too large
-						if (max_width < cur_width) {
-							max_width = cur_width;
-							cur_result.thumbnail_url = thumbnail["url"].string_value();
+				// debug(j.dump());
+				if (j["compactVideoRenderer"] != Json()) {
+					auto video_renderer = j["compactVideoRenderer"];
+					YouTubeVideoSuccinct cur_result;
+					std::string video_id = video_renderer["navigationEndpoint"]["watchEndpoint"]["videoId"].string_value();
+					cur_result.url = "https://m.youtube.com/watch?v=" + video_id;
+					cur_result.title = get_text_from_object(video_renderer["title"]);
+					cur_result.duration_text = get_text_from_object(video_renderer["lengthText"]);
+					cur_result.author = get_text_from_object(video_renderer["shortBylineText"]);
+					cur_result.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
+					/*
+					{ // extract thumbnail url
+						int max_width = -1;
+						for (auto thumbnail : video_renderer["thumbnail"]["thumbnails"].array_items()) {
+							if (thumbnail["url"].string_value().find("webp") != std::string::npos) continue; // we want jpeg thumbnail
+							int cur_width = thumbnail["width"].int_value();
+							if (cur_width > 256) continue; // too large
+							if (max_width < cur_width) {
+								max_width = cur_width;
+								cur_result.thumbnail_url = thumbnail["url"].string_value();
+							}
 						}
-					}
-				}*/
-				res.results.push_back(cur_result);
+					}*/
+					res.results.push_back(YouTubeSearchResult::Item(cur_result));
+				} else if (j["compactChannelRenderer"] != Json()) {
+					auto channel_renderer = j["compactChannelRenderer"];
+					YouTubeChannelSuccinct cur_result;
+					cur_result.name = get_text_from_object(channel_renderer["displayName"]);
+					
+					res.results.push_back(YouTubeSearchResult::Item(cur_result));
+				}
 			}
 		}
 		if (i["continuationItemRenderer"] != Json()) {
