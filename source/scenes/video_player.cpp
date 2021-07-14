@@ -54,7 +54,7 @@ namespace VideoPlayer {
 	std::string vid_audio_format = "n/a";
 	std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
 	Image_data vid_image[8];
-	Image_data author_icon_image;
+	bool icon_requested = false;
 	C2D_Image vid_banner[2];
 	C2D_Image vid_control[2];
 	Thread vid_decode_thread, vid_convert_thread;
@@ -64,9 +64,12 @@ namespace VideoPlayer {
 	NetworkStream *cur_video_stream = NULL;
 	NetworkStream *cur_audio_stream = NULL;
 	NetworkStreamDownloader stream_downloader;
+	
+	Handle small_resource_lock; // while decoder is backing up seek/video change request and removing the flag, assigning YouTubeVideoInfo
+	YouTubeVideoInfo cur_video_info;
+	
 	NetworkDecoder network_decoder;
 	Handle network_decoder_critical_lock; // locked when seeking or deiniting
-	Handle video_request_lock; // locked for very very short time, while decoder is backing up seek/video change request and removing the flag
 };
 using namespace VideoPlayer;
 
@@ -91,20 +94,20 @@ static void deinit_streams() {
 }
 
 static void send_change_video_request(std::string url) {
-	svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
+	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	vid_url = url;
 	vid_change_video_request = true;
 	network_decoder.is_locked = true;
-	svcReleaseMutex(video_request_lock);
+	svcReleaseMutex(small_resource_lock);
 }
 
 static void send_seek_request(double pos) {
-	svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
+	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	vid_seek_pos = pos;
 	vid_seek_request = true;
 	if (network_decoder.ready) // avoid locking while initing
 		network_decoder.is_locked = true;
-	svcReleaseMutex(video_request_lock);
+	svcReleaseMutex(small_resource_lock);
 }
 
 static void decode_thread(void* arg)
@@ -182,33 +185,33 @@ static void decode_thread(void* arg)
 			vid_play_request = false;
 			for (int i = 0; i < 3; i++) {
 				network_waiting_status = "loading video page";
-				YouTubeVideoInfo video_info = parse_video_page(vid_url);
-				if (video_info.error != "") {
-					result.error_description = video_info.error;
+				YouTubeVideoInfo tmp_video_info = parse_video_page(vid_url);
+				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+				cur_video_info = tmp_video_info;
+				svcReleaseMutex(small_resource_lock);
+				if (cur_video_info.error != "") {
+					result.error_description = cur_video_info.error;
 					continue;
 				}
+				network_waiting_status = NULL;
 				
 				if (VIDEO_AUDIO_SEPERATE) {
-					cur_video_stream = new NetworkStream(video_info.video_stream_url, video_info.video_stream_len);
-					cur_audio_stream = new NetworkStream(video_info.audio_stream_url, video_info.audio_stream_len);
+					cur_video_stream = new NetworkStream(cur_video_info.video_stream_url, cur_video_info.video_stream_len);
+					cur_audio_stream = new NetworkStream(cur_video_info.audio_stream_url, cur_video_info.audio_stream_len);
 					stream_downloader.add_stream(cur_video_stream);
 					stream_downloader.add_stream(cur_audio_stream);
 					result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
 				} else {
-					cur_video_stream = new NetworkStream(video_info.both_stream_url, video_info.both_stream_len);
+					cur_video_stream = new NetworkStream(cur_video_info.both_stream_url, cur_video_info.both_stream_len);
 					stream_downloader.add_stream(cur_video_stream);
 					result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
 				}
 				if(result.code == 0) {
 					vid_play_request = true;
-					// draw icon
-					int icon_w, icon_h;
-					u8 *author_icon_decoded = Image_decode(&video_info.author.icon.data[0], video_info.author.icon.data.size(), &icon_w, &icon_h);
-					if (author_icon_decoded) {
-						result = Draw_set_texture_data(&author_icon_image, author_icon_decoded, icon_w, icon_h, 256, 256, GPU_RGB565);
-						free(author_icon_decoded);
-						author_icon_decoded = NULL;
-					} else Util_log_save("dec", "Image_decode() failed");
+					
+					// request icon download
+					request_thumbnail(cur_video_info.author.icon_url);
+					icon_requested = true;
 					break;
 				}
 				deinit_streams();
@@ -268,11 +271,11 @@ static void decode_thread(void* arg)
 					Util_speaker_clear_buffer(0);
 					svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
 					while (vid_seek_request && !vid_change_video_request && vid_play_request) {
-						svcWaitSynchronization(video_request_lock, std::numeric_limits<s64>::max());
+						svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 						double seek_pos_bak = vid_seek_pos;
 						vid_seek_request = false;
 						network_decoder.is_locked = false;
-						svcReleaseMutex(video_request_lock);
+						svcReleaseMutex(small_resource_lock);
 						
 						if (network_decoder.need_reinit) {
 							Util_log_save("decoder", "reinit needed, performing...");
@@ -365,6 +368,10 @@ static void decode_thread(void* arg)
 			}
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
 			
+			if (icon_requested) {
+				cancel_request_thumbnail(cur_video_info.author.icon_url);
+				icon_requested = false;
+			}
 			deinit_streams();
 			while (Util_speaker_is_playing(0) && vid_play_request) usleep(10000);
 			Util_speaker_exit(0);
@@ -576,7 +583,7 @@ void VideoPlayer_init(void)
 	vid_thread_run = true;
 	
 	svcCreateMutex(&network_decoder_critical_lock, false);
-	svcCreateMutex(&video_request_lock, false);
+	svcCreateMutex(&small_resource_lock, false);
 	svcCreateMutex(&streams_lock, false);
 	
 	APT_CheckNew3DS(&new_3ds);
@@ -632,13 +639,6 @@ void VideoPlayer_init(void)
 			Util_err_set_error_show_flag(true);
 			vid_thread_run = false;
 		}
-	}
-	result = Draw_c2d_image_init(&author_icon_image, 256, 256, GPU_RGB565);
-	if(result.code != 0)
-	{
-		Util_err_set_error_message(DEF_ERR_OUT_OF_LINEAR_MEMORY_STR, "", DEF_SAPP0_INIT_STR, DEF_ERR_OUT_OF_LINEAR_MEMORY);
-		Util_err_set_error_show_flag(true);
-		vid_thread_run = false;
 	}
 
 	result = Draw_load_texture("romfs:/gfx/draw/video_player/banner.t3x", 61, vid_banner, 0, 2);
@@ -708,7 +708,6 @@ void VideoPlayer_exit(void)
 
 	for(int i = 0; i < 8; i++)
 		Draw_c2d_image_free(vid_image[i]);
-	Draw_c2d_image_free(author_icon_image);
 	
 	Util_log_save(DEF_SAPP0_EXIT_STR, "Exited.");
 }
@@ -789,8 +788,11 @@ Intent VideoPlayer_draw(void)
 				Draw_texture(vid_image[image_num * 4 + 2].c2d, vid_x - 40, (vid_y + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 2] * vid_zoom, vid_tex_height[image_num * 4 + 2] * vid_zoom);
 			if(vid_width > 1024 && vid_height > 1024)
 				Draw_texture(vid_image[image_num * 4 + 3].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 40, (vid_y + vid_tex_height[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 3] * vid_zoom, vid_tex_height[image_num * 4 + 3] * vid_zoom);
-			
-			Draw_texture(author_icon_image.c2d, 0, 0, 48, 48);
+		}
+		if (icon_requested) {
+			svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+			draw_thumbnail(cur_video_info.author.icon_url, 0, 0, 48, 48);
+			svcReleaseMutex(small_resource_lock);
 		}
 
 		//controls
@@ -1082,6 +1084,8 @@ Intent VideoPlayer_draw(void)
 		}
 		else
 			vid_lr_count = 0;
+		
+		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	}
 
 	if(Util_log_query_log_show_flag())

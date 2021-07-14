@@ -8,7 +8,7 @@ bool menu_thread_run = false;
 bool menu_check_exit_request = false;
 bool menu_update_available = false;
 std::string menu_msg[DEF_MENU_NUM_OF_MSG];
-Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread;
+Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread;
 C2D_Image menu_app_icon[4];
 
 static SceneType current_scene;
@@ -47,6 +47,7 @@ void Menu_init(void)
 	VideoPlayer_suspend();
 	Search_init(); // first running
 	current_scene = SceneType::SEARCH;
+	thumbnail_downloader_thread = threadCreate(thumbnail_downloader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	
 	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_high_resolution_mode).code);
 	Draw_frame_ready();
@@ -100,14 +101,17 @@ void Menu_exit(void)
 	Util_expl_exit();
 	Exfont_exit();
 
+	thumbnail_downloader_thread_exit_request();
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_check_connectivity_thread, time_out));
 	// Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_send_app_info_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_update_thread, time_out));
+	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(thumbnail_downloader_thread, time_out));
 	threadFree(menu_worker_thread);
 	threadFree(menu_check_connectivity_thread);
 	// threadFree(menu_send_app_info_thread);
 	threadFree(menu_update_thread);
+	threadFree(thumbnail_downloader_thread);
 
 	fsExit();
 	acExit();

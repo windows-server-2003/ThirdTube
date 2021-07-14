@@ -254,9 +254,6 @@ Intent Search_draw(void)
 			}
 		}
 		if (!ignore) {
-			if (last_touch_y != -1 && key.touch_y != -1) { // scroll
-				
-			}
 			if (key.p_a) {
 				if (!search_request) { // input video id
 					SwkbdState keyboard;
@@ -279,6 +276,7 @@ Intent Search_draw(void)
 			} else if(key.h_touch || key.p_touch)
 				var_need_reflesh = true;
 		}
+		if (!ignore && key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 		
 		if (key.touch_y == -1) list_scrolling = list_grabbed = false;
 		last_touch_x = key.touch_x;

@@ -20,14 +20,7 @@ struct YouTubeVideoInfo {
 	struct Channel {
 		std::string name;
 		std::string url;
-		
-		struct Icon {
-			std::string url;
-			int width;
-			int height;
-			std::vector<uint8_t> data;
-		};
-		Icon icon;
+		std::string icon_url;
 	};
 	std::string error;
 	std::string title;
