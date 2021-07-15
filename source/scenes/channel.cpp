@@ -16,6 +16,7 @@
 #define TAB_SELECTOR_HEIGHT 20
 #define TAB_SELECTOR_SELECTED_LINE_HEIGHT 3
 
+#define MAX_THUMBNAIL_LOAD_REQUEST 30
 
 #define TAB_NUM 2
 
@@ -34,18 +35,23 @@ namespace Channel {
 	Handle resource_lock;
 	std::string cur_channel_url;
 	YouTubeChannelDetail channel_info;
+	int thumbnail_request_l = 0;
+	int thumbnail_request_r = 0;
 	std::vector<std::vector<std::string> > wrapped_titles;
 };
 using namespace Channel;
 
 static void reset_channel_info() {
-	for (auto i : channel_info.videos)
-		cancel_request_thumbnail(i.thumbnail_url);
+	for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancel_request_thumbnail(channel_info.videos[i].thumbnail_url);
+	thumbnail_request_l = thumbnail_request_r = 0;
 	if (channel_info.banner_url != "") cancel_request_thumbnail(channel_info.banner_url);
 	if (channel_info.icon_url != "") cancel_request_thumbnail(channel_info.icon_url);
 	channel_info = YouTubeChannelDetail();
 }
-
+static void on_channel_load() { // this will be called while resource_lock is locked
+	if (channel_info.banner_url != "") request_thumbnail(channel_info.banner_url);
+	if (channel_info.icon_url != "") request_thumbnail(channel_info.icon_url);
+}
 
 static bool send_load_request(std::string url) {
 	if (!is_webpage_loading_requested(LoadRequestType::CHANNEL)) {
@@ -62,7 +68,7 @@ static bool send_load_request(std::string url) {
 		request->text_size_x = 0.5;
 		request->text_size_y = 0.5;
 		request->wrapped_titles = &wrapped_titles;
-		request->on_load_complete = NULL;
+		request->on_load_complete = on_channel_load;
 		request_webpage_loading(LoadRequestType::CHANNEL, request);
 		
 		svcReleaseMutex(resource_lock);
@@ -80,7 +86,7 @@ static bool send_load_more_request() {
 		request->text_size_x = 0.5;
 		request->text_size_y = 0.5;
 		request->wrapped_titles = &wrapped_titles;
-		request->on_load_complete = NULL; // we don't have to reset hid/scroll state after load-more
+		request->on_load_complete = NULL;
 		request_webpage_loading(LoadRequestType::CHANNEL_CONTINUE, request);
 		res = true;
 	}
@@ -219,6 +225,33 @@ Intent Channel_draw(void)
 	}
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	// thumbnail request update (this should be done while `resource_lock` is locked)
+	if (channel_info.videos.size()) {
+		int result_num = channel_info.videos.size();
+		int y_offset = 0;
+		if (channel_info.banner_url != "") y_offset += BANNER_HEIGHT;
+		y_offset += ICON_SIZE + ICON_MARGIN * 2 + TAB_SELECTOR_HEIGHT;
+		
+		int displayed_l = std::min(result_num, std::max(0, (videos_scroller.get_offset() - y_offset) / VIDEOS_VERTICAL_INTERVAL));
+		int displayed_r = std::min(result_num, std::max(0, (videos_scroller.get_offset() - y_offset + VIDEO_LIST_Y_HIGH - 1) / VIDEOS_VERTICAL_INTERVAL + 1));
+		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
+		int request_target_r = std::min(result_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
+		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
+		std::set<int> new_indexes, cancelling_indexes;
+		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancelling_indexes.insert(i);
+		for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
+		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) new_indexes.erase(i);
+		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
+		
+		for (auto i : cancelling_indexes) cancel_request_thumbnail(channel_info.videos[i].thumbnail_url);
+		std::vector<int> new_indexes_vec(new_indexes.begin(), new_indexes.end());
+		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
+		std::sort(new_indexes_vec.begin(), new_indexes_vec.end(), [&] (int i, int j) { return dist(i) < dist(j); });
+		for (auto i : new_indexes_vec) request_thumbnail(channel_info.videos[i].thumbnail_url);
+		
+		thumbnail_request_l = request_target_l;
+		thumbnail_request_r = request_target_r;
+	}
 	auto channel_info_bak = channel_info;
 	auto wrapped_titles_bak = wrapped_titles;
 	svcReleaseMutex(resource_lock);
@@ -314,7 +347,12 @@ Intent Channel_draw(void)
 		}
 		if(key.h_touch || key.p_touch)
 			var_need_reflesh = true;
-		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
+		if (key.p_select) {
+			if (!Util_log_query_log_show_flag() && !var_debug_mode) Util_log_set_log_show_flag(true);
+			else if (!var_debug_mode) var_debug_mode = true;
+			else if (!Util_log_query_log_show_flag()) var_debug_mode = false;
+			else Util_log_set_log_show_flag(false);
+		}
 	}
 
 	if(Util_log_query_log_show_flag())

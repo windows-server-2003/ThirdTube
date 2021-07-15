@@ -12,6 +12,8 @@
 #define THUMBNAIL_WIDTH 96
 #define LOAD_MORE_HEIGHT 30
 
+#define MAX_THUMBNAIL_LOAD_REQUEST 25
+
 
 namespace Search {
 	std::string string_resource[DEF_SEARCH_NUM_OF_MSG];
@@ -21,12 +23,24 @@ namespace Search {
 	Handle resource_lock;
 	std::string cur_search_word = "CITRUS";
 	YouTubeSearchResult search_result;
+	int thumbnail_request_l = 0;
+	int thumbnail_request_r = 0;
 	std::vector<std::vector<std::string> > wrapped_titles;
 	Thread search_thread;
 	
 	VerticalScroller results_scroller = VerticalScroller(0, 320, RESULT_Y_LOW, RESULT_Y_HIGH);
 };
 using namespace Search;
+
+static void reset_search_result() {
+	for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) {
+		auto cur_content = search_result.results[i];
+		if (cur_content.type == YouTubeSearchResult::Item::VIDEO) cancel_request_thumbnail(cur_content.video.thumbnail_url);
+		else if (cur_content.type == YouTubeSearchResult::Item::CHANNEL) cancel_request_thumbnail(cur_content.channel.icon_url);
+	}
+	thumbnail_request_l = thumbnail_request_r = 0;
+	search_result = YouTubeSearchResult();
+}
 
 static void on_search_complete() {
 	results_scroller.reset();
@@ -36,11 +50,7 @@ static bool send_search_request(std::string search_word) {
 	if (!is_webpage_loading_requested(LoadRequestType::SEARCH)) {
 		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 		cur_search_word = search_word;
-		for (auto i : search_result.results) {
-			if (i.type == YouTubeSearchResult::Item::VIDEO) cancel_request_thumbnail(i.video.thumbnail_url);
-			else if (i.type == YouTubeSearchResult::Item::CHANNEL) cancel_request_thumbnail(i.channel.icon_url);
-		}
-		search_result = YouTubeSearchResult(); // reset to empty results
+		reset_search_result();
 		results_scroller.reset();
 		
 		SearchRequestArg *request = new SearchRequestArg;
@@ -105,7 +115,7 @@ void Search_init(void)
 	svcCreateMutex(&resource_lock, false);
 	
 	results_scroller.reset();
-	search_result = YouTubeSearchResult();
+	reset_search_result();
 	
 	// result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SEARCH_NUM_OF_MSG);
 	// Util_log_save(DEF_SAPP0_INIT_STR, "Util_load_msg()..." + result.string + result.error_description, result.code);
@@ -187,6 +197,37 @@ Intent Search_draw(void)
 		back_color = DEF_DRAW_BLACK;
 	}
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	// thumbnail request update (this should be done while `resource_lock` is locked)
+	if (search_result.results.size()) {
+		int result_num = search_result.results.size();
+		int displayed_l = std::min(result_num, results_scroller.get_offset() / RESULTS_VERTICAL_INTERVAL);
+		int displayed_r = std::min(result_num, (results_scroller.get_offset() + RESULT_Y_HIGH - RESULT_Y_LOW - 1) / RESULTS_VERTICAL_INTERVAL + 1);
+		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
+		int request_target_r = std::min(result_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
+		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
+		std::set<int> new_indexes, cancelling_indexes;
+		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancelling_indexes.insert(i);
+		for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
+		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) new_indexes.erase(i);
+		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
+		
+		for (auto i : cancelling_indexes) {
+			auto cur_content = search_result.results[i];
+			if (cur_content.type == YouTubeSearchResult::Item::VIDEO) cancel_request_thumbnail(cur_content.video.thumbnail_url);
+			else if (cur_content.type == YouTubeSearchResult::Item::CHANNEL) cancel_request_thumbnail(cur_content.channel.icon_url);
+		}
+		std::vector<int> new_indexes_vec(new_indexes.begin(), new_indexes.end());
+		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
+		std::sort(new_indexes_vec.begin(), new_indexes_vec.end(), [&] (int i, int j) { return dist(i) < dist(j); });
+		for (auto i : new_indexes_vec) {
+			auto cur_content = search_result.results[i];
+			if (cur_content.type == YouTubeSearchResult::Item::VIDEO) request_thumbnail(cur_content.video.thumbnail_url);
+			else if (cur_content.type == YouTubeSearchResult::Item::CHANNEL) request_thumbnail(cur_content.channel.icon_url);
+		}
+		
+		thumbnail_request_l = request_target_l;
+		thumbnail_request_r = request_target_r;
+	}
 	auto search_result_bak = search_result;
 	auto wrapped_titles_bak = wrapped_titles;
 	svcReleaseMutex(resource_lock);
@@ -282,11 +323,14 @@ Intent Search_draw(void)
 			} else if(key.h_touch || key.p_touch)
 				var_need_reflesh = true;
 		}
-		if (!ignore && key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	}
 
-	if(Util_log_query_log_show_flag())
-		Util_log_main(key);
+	if (key.p_select) {
+		if (!Util_log_query_log_show_flag() && !var_debug_mode) Util_log_set_log_show_flag(true);
+		else if (!var_debug_mode) var_debug_mode = true;
+		else if (!Util_log_query_log_show_flag()) var_debug_mode = false;
+		else Util_log_set_log_show_flag(false);
+	}
 	
 	return intent;
 }

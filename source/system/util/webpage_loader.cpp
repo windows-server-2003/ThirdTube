@@ -165,13 +165,8 @@ static void load_search(SearchRequestArg arg) {
 	svcWaitSynchronization(arg.lock, std::numeric_limits<s64>::max());
 	*arg.result = new_result;
 	*arg.wrapped_titles = new_wrapped_titles;
-	for (auto i : new_result.results) {
-		if (i.type == YouTubeSearchResult::Item::VIDEO) request_thumbnail(i.video.thumbnail_url);
-		else if (i.type == YouTubeSearchResult::Item::CHANNEL) request_thumbnail(i.channel.icon_url);
-	}
-	svcReleaseMutex(arg.lock);
-	
 	if (arg.on_load_complete) arg.on_load_complete();
+	svcReleaseMutex(arg.lock);
 }
 static void load_search_continue(SearchRequestArg arg) {
 	lock();
@@ -201,17 +196,12 @@ static void load_search_continue(SearchRequestArg arg) {
 	svcWaitSynchronization(arg.lock, std::numeric_limits<s64>::max());
 	if (new_result.error != "") arg.result->error = new_result.error;
 	else {
-		for (size_t i = arg.result->results.size(); i < new_result.results.size(); i++) {
-			if (new_result.results[i].type == YouTubeSearchResult::Item::VIDEO) request_thumbnail(new_result.results[i].video.thumbnail_url);
-			else if (new_result.results[i].type == YouTubeSearchResult::Item::CHANNEL) request_thumbnail(new_result.results[i].channel.icon_url);
-		}
 		*arg.result = new_result;
 		*arg.wrapped_titles = new_wrapped_titles;
 	}
+	if (arg.on_load_complete) arg.on_load_complete();
 	svcReleaseMutex(arg.lock);
 	release();
-	
-	if (arg.on_load_complete) arg.on_load_complete();
 }
 
 static void load_search_channel(ChannelLoadRequestArg arg) {
@@ -230,13 +220,8 @@ static void load_search_channel(ChannelLoadRequestArg arg) {
 	svcWaitSynchronization(arg.lock, std::numeric_limits<s64>::max());
 	*arg.result = new_result;
 	*arg.wrapped_titles = new_wrapped_titles;
-	for (auto i : new_result.videos)
-		request_thumbnail(i.thumbnail_url);
-	if (new_result.banner_url != "") request_thumbnail(new_result.banner_url);
-	if (new_result.icon_url != "") request_thumbnail(new_result.icon_url);
-	svcReleaseMutex(arg.lock);
-	
 	if (arg.on_load_complete) arg.on_load_complete();
+	svcReleaseMutex(arg.lock);
 }
 static void load_search_channel_continue(ChannelLoadRequestArg arg) {
 	lock();
@@ -266,16 +251,10 @@ static void load_search_channel_continue(ChannelLoadRequestArg arg) {
 	else {
 		*arg.result = new_result;
 		*arg.wrapped_titles = new_wrapped_titles;
-		for (auto i : new_result.videos)
-			request_thumbnail(i.thumbnail_url);
-		if (new_result.banner_url != "") request_thumbnail(new_result.banner_url);
-		if (new_result.icon_url != "") request_thumbnail(new_result.icon_url);
 	}
+	if (arg.on_load_complete) arg.on_load_complete();
 	svcReleaseMutex(arg.lock);
 	release();
-	
-	if (arg.on_load_complete) arg.on_load_complete();
-	
 }
 
 static bool should_be_running = true;

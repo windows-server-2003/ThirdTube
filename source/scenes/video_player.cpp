@@ -1086,7 +1086,12 @@ Intent VideoPlayer_draw(void)
 		else
 			vid_lr_count = 0;
 		
-		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
+		if (key.p_select) {
+			if (!Util_log_query_log_show_flag() && !var_debug_mode) Util_log_set_log_show_flag(true);
+			else if (!var_debug_mode) var_debug_mode = true;
+			else if (!Util_log_query_log_show_flag()) var_debug_mode = false;
+			else Util_log_set_log_show_flag(false);
+		}
 	}
 
 	if(Util_log_query_log_show_flag())
