@@ -40,6 +40,7 @@ YouTubeSearchResult youtube_parse_search(std::string url);
 // takes the previous result, returns the new result with both old items and new items
 YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result);
 
+
 struct YouTubeVideoDetail {
 	std::string error;
 	std::string title;
@@ -52,3 +53,19 @@ struct YouTubeVideoDetail {
 	size_t both_stream_len;
 };
 YouTubeVideoDetail youtube_parse_video_page(std::string url);
+
+
+
+struct YouTubeChannelDetail {
+	std::string error;
+	std::string name;
+	std::string url;
+	std::string icon_url;
+	std::string banner_url;
+	std::string description;
+	std::vector<YouTubeVideoSuccinct> videos;
+	
+	std::string continue_token;
+	std::string continue_key;
+};
+YouTubeChannelDetail youtube_parse_channel_page(std::string url);

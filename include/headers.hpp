@@ -24,6 +24,7 @@
 #include "system/util/network_decoder.hpp"
 #include "system/util/network_io.hpp"
 #include "system/util/thumbnail_loader.hpp"
+#include "system/util/webpage_loader.hpp"
 #include "system/util/encoder.hpp"
 #include "system/util/mic.hpp"
 #include "system/util/muxer.hpp"

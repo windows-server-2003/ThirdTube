@@ -11,62 +11,28 @@ static Json get_initial_data(const std::string &html) {
 	return res;
 }
 
-static bool parse_searched_item(Json content, std::vector<YouTubeSearchResult::Item> &res) {
-	if (content["compactVideoRenderer"] != Json()) {
-		auto video_renderer = content["compactVideoRenderer"];
-		YouTubeVideoSuccinct cur_result;
-		std::string video_id = video_renderer["navigationEndpoint"]["watchEndpoint"]["videoId"].string_value();
-		cur_result.url = "https://m.youtube.com/watch?v=" + video_id;
-		cur_result.title = get_text_from_object(video_renderer["title"]);
-		cur_result.duration_text = get_text_from_object(video_renderer["lengthText"]);
-		cur_result.author = get_text_from_object(video_renderer["shortBylineText"]);
-		cur_result.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
-		/*
-		{ // extract thumbnail url
-			int max_width = -1;
-			for (auto thumbnail : video_renderer["thumbnail"]["thumbnails"].array_items()) {
-				if (thumbnail["url"].string_value().find("webp") != std::string::npos) continue; // we want jpeg thumbnail
-				int cur_width = thumbnail["width"].int_value();
-				if (cur_width > 256) continue; // too large
-				if (max_width < cur_width) {
-					max_width = cur_width;
-					cur_result.thumbnail_url = thumbnail["url"].string_value();
-				}
-			}
-		}*/
-		res.push_back(YouTubeSearchResult::Item(cur_result));
-		return true;
-	} else if (content["compactChannelRenderer"] != Json()) {
-		auto channel_renderer = content["compactChannelRenderer"];
-		YouTubeChannelSuccinct cur_result;
-		cur_result.name = get_text_from_object(channel_renderer["displayName"]);
-		cur_result.url = "https://m.youtube.com/channel/" + channel_renderer["channelId"].string_value();
-		
-		{
-			constexpr int target_height = 70;
-			int min_distance = 100000;
-			std::string best_icon;
-			for (auto icon : channel_renderer["thumbnail"]["thumbnails"].array_items()) {
-				int cur_height = icon["height"].int_value();
-				if (cur_height >= 256) continue; // too large
-				if (min_distance > std::abs(target_height - cur_height)) {
-					min_distance = std::abs(target_height - cur_height);
-					best_icon = icon["url"].string_value();
-				}
-			}
-			cur_result.icon_url = best_icon;
-		}
-		
-		res.push_back(YouTubeSearchResult::Item(cur_result));
-		return true;
-	}
-	return false;
-}
-
-YouTubeSearchResult youtube_parse_search(std::string url) {
-	YouTubeSearchResult res;
+YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
+	YouTubeChannelDetail res;
 	
-	url = convert_url_to_mobile(url);
+	url = convert_url_to_mobile(url); // mobile version doesn't offer channel description
+	
+	// append "/videos" at the end of the url
+	{
+		bool ok = false;
+		for (auto pattern : std::vector<std::string>{"https://m.youtube.com/channel/", "https://m.youtube.com/c/"}) {
+			if (url.substr(0, pattern.size()) == pattern) {
+				url = url.substr(pattern.size(), url.size());
+				auto next_slash = std::find(url.begin(), url.end(), '/');
+				url = pattern + std::string(url.begin(), next_slash) + "/videos";
+				ok = true;
+				break;
+			}
+		}
+		if (!ok) {
+			res.error = "invalid URL : " + url;
+			return res;
+		}
+	}
 	
 	std::string html = http_get(url);
 	if (!html.size()) {
@@ -74,20 +40,63 @@ YouTubeSearchResult youtube_parse_search(std::string url) {
 		return res;
 	}
 	
-	auto initial_data = get_initial_data(html);
-	res.estimated_result_num = std::stoll(initial_data["estimatedResults"].string_value());
+	std::string channel_name = "stub channel name";
 	
-	for (auto i : initial_data["contents"]["sectionListRenderer"]["contents"].array_items()) {
-		if (i["itemSectionRenderer"] != Json()) {
-			for (auto j : i["itemSectionRenderer"]["contents"].array_items()) {
-				parse_searched_item(j, res.results);
+	auto initial_data = get_initial_data(html);
+	
+	auto metadata_renderer = initial_data["metadata"]["channelMetadataRenderer"];
+	res.name = metadata_renderer["title"].string_value();
+	res.url = "https://m.youtube.com/channel/" + metadata_renderer["externalId"].string_value();
+	res.description = metadata_renderer["description"].string_value();
+	
+	for (auto tab : initial_data["contents"]["singleColumnBrowseResultsRenderer"]["tabs"].array_items()) {
+		if (tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"] != Json()) {
+			for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items()) if (i["itemSectionRenderer"] != Json()) {
+				for (auto content : i["itemSectionRenderer"]["contents"].array_items()) {
+					if (content["compactVideoRenderer"] != Json()) {
+						auto video_renderer = content["compactVideoRenderer"];
+						YouTubeVideoSuccinct cur_video;
+						std::string video_id = video_renderer["videoId"].string_value();
+						cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
+						cur_video.title = get_text_from_object(video_renderer["title"]);
+						cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
+						cur_video.author = channel_name;
+						cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
+						res.videos.push_back(cur_video);
+						debug(cur_video.title + " " + cur_video.url);
+					} else if (content["continuationItemRenderer"] != Json()) {
+						res.continue_token = content["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
+					} else debug("unknown item found in channel videos");
+				}
 			}
 		}
-		if (i["continuationItemRenderer"] != Json()) {
-			res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
-			debug(res.continue_token);
+	}
+	{ // top banner
+		int max_width = -1;
+		for (auto banner : initial_data["header"]["c4TabbedHeaderRenderer"]["mobileBanner"]["thumbnails"].array_items()) {
+			int cur_width = banner["width"].int_value();
+			if (cur_width > 1024) continue;
+			if (max_width < cur_width) {
+				max_width = cur_width;
+				res.banner_url = banner["url"].string_value();
+			}
 		}
 	}
+	{ // icon
+		int max_width = -1;
+		for (auto icon : initial_data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"].array_items()) {
+			int cur_width = icon["width"].int_value();
+			if (cur_width > 1024) continue;
+			if (max_width < cur_width) {
+				max_width = cur_width;
+				res.icon_url = icon["url"].string_value();
+			}
+		}
+	}
+	debug(res.banner_url);
+	debug(res.icon_url);
+	debug(res.description);
+	
 	{
 		std::regex pattern(std::string(R"***("INNERTUBE_API_KEY":"([\w-]+)")***"));
 		std::smatch match_result;
@@ -107,6 +116,7 @@ YouTubeSearchResult youtube_parse_search(std::string url) {
 	debug(res.estimated_result_num);*/
 	return res;
 }
+/*
 YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result) {
 	YouTubeSearchResult new_result = prev_result;
 	
@@ -159,23 +169,16 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 	}
 	if (new_result.continue_token == "") debug("failed to get next continue token");
 	return new_result;
-}
+}*/
 
 #ifdef _WIN32
 int main() {
 	std::string url;
 	std::cin >> url;
-	auto result = youtube_parse_search(url);
-	
-	auto out = [&] (YouTubeSearchResult::Item item) {
-		if (item.type == YouTubeSearchResult::Item::VIDEO) {
-			std::cerr << "video " << item.video.title << std::endl;
-		} else {
-			std::cerr << "channel " << item.channel.name << std::endl;
-		}
-	};
+	auto result = youtube_parse_channel_page(url);
 	
 	/*
+	
 	for (auto i : result.results) out(i);
 	
 	for (int i = 0; i < 3; i++) {

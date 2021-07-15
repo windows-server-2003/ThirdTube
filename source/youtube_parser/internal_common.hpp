@@ -43,6 +43,7 @@ namespace youtube_parser {
 	Json get_succeeding_json_regexes(const std::string &html, std::vector<const char *> patterns);
 
 	std::string convert_url_to_mobile(std::string url);
+	std::string convert_url_to_desktop(std::string url);
 }
 using namespace youtube_parser;
 

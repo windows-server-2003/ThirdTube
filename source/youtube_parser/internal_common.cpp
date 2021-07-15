@@ -195,4 +195,13 @@ namespace youtube_parser {
 		if (url.substr(0, 4) == "www.") url = "m." + url.substr(4, url.size());
 		return "https://" + url;
 	}
+	std::string convert_url_to_desktop(std::string url) {
+		// strip out of http:// or https://
+		{
+			auto pos = url.find("://");
+			if (pos != std::string::npos) url = url.substr(pos + 3, url.size());
+		}
+		if (url.substr(0, 2) == "m.") url = "www." + url.substr(2, url.size());
+		return "https://" + url;
+	}
 }

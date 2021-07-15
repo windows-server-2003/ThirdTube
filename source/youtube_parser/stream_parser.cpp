@@ -1,8 +1,3 @@
-/*
-	reference :
-	https://github.com/pytube/pytube
-*/
-
 #include <regex>
 #include "internal_common.hpp"
 #include "parser.hpp"

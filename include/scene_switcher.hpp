@@ -4,6 +4,7 @@ enum class SceneType {
 	VIDEO_PLAYER,
 	SEARCH,
 	SETTING,
+	CHANNEL,
 	// used for intent
 	NO_CHANGE,
 	EXIT

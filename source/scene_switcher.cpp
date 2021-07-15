@@ -3,12 +3,13 @@
 #include "system/setting_menu.hpp"
 #include "scenes/video_player.hpp"
 #include "scenes/search.hpp"
+#include "scenes/channel.hpp"
 
 bool menu_thread_run = false;
 bool menu_check_exit_request = false;
 bool menu_update_available = false;
 std::string menu_msg[DEF_MENU_NUM_OF_MSG];
-Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread;
+Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread,webpage_loader_thread;
 C2D_Image menu_app_icon[4];
 
 static SceneType current_scene;
@@ -45,9 +46,13 @@ void Menu_init(void)
 	Sem_suspend();
 	VideoPlayer_init();
 	VideoPlayer_suspend();
+	Channel_init();
+	Channel_suspend();
 	Search_init(); // first running
 	current_scene = SceneType::SEARCH;
 	thumbnail_downloader_thread = threadCreate(thumbnail_downloader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+	webpage_loader_thread = threadCreate(webpage_loader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+
 	
 	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_high_resolution_mode).code);
 	Draw_frame_ready();
@@ -94,6 +99,7 @@ void Menu_exit(void)
 	menu_thread_run = false;
 
 	VideoPlayer_exit();
+	Channel_exit();
 	Search_exit();
 	Sem_exit();
 
@@ -102,16 +108,19 @@ void Menu_exit(void)
 	Exfont_exit();
 
 	thumbnail_downloader_thread_exit_request();
+	webpage_loader_thread_exit_request();
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_check_connectivity_thread, time_out));
 	// Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_send_app_info_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_update_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(thumbnail_downloader_thread, time_out));
+	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(webpage_loader_thread, time_out));
 	threadFree(menu_worker_thread);
 	threadFree(menu_check_connectivity_thread);
 	// threadFree(menu_send_app_info_thread);
 	threadFree(menu_update_thread);
 	threadFree(thumbnail_downloader_thread);
+	threadFree(webpage_loader_thread);
 
 	fsExit();
 	acExit();
@@ -141,6 +150,9 @@ bool Menu_main(void)
 	} else if (current_scene == SceneType::SEARCH) {
 		intent = Search_draw();
 		if (intent.next_scene != SceneType::NO_CHANGE) Search_suspend();
+	} else if (current_scene == SceneType::CHANNEL) {
+		intent = Channel_draw();
+		if (intent.next_scene != SceneType::NO_CHANGE) Channel_suspend();
 	} else if (current_scene == SceneType::SETTING) {
 		intent = Sem_draw();
 		if (intent.next_scene != SceneType::NO_CHANGE) Sem_suspend();
@@ -151,6 +163,7 @@ bool Menu_main(void)
 		current_scene = intent.next_scene;
 		if (current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_resume(intent.arg);
 		else if (current_scene == SceneType::SEARCH) Search_resume(intent.arg);
+		else if (current_scene == SceneType::CHANNEL) Channel_resume(intent.arg);
 		else if (current_scene == SceneType::SETTING) Sem_resume(intent.arg);
 	}
 	

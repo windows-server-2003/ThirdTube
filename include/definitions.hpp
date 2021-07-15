@@ -33,6 +33,8 @@
 
 #define DEF_SEARCH_NUM_OF_MSG 1
 
+#define DEF_CHANNEL_NUM_OF_MSG 1
+
 //menu
 #define DEF_MENU_NUM_OF_MSG 5
 #define DEF_MENU_MAIN_STR (std::string)"Menu/Main"
