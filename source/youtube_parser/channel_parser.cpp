@@ -72,14 +72,17 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 		}
 	}
 	{ // top banner
-		int max_width = -1;
-		for (auto banner : initial_data["header"]["c4TabbedHeaderRenderer"]["mobileBanner"]["thumbnails"].array_items()) {
+		for (auto banner : initial_data["header"]["c4TabbedHeaderRenderer"]["banner"]["thumbnails"].array_items()) {
 			int cur_width = banner["width"].int_value();
+			if (cur_width == 1060) {
+				res.banner_url = banner["url"].string_value();
+			}
+			/*
 			if (cur_width > 1024) continue;
 			if (max_width < cur_width) {
 				max_width = cur_width;
 				res.banner_url = banner["url"].string_value();
-			}
+			}*/
 		}
 	}
 	{ // icon

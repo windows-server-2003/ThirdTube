@@ -377,6 +377,14 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 	C2D_TextBufDelete(c2d_buf);
 }
 
+float Draw_get_height(std::string text, float text_size_x, float text_size_y) {
+	if (text == "") return 0;
+	int characters;
+	Exfont_text_parse(text, draw_part_text[0], 1023, &characters);
+	int lines = 1;
+	for (int i = 0; i < characters; i++) if (draw_part_text[0][i] == "\n") lines++;
+	return lines * 20.0 * text_size_y;
+}
 float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 {
 	float x = 0, y = 0, x_max = 0;

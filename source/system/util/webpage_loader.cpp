@@ -232,6 +232,8 @@ static void load_search_channel(ChannelLoadRequestArg arg) {
 	*arg.wrapped_titles = new_wrapped_titles;
 	for (auto i : new_result.videos)
 		request_thumbnail(i.thumbnail_url);
+	if (new_result.banner_url != "") request_thumbnail(new_result.banner_url);
+	if (new_result.icon_url != "") request_thumbnail(new_result.icon_url);
 	svcReleaseMutex(arg.lock);
 	
 	if (arg.on_load_complete) arg.on_load_complete();

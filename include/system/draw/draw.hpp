@@ -16,7 +16,9 @@ Result_with_string Draw_c2d_image_init(Image_data* c2d_image,int tex_size_x, int
 void Draw_c2d_image_free(Image_data c2d_image);
 
 void Draw(std::string text, float x, float y, float text_size_x, float text_size_y, int abgr8888);
+
 float Draw_get_width(std::string text, float text_size_x, float text_size_y);
+float Draw_get_height(std::string text, float text_size_x, float text_size_y);
 
 Result_with_string Draw_load_texture(std::string file_name, int sheet_map_num, C2D_Image return_image[], int start_num, int num_of_array);
 

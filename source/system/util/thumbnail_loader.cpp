@@ -122,10 +122,14 @@ void thumbnail_downloader_thread_func(void *arg) {
 		if (decoded_data) {
 			// for video thumbnail, crop to 16:9
 			if (next_url.find("https://i.ytimg.com/vi/") != std::string::npos && h > w * 9 / 16 + 1) {
-				int new_h = w * 9 / 16 + 1;
+				int new_h = w * 9 / 16;
 				int vertical_offset = (h - new_h) / 2;
 				memmove(decoded_data, decoded_data + vertical_offset * w * 2, new_h * w * 2);
 				h = new_h;
+			}
+			if (w == 1060) { // channel banner : crop to 1024 to fit in the maximum texture size
+				for (int i = 0; i < h; i++) memmove(decoded_data + i * 1024 * 2, decoded_data + (i * 1060 + 18) * 2, 1024 * 2);
+				w = 1024;
 			}
 			
 			Image_data result_image;
