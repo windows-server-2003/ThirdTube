@@ -153,7 +153,7 @@ static void draw_channel_content(const YouTubeChannelDetail &channel_info, const
 					// title
 					auto title_lines = wrapped_titles[i];
 					for (size_t line = 0; line < title_lines.size(); line++) {
-						Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + line * 13, 0.5, 0.5, color);
+						Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + (int) line * 13, 0.5, 0.5, color);
 					}
 					// thumbnail
 					draw_thumbnail(cur_video.thumbnail_url, 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
