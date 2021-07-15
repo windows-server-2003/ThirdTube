@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+#include "citro2d.h"
 
 struct Result_with_string
 {

@@ -31,6 +31,7 @@
 #include "system/util/speaker.hpp"
 #include "system/util/swkbd.hpp"
 #include "system/util/util.hpp"
+#include "ui/scroller.hpp"
 #include "variables.hpp"
 #include "scene_switcher.hpp"
 #include "types.hpp"

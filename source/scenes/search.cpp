@@ -7,7 +7,7 @@
 
 #define RESULT_Y_LOW 20
 #define RESULT_Y_HIGH 240
-#define FONT_VERTICAL_INTERVAL 60
+#define RESULTS_VERTICAL_INTERVAL 60
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
 #define LOAD_MORE_HEIGHT 30
@@ -24,28 +24,12 @@ namespace Search {
 	std::vector<std::vector<std::string> > wrapped_titles;
 	Thread search_thread;
 	
-	int scroll_offset = 0;
-	
-	
-	int last_touch_x = -1;
-	int last_touch_y = -1;
-	int first_touch_x = -1;
-	int first_touch_y = -1;
-	bool list_grabbed = false;
-	bool list_scrolling = false;
+	VerticalScroller results_scroller = VerticalScroller(0, 320, RESULT_Y_LOW, RESULT_Y_HIGH);
 };
 using namespace Search;
 
-
-static void reset_hid_state() {
-	last_touch_x = last_touch_y = -1;
-	first_touch_x = first_touch_y = -1;
-	list_scrolling = false;
-	list_grabbed = false;
-}
 static void on_search_complete() {
-	reset_hid_state();
-	scroll_offset = 0;
+	results_scroller.reset();
 }
 
 static bool send_search_request(std::string search_word) {
@@ -57,8 +41,7 @@ static bool send_search_request(std::string search_word) {
 			else if (i.type == YouTubeSearchResult::Item::CHANNEL) cancel_request_thumbnail(i.channel.icon_url);
 		}
 		search_result = YouTubeSearchResult(); // reset to empty results
-		reset_hid_state();
-		scroll_offset = 0;
+		results_scroller.reset();
 		
 		SearchRequestArg *request = new SearchRequestArg;
 		request->lock = resource_lock;
@@ -104,7 +87,7 @@ bool Search_query_init_flag(void) {
 void Search_resume(std::string arg)
 {
 	(void) arg;
-	reset_hid_state();
+	results_scroller.on_resume();
 	thread_suspend = false;
 	var_need_reflesh = true;
 }
@@ -121,8 +104,7 @@ void Search_init(void)
 	
 	svcCreateMutex(&resource_lock, false);
 	
-	reset_hid_state();
-	scroll_offset = 0;
+	results_scroller.reset();
 	search_result = YouTubeSearchResult();
 	
 	// result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SEARCH_NUM_OF_MSG);
@@ -147,12 +129,12 @@ void Search_exit(void)
 static void draw_search_result(const YouTubeSearchResult &result, const std::vector<std::vector<std::string> > &wrapped_titles, Hid_info key, int color) {
 	if (result.results.size()) {
 		for (size_t i = 0; i < result.results.size(); i++) {
-			int y_l = RESULT_Y_LOW + i * FONT_VERTICAL_INTERVAL - scroll_offset;
-			int y_r = RESULT_Y_LOW + (i + 1) * FONT_VERTICAL_INTERVAL - scroll_offset;
+			int y_l = RESULT_Y_LOW + i * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset();
+			int y_r = y_l + RESULTS_VERTICAL_INTERVAL;
 			if (y_r <= RESULT_Y_LOW || y_l >= RESULT_Y_HIGH) continue;
 			
-			if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r && list_grabbed && !list_scrolling) {
-				Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 0, y_l, 320, FONT_VERTICAL_INTERVAL);
+			if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r && results_scroller.is_selecting()) {
+				Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 0, y_l, 320, RESULTS_VERTICAL_INTERVAL);
 			}
 			
 			if (result.results[i].type == YouTubeSearchResult::Item::VIDEO) {
@@ -177,7 +159,7 @@ static void draw_search_result(const YouTubeSearchResult &result, const std::vec
 			if (is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE)) draw_str = "Loading...";
 			else if (result.error != "") draw_str = result.error;
 			
-			int y = RESULT_Y_LOW + result.results.size() * FONT_VERTICAL_INTERVAL - scroll_offset;
+			int y = RESULT_Y_LOW + result.results.size() * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset();
 			if (y < RESULT_Y_HIGH) {
 				int width = Draw_get_width(draw_str, 0.5, 0.5);
 				Draw(draw_str, (320 - width) / 2, y, 0.5, 0.5, color);
@@ -249,27 +231,12 @@ Intent Search_draw(void)
 
 	if (Util_err_query_error_show_flag()) {
 		Util_err_main(key);
-		reset_hid_state();
+		results_scroller.on_resume();
 	} else if(Util_expl_query_show_flag()) {
 		Util_expl_main(key);
-		reset_hid_state();
+		results_scroller.on_resume();
 	} else {
-		int scroll_max = std::max(0, (int) search_result.results.size() * FONT_VERTICAL_INTERVAL - (RESULT_Y_HIGH - RESULT_Y_LOW) + LOAD_MORE_HEIGHT);
-		if (key.p_touch) {
-			first_touch_x = key.touch_x;
-			first_touch_y = key.touch_y;
-			if (first_touch_y >= RESULT_Y_LOW && first_touch_y < std::min<s32>(search_result_bak.results.size() * FONT_VERTICAL_INTERVAL, RESULT_Y_HIGH) &&
-				var_afk_time <= var_time_to_turn_off_lcd) list_grabbed = true;
-		} else if (list_grabbed && !list_scrolling && key.touch_y != -1 && std::abs(key.touch_y - first_touch_y) >= 4) {
-			list_scrolling = true;
-			scroll_offset += first_touch_y - key.touch_y;
-			if (scroll_offset < 0) scroll_offset = 0;
-			if (scroll_offset > scroll_max) scroll_offset = scroll_max;
-		} else if (list_scrolling && key.touch_y != -1) {
-			scroll_offset += last_touch_y - key.touch_y;
-			if (scroll_offset < 0) scroll_offset = 0;
-			if (scroll_offset > scroll_max) scroll_offset = scroll_max;
-		}
+		auto released_point = results_scroller.update(key, search_result_bak.results.size() ? search_result_bak.results.size() * RESULTS_VERTICAL_INTERVAL + LOAD_MORE_HEIGHT : 0);
 		
 		bool ignore = false;
 		if (key.p_start) {
@@ -277,19 +244,18 @@ Intent Search_draw(void)
 			intent.next_scene = SceneType::EXIT;
 			ignore = true;
 		}
-		if (!ignore && key.touch_y == -1 && last_touch_y != -1 && first_touch_x != -1) {
-			if (last_touch_y + scroll_offset >= 20 && (size_t) last_touch_y + scroll_offset < 20 + search_result_bak.results.size() * FONT_VERTICAL_INTERVAL) {
-				if (!list_scrolling && list_grabbed) {
-					int index = (last_touch_y + scroll_offset - 20) / FONT_VERTICAL_INTERVAL;
-					if (search_result_bak.results[index].type == YouTubeSearchResult::Item::VIDEO) {
-						intent.next_scene = SceneType::VIDEO_PLAYER;
-						intent.arg = search_result_bak.results[index].video.url;
-						ignore = true;
-					} else if (search_result_bak.results[index].type == YouTubeSearchResult::Item::CHANNEL) {
-						intent.next_scene = SceneType::CHANNEL;
-						intent.arg = search_result_bak.results[index].channel.url;
-						ignore = true;
-					}
+		if (!ignore && released_point.first != -1) {
+			int released_y = released_point.second;
+			if (released_y < (int) search_result_bak.results.size() * RESULTS_VERTICAL_INTERVAL) {
+				int index = released_y / RESULTS_VERTICAL_INTERVAL;
+				if (search_result_bak.results[index].type == YouTubeSearchResult::Item::VIDEO) {
+					intent.next_scene = SceneType::VIDEO_PLAYER;
+					intent.arg = search_result_bak.results[index].video.url;
+					ignore = true;
+				} else if (search_result_bak.results[index].type == YouTubeSearchResult::Item::CHANNEL) {
+					intent.next_scene = SceneType::CHANNEL;
+					intent.arg = search_result_bak.results[index].channel.url;
+					ignore = true;
 				}
 			}
 		}
@@ -309,11 +275,7 @@ Intent Search_draw(void)
 					remove_cpu_limit(40);
 					if (button_pressed == SWKBD_BUTTON_RIGHT) send_search_request(search_word);
 				}
-				
-				/*
-				intent.next_scene = SceneType::VIDEO_PLAYER;
-				var_need_reflesh = true;*/
-			} else if (RESULT_Y_LOW + search_result.results.size() * FONT_VERTICAL_INTERVAL - scroll_offset < RESULT_Y_HIGH &&
+			} else if (RESULT_Y_LOW + search_result_bak.results.size() * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset() < RESULT_Y_HIGH &&
 				!is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE)) {
 				
 				send_load_more_request();
@@ -321,10 +283,6 @@ Intent Search_draw(void)
 				var_need_reflesh = true;
 		}
 		if (!ignore && key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
-		
-		if (key.touch_y == -1) list_scrolling = list_grabbed = false;
-		last_touch_x = key.touch_x;
-		last_touch_y = key.touch_y;
 	}
 
 	if(Util_log_query_log_show_flag())
