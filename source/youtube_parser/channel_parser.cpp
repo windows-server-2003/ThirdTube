@@ -63,7 +63,6 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 						cur_video.author = channel_name;
 						cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
 						res.videos.push_back(cur_video);
-						debug(cur_video.title + " " + cur_video.url);
 					} else if (content["continuationItemRenderer"] != Json()) {
 						res.continue_token = content["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 					} else debug("unknown item found in channel videos");
@@ -112,16 +111,11 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 		}
 	}
 	
-	/*
-	for (auto i : res.results) {
-		debug(i.title + " " + i.author + " " + i.duration_text + " " + i.url + " " + i.thumbnail_url);
-	}
-	debug(res.estimated_result_num);*/
 	return res;
 }
-/*
-YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result) {
-	YouTubeSearchResult new_result = prev_result;
+
+YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result) {
+	YouTubeChannelDetail new_result = prev_result;
 	
 	if (prev_result.continue_key == "") {
 		new_result.error = "continue key empty";
@@ -132,13 +126,12 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 		return new_result;
 	}
 	
-	// POST to get more results
 	Json yt_result;
 	{
 		std::string post_content = R"({"context": {"client": {"hl": "ja", "gl": "JP", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
 			+ prev_result.continue_token + "\"}";
 		
-		std::string post_url = "https://m.youtube.com/youtubei/v1/search?key=" + prev_result.continue_key;
+		std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + prev_result.continue_key;
 		
 		std::string received_str = http_post_json(post_url, post_content);
 		if (received_str != "") {
@@ -156,15 +149,20 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 		new_result.error = "received json empty";
 		return new_result;
 	}
-	
-	new_result.estimated_result_num = stoll(yt_result["estimatedResults"].string_value());
 	new_result.continue_token = "";
-	for (auto i : yt_result["onResponseReceivedCommands"].array_items()) if (i["appendContinuationItemsAction"] != Json()) {
+	
+	for (auto i : yt_result["onResponseReceivedActions"].array_items()) if (i["appendContinuationItemsAction"] != Json()) {
 		for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
-			if (j["itemSectionRenderer"] != Json()) {
-				for (auto item : j["itemSectionRenderer"]["contents"].array_items()) {
-					parse_searched_item(item, new_result.results);
-				}
+			if (j["compactVideoRenderer"] != Json()) {
+				auto video_renderer = j["compactVideoRenderer"];
+				YouTubeVideoSuccinct cur_video;
+				std::string video_id = video_renderer["videoId"].string_value();
+				cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
+				cur_video.title = get_text_from_object(video_renderer["title"]);
+				cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
+				cur_video.author = new_result.name;
+				cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
+				new_result.videos.push_back(cur_video);
 			} else if (j["continuationItemRenderer"] != Json()) {
 				new_result.continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 			}
@@ -172,7 +170,7 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 	}
 	if (new_result.continue_token == "") debug("failed to get next continue token");
 	return new_result;
-}*/
+}
 
 #ifdef _WIN32
 int main() {
@@ -180,20 +178,15 @@ int main() {
 	std::cin >> url;
 	auto result = youtube_parse_channel_page(url);
 	
-	/*
-	
-	for (auto i : result.results) out(i);
-	
 	for (int i = 0; i < 3; i++) {
-		std::cerr << std::endl;
-		std::cerr << i << std::endl;
-		auto new_result = youtube_continue_search(result);
-		
-		for (int j = result.results.size(); j < (int) new_result.results.size(); j++) {
-			out(new_result.results[j]);
+		auto next_result = youtube_channel_page_continue(result);
+		for (int j = result.videos.size(); j < (int) next_result.videos.size(); j++) {
+			debug(next_result.videos[j].title);
 		}
-		result = new_result;
-	}*/
+		
+		result = next_result;
+	}
+	
 	return 0;
 }
 #endif

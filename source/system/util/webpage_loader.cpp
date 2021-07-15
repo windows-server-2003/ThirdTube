@@ -20,7 +20,7 @@ static void release() {
 static void delete_request(LoadRequestType request_type) {
 	if (request_type == LoadRequestType::SEARCH || request_type == LoadRequestType::SEARCH_CONTINUE) {
 		delete ((SearchRequestArg *) requests[(int) request_type]);
-	} else if (request_type == LoadRequestType::CHANNEL) {
+	} else if (request_type == LoadRequestType::CHANNEL || request_type == LoadRequestType::CHANNEL_CONTINUE) {
 		delete ((ChannelLoadRequestArg *) requests[(int) request_type]);
 	}
 	// add here
@@ -238,6 +238,45 @@ static void load_search_channel(ChannelLoadRequestArg arg) {
 	
 	if (arg.on_load_complete) arg.on_load_complete();
 }
+static void load_search_channel_continue(ChannelLoadRequestArg arg) {
+	lock();
+	if (requests[(int) LoadRequestType::CHANNEL]) {
+		release();
+		return;
+	}
+	auto prev_result = *arg.result;
+	release();
+	
+	auto new_result = youtube_channel_page_continue(prev_result);
+	
+	Util_log_save("wloader/channel-c", "truncate start");
+	std::vector<std::vector<std::string> > new_wrapped_titles(new_result.videos.size());
+	for (size_t i = 0; i < new_result.videos.size(); i++)
+		new_wrapped_titles[i] = truncate_str(new_result.videos[i].title, arg.max_width, arg.text_size_x, arg.text_size_y);
+	Util_log_save("wloader/channel-c", "truncate end");
+	
+	
+	lock();
+	if (requests[(int) LoadRequestType::CHANNEL]) {
+		release();
+		return;
+	}
+	svcWaitSynchronization(arg.lock, std::numeric_limits<s64>::max());
+	if (new_result.error != "") arg.result->error = new_result.error;
+	else {
+		*arg.result = new_result;
+		*arg.wrapped_titles = new_wrapped_titles;
+		for (auto i : new_result.videos)
+			request_thumbnail(i.thumbnail_url);
+		if (new_result.banner_url != "") request_thumbnail(new_result.banner_url);
+		if (new_result.icon_url != "") request_thumbnail(new_result.icon_url);
+	}
+	svcReleaseMutex(arg.lock);
+	release();
+	
+	if (arg.on_load_complete) arg.on_load_complete();
+	
+}
 
 static bool should_be_running = true;
 void webpage_loader_thread_exit_request() { should_be_running = false; }
@@ -250,6 +289,7 @@ void webpage_loader_thread_func(void* arg) {
 		if (requests[(int) LoadRequestType::SEARCH]) next_type = LoadRequestType::SEARCH;
 		else if (requests[(int) LoadRequestType::SEARCH_CONTINUE]) next_type = LoadRequestType::SEARCH_CONTINUE;
 		else if (requests[(int) LoadRequestType::CHANNEL]) next_type = LoadRequestType::CHANNEL;
+		else if (requests[(int) LoadRequestType::CHANNEL_CONTINUE]) next_type = LoadRequestType::CHANNEL_CONTINUE;
 		// add here
 		
 		if (next_type != LoadRequestType::NONE) in_progress[(int) next_type] = true;
@@ -262,6 +302,7 @@ void webpage_loader_thread_func(void* arg) {
 		if (next_type == LoadRequestType::SEARCH) load_search(*((SearchRequestArg *) requests[(int) LoadRequestType::SEARCH]));
 		if (next_type == LoadRequestType::SEARCH_CONTINUE) load_search_continue(*((SearchRequestArg *) requests[(int) LoadRequestType::SEARCH_CONTINUE]));
 		if (next_type == LoadRequestType::CHANNEL) load_search_channel(*((ChannelLoadRequestArg *) requests[(int) LoadRequestType::CHANNEL]));
+		if (next_type == LoadRequestType::CHANNEL_CONTINUE) load_search_channel_continue(*((ChannelLoadRequestArg *) requests[(int) LoadRequestType::CHANNEL_CONTINUE]));
 		// add here
 		
 		lock();

@@ -10,12 +10,13 @@ enum class LoadRequestType {
 	SEARCH,
 	SEARCH_CONTINUE,
 	CHANNEL,
+	CHANNEL_CONTINUE,
 	NONE // used internally
 };
 struct SearchRequestArg {
 	Handle lock;
 	YouTubeSearchResult *result;
-	std::string search_word; // won't be used for SEARCH_CONTINUE
+	std::string search_word; // not used for SEARCH_CONTINUE
 	// for truncating
 	int max_width;
 	float text_size_x;
@@ -27,7 +28,7 @@ struct SearchRequestArg {
 struct ChannelLoadRequestArg {
 	Handle lock;
 	YouTubeChannelDetail *result;
-	std::string url;
+	std::string url; // not used for CHANNEL_CONTINUE
 	
 	// for truncating
 	int max_width;
