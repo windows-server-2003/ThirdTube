@@ -54,7 +54,7 @@ namespace VideoPlayer {
 	std::string vid_audio_format = "n/a";
 	std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
 	Image_data vid_image[8];
-	bool icon_requested = false;
+	int icon_thumbnail_handle = -1;
 	C2D_Image vid_banner[2];
 	C2D_Image vid_control[2];
 	Thread vid_decode_thread, vid_convert_thread;
@@ -208,8 +208,7 @@ static void decode_thread(void* arg)
 					vid_play_request = true;
 					
 					// request icon download
-					request_thumbnail_cutin(cur_video_info.author.icon_url);
-					icon_requested = true;
+					icon_thumbnail_handle = thumbnail_request(cur_video_info.author.icon_url, SceneType::VIDEO_PLAYER, 1000);
 					break;
 				}
 				deinit_streams();
@@ -366,10 +365,7 @@ static void decode_thread(void* arg)
 			}
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
 			
-			if (icon_requested) {
-				cancel_request_thumbnail(cur_video_info.author.icon_url);
-				icon_requested = false;
-			}
+			if (icon_thumbnail_handle != -1) thumbnail_cancel_request(icon_thumbnail_handle), icon_thumbnail_handle = -1;
 			deinit_streams();
 			while (Util_speaker_is_playing(0) && vid_play_request) usleep(10000);
 			Util_speaker_exit(0);
@@ -731,6 +727,8 @@ Intent VideoPlayer_draw(void)
 		color = DEF_DRAW_WHITE;
 		back_color = DEF_DRAW_BLACK;
 	}
+	
+	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 
 	if(var_need_reflesh || !var_eco_mode)
 	{
@@ -790,11 +788,7 @@ Intent VideoPlayer_draw(void)
 			if(vid_width > 1024 && vid_height > 1024)
 				Draw_texture(vid_image[image_num * 4 + 3].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 40, (vid_y + vid_tex_height[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 3] * vid_zoom, vid_tex_height[image_num * 4 + 3] * vid_zoom);
 		}
-		if (icon_requested) {
-			svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-			draw_thumbnail(cur_video_info.author.icon_url, 0, 0, 48, 48);
-			svcReleaseMutex(small_resource_lock);
-		}
+		thumbnail_draw(icon_thumbnail_handle, 0, 0, 48, 48);
 
 		//controls
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, 165, 145, 10);

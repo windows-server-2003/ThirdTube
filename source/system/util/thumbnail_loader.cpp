@@ -10,11 +10,24 @@ struct LoadedThumbnail {
 	Image_data data;
 };
 
+struct Request {
+	std::string url;
+	SceneType scene;
+	int priority;
+};
+
+static volatile SceneType active_scene = SceneType::SEARCH;
 static Handle resource_lock;
 static bool lock_initialized = false;
-static std::map<std::string, int> thumbnail_request;
-static std::map<std::string, LoadedThumbnail> thumbnail_cache;
-static std::deque<std::string> load_queue;
+static std::vector<Request> requests;
+static std::queue<int> free_list;
+
+struct URLStatus {
+	std::set<int> handles;
+	bool is_loaded = false;
+	LoadedThumbnail data;
+};
+static std::map<std::string, URLStatus> requested_urls;
 
 static void lock() {
 	if (!lock_initialized) {
@@ -27,40 +40,70 @@ static void release() {
 	svcReleaseMutex(lock_initialized);
 }
 
-void request_thumbnail(std::string url) {
+int thumbnail_request(const std::string &url, SceneType scene_id, int priority) {
+	if (url == "") return -1;
+	int handle;
 	lock();
-	load_queue.push_back(url);
-	thumbnail_request[url]++;
+	if (free_list.size()) {
+		handle = free_list.front();
+		free_list.pop();
+		requests[handle] = {url, scene_id, priority};
+	} else {
+		handle = requests.size();
+		requests.push_back({url, scene_id, priority});
+	}
+	requested_urls[url].handles.insert(handle);
+	release();
+	return handle;
+}
+void thumbnail_cancel_request(int handle) {
+	if (handle == -1) return;
+	lock();
+	std::string url = requests[handle].url;
+	auto &url_status = requested_urls[url];
+	url_status.handles.erase(handle);
+	if (!url_status.handles.size()) {
+		if (url_status.is_loaded) Draw_c2d_image_free(url_status.data.data);
+		requested_urls.erase(url);
+	}
+	free_list.push(handle);
 	release();
 }
-void request_thumbnail_cutin(std::string url) {
+void thumbnail_set_priority(int handle, int value) {
+	if (handle == -1) return;
 	lock();
-	load_queue.push_front(url);
-	thumbnail_request[url]++;
+	requests[handle].priority = value;
 	release();
 }
-void cancel_request_thumbnail(std::string url) {
+void thumbnail_set_priorities(const std::vector<std::pair<int, int> > &priority_list) {
 	lock();
-	if (!--thumbnail_request[url]) {
-		thumbnail_request.erase(url);
-		if (thumbnail_cache.count(url)) {
-			Draw_c2d_image_free(thumbnail_cache[url].data);
-			thumbnail_cache.erase(url);
-		}
+	for (auto i : priority_list) {
+		if (i.first == -1) continue;
+		requests[i.first].priority = i.second;
 	}
 	release();
 }
-bool thumbnail_available(std::string url) {
+void thumbnail_set_active_scene(SceneType type) {
+	active_scene = type;
+}
+bool thumbnail_is_available(const std::string &url) {
+	if (url == "") return false;
 	lock();
-	bool res = thumbnail_request.count(url) && thumbnail_cache.count(url);
+	bool res = requested_urls.count(url) && requested_urls[url].is_loaded;
 	release();
 	return res;
 }
-bool draw_thumbnail(std::string url, int x_offset, int y_offset, int x_len, int y_len) {
+bool thumbnail_is_available(int handle) {
+	if (handle == -1) return false;
+	return thumbnail_is_available(requests[handle].url);
+}
+bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len) {
+	if (handle == -1) return false;
 	bool res;
 	lock();
-	if (thumbnail_cache.count(url)) {
-		LoadedThumbnail thumbnail = thumbnail_cache[url];
+	std::string url = requests[handle].url;
+	if (requested_urls.count(url) && requested_urls[url].is_loaded) {
+		LoadedThumbnail thumbnail = requested_urls[url].data;
 		Draw_texture(thumbnail.data.c2d, x_offset, y_offset, x_len, y_len);
 		res = true;
 	} else res = false;
@@ -98,23 +141,33 @@ static std::vector<u8> http_get(const std::string &url) {
 static bool should_be_running = true;
 void thumbnail_downloader_thread_func(void *arg) {
 	while (should_be_running) {
-		bool need_download = false;
-		std::string next_url;
+		const std::string *next_url_ = NULL;
 		lock();
-		while (load_queue.size()) {
-			next_url = load_queue.front();
-			load_queue.pop_front();
-			if (thumbnail_request.count(next_url) && !thumbnail_cache.count(next_url)) {
-				need_download = true;
-				break;
+		{
+			int max_priority = -1;
+			for (auto &i : requested_urls) {
+				if (i.second.is_loaded) continue;
+				int cur_url_priority = 0;
+				for (auto handle : i.second.handles) {
+					int cur_priority = requests[handle].priority;
+					if (requests[handle].scene == active_scene) cur_priority += 1000000;
+					cur_url_priority = std::max(cur_url_priority, cur_priority);
+				}
+				if (max_priority < cur_url_priority) {
+					max_priority = cur_url_priority;
+					next_url_ = &i.first;
+				}
 			}
 		}
+		std::string next_url;
+		if (next_url_) next_url = *next_url_;
 		release();
 		
-		if (!need_download) {
+		if (!next_url_) {
 			usleep(50000);
 			continue;
 		}
+		Util_log_save("thumb-dl", "size:" + std::to_string(requests.size()));
 		auto encoded_data = http_get(next_url);
 		
 		int w, h;
@@ -148,8 +201,9 @@ void thumbnail_downloader_thread_func(void *arg) {
 					Util_log_save("thumb-dl", "Draw_set_texture_data() failed");
 				} else {
 					lock();
-					if (thumbnail_request.count(next_url)) { // in case the request is cancelled while downloading
-						thumbnail_cache[next_url] = {w, h, texture_w, texture_h, result_image};
+					if (requested_urls.count(next_url)) { // in case the request is cancelled while downloading
+						requested_urls[next_url].is_loaded = true;
+						requested_urls[next_url].data = {w, h, texture_w, texture_h, result_image};
 						Util_log_save("thumb-dl", "successfully loaded thumbnail : " + next_url);
 					}
 					release();
@@ -161,8 +215,8 @@ void thumbnail_downloader_thread_func(void *arg) {
 	}
 	
 	lock();
-	for (auto i : thumbnail_cache) Draw_c2d_image_free(i.second.data);
-	thumbnail_cache.clear();
+	for (auto i : requested_urls) if (i.second.is_loaded) Draw_c2d_image_free(i.second.data.data);
+	requested_urls.clear();
 	release();
 	
 	Util_log_save("thumb-dl", "Thread exit.");

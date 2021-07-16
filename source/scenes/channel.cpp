@@ -37,20 +37,28 @@ namespace Channel {
 	YouTubeChannelDetail channel_info;
 	int thumbnail_request_l = 0;
 	int thumbnail_request_r = 0;
+	std::vector<int> thumbnail_handles;
+	int banner_thumbnail_handle = -1;
+	int icon_thumbnail_handle = -1;
 	std::vector<std::vector<std::string> > wrapped_titles;
 };
 using namespace Channel;
 
 static void reset_channel_info() {
-	for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancel_request_thumbnail(channel_info.videos[i].thumbnail_url);
+	for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) thumbnail_cancel_request(thumbnail_handles[i]);
+	thumbnail_handles.clear();
 	thumbnail_request_l = thumbnail_request_r = 0;
-	if (channel_info.banner_url != "") cancel_request_thumbnail(channel_info.banner_url);
-	if (channel_info.icon_url != "") cancel_request_thumbnail(channel_info.icon_url);
+	if (icon_thumbnail_handle != -1) thumbnail_cancel_request(icon_thumbnail_handle), icon_thumbnail_handle = -1;
+	if (banner_thumbnail_handle != -1) thumbnail_cancel_request(banner_thumbnail_handle), banner_thumbnail_handle = -1;
 	channel_info = YouTubeChannelDetail();
 }
 static void on_channel_load() { // this will be called while resource_lock is locked
-	if (channel_info.banner_url != "") request_thumbnail(channel_info.banner_url);
-	if (channel_info.icon_url != "") request_thumbnail(channel_info.icon_url);
+	thumbnail_handles.assign(channel_info.videos.size(), -1);
+	if (channel_info.icon_url != "") icon_thumbnail_handle = thumbnail_request(channel_info.icon_url, SceneType::CHANNEL, 1001);
+	if (channel_info.banner_url != "") banner_thumbnail_handle = thumbnail_request(channel_info.banner_url, SceneType::CHANNEL, 1000);
+}
+static void on_channel_load_more() {
+	thumbnail_handles.resize(channel_info.videos.size(), -1);
 }
 
 static bool send_load_request(std::string url) {
@@ -86,7 +94,7 @@ static bool send_load_more_request() {
 		request->text_size_x = 0.5;
 		request->text_size_y = 0.5;
 		request->wrapped_titles = &wrapped_titles;
-		request->on_load_complete = NULL;
+		request->on_load_complete = on_channel_load_more;
 		request_webpage_loading(LoadRequestType::CHANNEL_CONTINUE, request);
 		res = true;
 	}
@@ -140,18 +148,31 @@ void Channel_exit(void)
 }
 
 
-static void draw_channel_content(const YouTubeChannelDetail &channel_info, const std::vector<std::vector<std::string> > &wrapped_titles, Hid_info key, int color) {
+struct TemporaryCopyOfChannelInfo {
+	std::string error;
+	std::string name;
+	std::string banner_url;
+	std::string icon_url;
+	std::string description;
+	int video_num;
+	int displayed_l;
+	int displayed_r;
+	std::map<int, YouTubeVideoSuccinct> videos;
+	std::map<int, std::vector<std::string> > wrapped_titles;
+	bool has_continue;
+};
+static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_info key, int color) {
 	if (is_webpage_loading_requested(LoadRequestType::CHANNEL)) {
 		Draw("Loading", 0, 0, 0.5, 0.5, color);
 	} else  {
 		int y_offset = 0;
 		if (channel_info.banner_url != "") {
-			draw_thumbnail(channel_info.banner_url, 0, y_offset - videos_scroller.get_offset(), 320, BANNER_HEIGHT);
+			thumbnail_draw(banner_thumbnail_handle, 0, y_offset - videos_scroller.get_offset(), 320, BANNER_HEIGHT);
 			y_offset += BANNER_HEIGHT;
 		}
 		y_offset += ICON_MARGIN;
 		if (channel_info.icon_url != "") {
-			draw_thumbnail(channel_info.icon_url, ICON_MARGIN, y_offset - videos_scroller.get_offset(), ICON_SIZE, ICON_SIZE);
+			thumbnail_draw(icon_thumbnail_handle, ICON_MARGIN, y_offset - videos_scroller.get_offset(), ICON_SIZE, ICON_SIZE);
 		}
 		Draw(channel_info.name, ICON_SIZE + ICON_MARGIN * 3, y_offset - videos_scroller.get_offset() - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
 		y_offset += ICON_SIZE;
@@ -164,11 +185,10 @@ static void draw_channel_content(const YouTubeChannelDetail &channel_info, const
 		y_offset += TAB_SELECTOR_HEIGHT;
 		
 		if (selected_tab == 0) { // videos
-			if (channel_info.videos.size()) {
-				for (size_t i = 0; i < channel_info.videos.size(); i++) {
+			if (channel_info.video_num) {
+				for (int i = channel_info.displayed_l; i < channel_info.displayed_r; i++) {
 					int y_l = y_offset + i * VIDEOS_VERTICAL_INTERVAL - videos_scroller.get_offset();
 					int y_r = y_l + VIDEOS_VERTICAL_INTERVAL;
-					if (y_r <= 0 || y_l >= VIDEO_LIST_Y_HIGH) continue;
 					
 					if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r && videos_scroller.is_selecting()) {
 						Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 0, y_l, 320, VIDEOS_VERTICAL_INTERVAL);
@@ -176,15 +196,15 @@ static void draw_channel_content(const YouTubeChannelDetail &channel_info, const
 					
 					auto cur_video = channel_info.videos[i];
 					// title
-					auto title_lines = wrapped_titles[i];
+					auto title_lines = channel_info.wrapped_titles[i];
 					for (size_t line = 0; line < title_lines.size(); line++) {
 						Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + (int) line * 13, 0.5, 0.5, color);
 					}
 					// thumbnail
-					draw_thumbnail(cur_video.thumbnail_url, 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+					thumbnail_draw(thumbnail_handles[i], 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 				}
-				y_offset += channel_info.videos.size() * VIDEOS_VERTICAL_INTERVAL;
-				if (channel_info.error != "" || channel_info.has_continue()) {
+				y_offset += channel_info.video_num * VIDEOS_VERTICAL_INTERVAL;
+				if (channel_info.error != "" || channel_info.has_continue) {
 					std::string draw_string = "";
 					if (is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE)) draw_string = "Loading...";
 					else if (channel_info.error != "") draw_string = channel_info.error;
@@ -224,18 +244,40 @@ Intent Channel_draw(void)
 		back_color = DEF_DRAW_BLACK;
 	}
 	
+	thumbnail_set_active_scene(SceneType::CHANNEL);
+	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-	// thumbnail request update (this should be done while `resource_lock` is locked)
-	if (channel_info.videos.size()) {
-		int result_num = channel_info.videos.size();
+	int video_num = channel_info.videos.size();
+	int displayed_l, displayed_r;
+	{
+		
 		int y_offset = 0;
 		if (channel_info.banner_url != "") y_offset += BANNER_HEIGHT;
 		y_offset += ICON_SIZE + ICON_MARGIN * 2 + TAB_SELECTOR_HEIGHT;
+		displayed_l = std::min(video_num, std::max(0, (videos_scroller.get_offset() - y_offset) / VIDEOS_VERTICAL_INTERVAL));
+		displayed_r = std::min(video_num, std::max(0, (videos_scroller.get_offset() - y_offset + VIDEO_LIST_Y_HIGH - 1) / VIDEOS_VERTICAL_INTERVAL + 1));
+	}
+	// back up some information while `resource_lock` is locked
+	TemporaryCopyOfChannelInfo channel_info_bak;
+	channel_info_bak.error = channel_info.error;
+	channel_info_bak.name = channel_info.name;
+	channel_info_bak.icon_url = channel_info.icon_url;
+	channel_info_bak.banner_url = channel_info.banner_url;
+	channel_info_bak.description = channel_info.description;
+	channel_info_bak.has_continue = channel_info.has_continue();
+	channel_info_bak.video_num = video_num;
+	channel_info_bak.displayed_l = displayed_l;
+	channel_info_bak.displayed_r = displayed_r;
+	for (int i = displayed_l; i < displayed_r; i++) {
+		channel_info_bak.videos[i] = channel_info.videos[i];
+		channel_info_bak.wrapped_titles[i] = wrapped_titles[i];
+	}
+	
+	// thumbnail request update (this should be done while `resource_lock` is locked)
+	if (channel_info.videos.size()) {
 		
-		int displayed_l = std::min(result_num, std::max(0, (videos_scroller.get_offset() - y_offset) / VIDEOS_VERTICAL_INTERVAL));
-		int displayed_r = std::min(result_num, std::max(0, (videos_scroller.get_offset() - y_offset + VIDEO_LIST_Y_HIGH - 1) / VIDEOS_VERTICAL_INTERVAL + 1));
 		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-		int request_target_r = std::min(result_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
+		int request_target_r = std::min(video_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
 		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
 		std::set<int> new_indexes, cancelling_indexes;
 		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancelling_indexes.insert(i);
@@ -243,17 +285,17 @@ Intent Channel_draw(void)
 		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) new_indexes.erase(i);
 		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
 		
-		for (auto i : cancelling_indexes) cancel_request_thumbnail(channel_info.videos[i].thumbnail_url);
-		std::vector<int> new_indexes_vec(new_indexes.begin(), new_indexes.end());
-		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-		std::sort(new_indexes_vec.begin(), new_indexes_vec.end(), [&] (int i, int j) { return dist(i) < dist(j); });
-		for (auto i : new_indexes_vec) request_thumbnail(channel_info.videos[i].thumbnail_url);
+		for (auto i : cancelling_indexes) thumbnail_cancel_request(thumbnail_handles[i]), thumbnail_handles[i] = -1;
+		for (auto i : new_indexes) thumbnail_handles[i] = thumbnail_request(channel_info.videos[i].thumbnail_url, SceneType::CHANNEL, 0);
 		
 		thumbnail_request_l = request_target_l;
 		thumbnail_request_r = request_target_r;
+		
+		std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
+		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
+		for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {thumbnail_handles[i], 500 - dist(i)};
+		thumbnail_set_priorities(priority_list);
 	}
-	auto channel_info_bak = channel_info;
-	auto wrapped_titles_bak = wrapped_titles;
 	svcReleaseMutex(resource_lock);
 	
 	if(var_need_reflesh || !var_eco_mode)
@@ -269,7 +311,7 @@ Intent Channel_draw(void)
 		
 		Draw_screen_ready(1, back_color);
 		
-		draw_channel_content(channel_info_bak, wrapped_titles_bak, key, color);
+		draw_channel_content(channel_info_bak, key, color);
 		
 		Draw_texture(var_square_image[0], color, 0, VIDEO_LIST_Y_HIGH, 320, 1);
 		Draw_texture(var_square_image[0], back_color, 0, VIDEO_LIST_Y_HIGH + 1, 320, 240 - VIDEO_LIST_Y_HIGH - 1);
@@ -297,13 +339,13 @@ Intent Channel_draw(void)
 		if (channel_info_bak.banner_url != "") content_height += BANNER_HEIGHT;
 		content_height += ICON_SIZE + ICON_MARGIN * 2 + TAB_SELECTOR_HEIGHT;
 		if (selected_tab == 0) {
-			content_height += channel_info_bak.videos.size() * VIDEOS_VERTICAL_INTERVAL;
+			content_height += channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL;
 			// load more
 			if (content_height - videos_scroller.get_offset() < VIDEO_LIST_Y_HIGH && !is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE) &&
-				channel_info_bak.videos.size()) {
+				channel_info_bak.video_num) {
 				send_load_more_request();
 			}
-			if (channel_info_bak.error != "" || channel_info_bak.has_continue()) content_height += LOAD_MORE_MARGIN;
+			if (channel_info_bak.error != "" || channel_info_bak.has_continue) content_height += LOAD_MORE_MARGIN;
 		} else if (selected_tab == 1) {
 			content_height += Draw_get_height("Channel Description :", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 			content_height += 3;
@@ -327,14 +369,16 @@ Intent Channel_draw(void)
 			}
 			y_offset += TAB_SELECTOR_HEIGHT;
 			if (selected_tab == 0) {
-				if (y_offset <= released_y && released_y < y_offset + (int) channel_info_bak.videos.size() * VIDEOS_VERTICAL_INTERVAL) {
+				if (y_offset <= released_y && released_y < y_offset + (int) channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL) {
 					int index = (released_y - y_offset) / VIDEOS_VERTICAL_INTERVAL;
-					intent.next_scene = SceneType::VIDEO_PLAYER;
-					intent.arg = channel_info_bak.videos[index].url;
-					break;
+					if (displayed_l <= index && index < displayed_r) {
+						intent.next_scene = SceneType::VIDEO_PLAYER;
+						intent.arg = channel_info_bak.videos[index].url;
+						break;
+					} else Util_log_save("channel", "unexpected : a video that is not displayed is selected");
 				}
-				y_offset += channel_info_bak.videos.size() * VIDEOS_VERTICAL_INTERVAL;
-				if (channel_info_bak.error != "" || channel_info_bak.has_continue()) y_offset += LOAD_MORE_MARGIN;
+				y_offset += channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL;
+				if (channel_info_bak.error != "" || channel_info_bak.has_continue) y_offset += LOAD_MORE_MARGIN;
 			} else {
 				y_offset += Draw_get_height("Channel Description :", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 				y_offset += 3;
