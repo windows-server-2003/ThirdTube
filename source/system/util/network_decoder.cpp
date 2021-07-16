@@ -43,6 +43,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 			decoder->need_reinit = true;
 			goto fail;
 		}
+		decoder->network_waiting_status = "Reading stream";
 		if (!cpu_limited) {
 			cpu_limited = true;
 			add_cpu_limit(25);
@@ -54,6 +55,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 		cpu_limited = false;
 		remove_cpu_limit(25);
 	}
+	decoder->network_waiting_status = NULL;
 	
 	{
 		auto tmp = stream->get_data(stream->read_head, std::min(buf_size, stream->len - stream->read_head));

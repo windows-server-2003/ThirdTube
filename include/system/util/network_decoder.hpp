@@ -107,6 +107,7 @@ public :
 	volatile bool is_locked = false;
 	volatile bool need_reinit = false;
 	volatile bool ready = false;
+	const char * volatile network_waiting_status = NULL;
 	
 	void deinit();
 	Result_with_string init(NetworkStream *video_stream, NetworkStream *audio_stream, bool request_hw_decoder);

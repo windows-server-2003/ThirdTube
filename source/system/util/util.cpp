@@ -61,7 +61,7 @@ std::string Util_convert_seconds_to_time(double input_seconds)
 	else
 		time += std::to_string(seconds);
 
-	time += std::to_string(input_seconds - count + 1).substr(1, 2);
+	// time += std::to_string(input_seconds - count + 1).substr(1, 2);
 	return time;
 }
 

@@ -3,10 +3,9 @@
 #include <numeric>
 
 #include "scenes/search.hpp"
+#include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
 
-#define RESULT_Y_LOW 20
-#define RESULT_Y_HIGH 240
 #define RESULTS_VERTICAL_INTERVAL 60
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -29,6 +28,9 @@ namespace Search {
 	std::vector<std::vector<std::string> > wrapped_titles;
 	Thread search_thread;
 	
+	const int RESULT_Y_LOW = 20;
+	int RESULT_Y_HIGH = 240; // changes according to whether the video playing bar should be drawn or not
+	
 	VerticalScroller results_scroller = VerticalScroller(0, 320, RESULT_Y_LOW, RESULT_Y_HIGH);
 };
 using namespace Search;
@@ -43,9 +45,11 @@ static void reset_search_result() {
 static void on_search_complete() {
 	thumbnail_handles.assign(search_result.results.size(), -1);
 	results_scroller.reset();
+	var_need_reflesh = true;
 }
 static void on_search_more_complete() {
 	thumbnail_handles.resize(search_result.results.size(), -1);
+	var_need_reflesh = true;
 }
 
 static bool send_search_request(std::string search_word) {
@@ -211,6 +215,10 @@ Intent Search_draw(void)
 	
 	thumbnail_set_active_scene(SceneType::SEARCH);
 	
+	bool video_playing_bar_show = video_is_playing();
+	RESULT_Y_HIGH = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
+	results_scroller.change_area(0, 320, RESULT_Y_LOW, RESULT_Y_HIGH);
+	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	// back up some information while `resource_lock` is locked
 	int result_num = search_result.results.size();
@@ -273,11 +281,12 @@ Intent Search_draw(void)
 		draw_search_result(search_result_bak, key, color);
 		Draw_texture(var_square_image[0], back_color, 0, 0, 320, RESULT_Y_LOW - 1);
 		Draw_texture(var_square_image[0], color, 0, RESULT_Y_LOW - 1, 320, 1);
-		Draw_texture(var_square_image[0], back_color, 0, RESULT_Y_HIGH + 1, 320, 240 - RESULT_Y_HIGH - 1);
 
 		// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
 		
 		Draw("Search scene (Press A to search)", 0, 0, 0.5, 0.5, color);
+		
+		if (video_playing_bar_show) video_draw_playing_bar();
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
@@ -331,6 +340,7 @@ Intent Search_draw(void)
 			}
 		}
 		if (!ignore) {
+			if (video_playing_bar_show) video_update_playing_bar(key);
 			if (key.p_a) {
 				if (!is_webpage_loading_requested(LoadRequestType::SEARCH)) {
 					SwkbdState keyboard;

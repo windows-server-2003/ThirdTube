@@ -1,6 +1,7 @@
 #include "headers.hpp"
 #include <vector>
 #include <numeric>
+#include <math.h>
 
 #include "scenes/video_player.hpp"
 
@@ -8,6 +9,8 @@
 #define VIDEO_AUDIO_SEPERATE false
 #define NEW_3DS_CPU_LIMIT 50
 #define OLD_3DS_CPU_LIMIT 80
+
+#define ICON_MARGIN 5
 
 namespace VideoPlayer {
 	bool vid_main_run = false;
@@ -18,7 +21,8 @@ namespace VideoPlayer {
 	volatile bool vid_seek_request = false;
 	volatile bool vid_change_video_request = false;
 	bool vid_detail_mode = false;
-	bool vid_pausing = false;
+	volatile bool vid_pausing = false;
+	volatile bool vid_pausing_seek = false;
 	bool vid_linear_filter = true;
 	bool vid_show_controls = false;
 	bool vid_allow_skip_frames = false;
@@ -65,7 +69,7 @@ namespace VideoPlayer {
 	NetworkStream *cur_audio_stream = NULL;
 	NetworkStreamDownloader stream_downloader;
 	
-	Handle small_resource_lock; // while decoder is backing up seek/video change request and removing the flag, assigning YouTubeVideoInfo
+	Handle small_resource_lock; // while decoder is backing up seek/video change request and removing the flag, when modifying YouTubeVideoInfo, when changing pause status
 	YouTubeVideoDetail cur_video_info;
 	
 	NetworkDecoder network_decoder;
@@ -76,8 +80,7 @@ using namespace VideoPlayer;
 static const char * volatile network_waiting_status = NULL;
 const char *get_network_waiting_status() {
 	if (network_waiting_status) return network_waiting_status;
-	return NULL;
-	// return decoder_get_network_waiting_status();
+	return network_decoder.network_waiting_status;
 }
 
 bool VideoPlayer_query_init_flag(void)
@@ -104,11 +107,115 @@ static void send_change_video_request(std::string url) {
 static void send_seek_request(double pos) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	vid_seek_pos = pos;
+	vid_current_pos = pos / 1000;
 	vid_seek_request = true;
 	if (network_decoder.ready) // avoid locking while initing
 		network_decoder.is_locked = true;
 	svcReleaseMutex(small_resource_lock);
 }
+
+
+bool video_is_playing() {
+	if (!vid_play_request && vid_pausing_seek) {
+		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		vid_pausing_seek = false;
+		if (!vid_pausing) Util_speaker_resume(0);
+		svcReleaseMutex(small_resource_lock);
+	}
+	return vid_play_request;
+}
+#define SMALL_FONT_SIZE 0.4
+
+namespace Bar {
+	static bool bar_grabbed = false;
+	static int last_touch_x = -1;
+	static int last_touch_y = -1;
+	static float bar_x_l, bar_x_r;
+	void video_draw_playing_bar() {
+		// draw
+		float y_l = 240 - VIDEO_PLAYING_BAR_HEIGHT;
+		float y_center = 240 - (float) VIDEO_PLAYING_BAR_HEIGHT / 2;
+		
+		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, 0, y_l, 320, VIDEO_PLAYING_BAR_HEIGHT);
+		
+		if (get_network_waiting_status()) { // loading
+			C2D_DrawCircleSolid(6, y_center, 0, 2, DEF_DRAW_WHITE);
+			C2D_DrawCircleSolid(12, y_center, 0, 2, DEF_DRAW_WHITE);
+			C2D_DrawCircleSolid(18, y_center, 0, 2, DEF_DRAW_WHITE);
+		} else if (vid_pausing || vid_pausing_seek) { // pausing
+			C2D_DrawTriangle(8, y_l + 3, DEF_DRAW_WHITE,
+							 8, 240 - 4, DEF_DRAW_WHITE,
+							 8 + (VIDEO_PLAYING_BAR_HEIGHT - 6) * std::sqrt(3) / 2, y_center, DEF_DRAW_WHITE,
+							 0);
+		} else { // playing
+			C2D_DrawRectSolid(8, y_l + 3, 0, 4, VIDEO_PLAYING_BAR_HEIGHT - 6, DEF_DRAW_WHITE);
+			C2D_DrawRectSolid(16, y_l + 3, 0, 4, VIDEO_PLAYING_BAR_HEIGHT - 6, DEF_DRAW_WHITE);
+		}
+		
+		double vid_progress = vid_current_pos / vid_duration;
+		if (bar_grabbed) vid_progress = std::max(0.0f, std::min(1.0f, (last_touch_x - bar_x_l) / (bar_x_r - bar_x_l)));
+		else if (vid_seek_request) vid_progress = vid_seek_pos / vid_duration;
+		
+		constexpr int TIME_STR_RIGHT_MARGIN = 2;
+		constexpr int TIME_STR_LEFT_MARGIN = 3;
+		std::string time_str0 = Util_convert_seconds_to_time(vid_progress * vid_duration);
+		std::string time_str1 = "/ " + Util_convert_seconds_to_time(vid_duration);
+		float time_str0_w = Draw_get_width(time_str0, SMALL_FONT_SIZE, SMALL_FONT_SIZE);
+		float time_str1_w = Draw_get_width(time_str1, SMALL_FONT_SIZE, SMALL_FONT_SIZE);
+		bar_x_l = 30;
+		bar_x_r = 320 - std::max(time_str0_w, time_str1_w) - TIME_STR_RIGHT_MARGIN - TIME_STR_LEFT_MARGIN;
+		
+		
+		float time_str_w = std::max(time_str0_w, time_str1_w);
+		Draw(time_str0, bar_x_r + TIME_STR_LEFT_MARGIN + (time_str_w - time_str0_w) / 2, y_l - 1, SMALL_FONT_SIZE, SMALL_FONT_SIZE, DEF_DRAW_WHITE);
+		Draw(time_str1, bar_x_r + TIME_STR_LEFT_MARGIN + (time_str_w - time_str1_w) / 2, y_center - 2, SMALL_FONT_SIZE, SMALL_FONT_SIZE, DEF_DRAW_WHITE);
+		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, bar_x_l, y_center - 2, bar_x_r - bar_x_l, 4);
+		if (vid_duration != 0) {
+			Draw_texture(var_square_image[0], 0xFF3333D0, bar_x_l, y_center - 2, (bar_x_r - bar_x_l) * vid_progress, 4);
+			C2D_DrawCircleSolid(bar_x_l + (bar_x_r - bar_x_l) * vid_progress, y_center, 0, bar_grabbed ? 6 : 4, 0xFF3333D0);
+		}
+	}
+	void video_update_playing_bar(Hid_info key) {
+		float y_l = 240 - VIDEO_PLAYING_BAR_HEIGHT;
+		float y_center = 240 - (float) VIDEO_PLAYING_BAR_HEIGHT / 2;
+		
+		constexpr int GRAB_TOLERANCE = 5;
+		if (!bar_grabbed && network_decoder.ready && key.p_touch && bar_x_l - GRAB_TOLERANCE <= key.touch_x && key.touch_x <= bar_x_r + GRAB_TOLERANCE &&
+			y_center - 2 - GRAB_TOLERANCE <= key.touch_y && key.touch_y <= y_center + 2 + GRAB_TOLERANCE) {
+			bar_grabbed = true;
+		}
+		if (bar_grabbed && key.touch_x == -1) {
+			if (network_decoder.ready) {
+				double pos = std::min(1.0f, std::max(0.0f, (last_touch_x - bar_x_l) / (bar_x_r - bar_x_l))) * vid_duration * 1000;
+				send_seek_request(pos);
+			}
+			bar_grabbed = false;
+		}
+		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		if (!vid_pausing_seek && bar_grabbed && !vid_pausing) Util_speaker_pause(0);
+		if (vid_pausing_seek && !bar_grabbed && !vid_pausing) Util_speaker_resume(0);
+		vid_pausing_seek = bar_grabbed;
+		
+		// start/stop
+		if (!get_network_waiting_status() && !vid_pausing_seek && key.p_touch && key.touch_x < 22 && y_l <= key.touch_y) {
+			if (vid_pausing) {
+				vid_pausing = false;
+				Util_speaker_resume(0);
+			} else {
+				vid_pausing = true;
+				Util_speaker_pause(0);
+			}
+		}
+		svcReleaseMutex(small_resource_lock);
+		
+		last_touch_x = key.touch_x;
+		last_touch_y = key.touch_y;
+	}
+}
+void video_update_playing_bar(Hid_info key) { Bar::video_update_playing_bar(key); }
+void video_draw_playing_bar() { Bar::video_draw_playing_bar(); }
+
+
 
 static void decode_thread(void* arg)
 {
@@ -182,7 +289,7 @@ static void decode_thread(void* arg)
 			// video page parsing sometimes randomly fails, so try several times
 			vid_play_request = false;
 			for (int i = 0; i < 3; i++) {
-				network_waiting_status = "loading video page";
+				network_waiting_status = "Loading video page";
 				YouTubeVideoDetail tmp_video_info = youtube_parse_video_page(vid_url);
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_info = tmp_video_info;
@@ -191,8 +298,8 @@ static void decode_thread(void* arg)
 					result.error_description = cur_video_info.error;
 					continue;
 				}
-				network_waiting_status = NULL;
 				
+				network_waiting_status = "Reading stream";
 				if (VIDEO_AUDIO_SEPERATE) {
 					cur_video_stream = new NetworkStream(cur_video_info.video_stream_url, cur_video_info.video_stream_len);
 					cur_audio_stream = new NetworkStream(cur_video_info.audio_stream_url, cur_video_info.audio_stream_len);
@@ -214,6 +321,7 @@ static void decode_thread(void* arg)
 				deinit_streams();
 				network_decoder.deinit(); 
 			}
+			network_waiting_status = NULL;
 			
 			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
@@ -265,6 +373,8 @@ static void decode_thread(void* arg)
 			while (vid_play_request)
 			{
 				if (vid_seek_request && !vid_change_video_request) {
+					network_waiting_status = "Seeking";
+					vid_current_pos = vid_seek_pos / 1000;
 					Util_speaker_clear_buffer(0);
 					svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
 					while (vid_seek_request && !vid_change_video_request && vid_play_request) {
@@ -276,9 +386,11 @@ static void decode_thread(void* arg)
 						
 						if (network_decoder.need_reinit) {
 							Util_log_save("decoder", "reinit needed, performing...");
+							network_waiting_status = "Seek : Reiniting";
 							network_decoder.deinit();
 							if (cur_audio_stream) result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
 							else result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
+							network_waiting_status = "Seeking";
 							if (result.code != 0) {
 								if (network_decoder.need_reinit) continue; // someone locked while reinit, another seek request is made
 								Util_log_save("decoder", "reinit failed without lock (unknown reason)");
@@ -296,6 +408,7 @@ static void decode_thread(void* arg)
 						}
 					}
 					svcReleaseMutex(network_decoder_critical_lock);
+					network_waiting_status = NULL;
 				}
 				if (vid_change_video_request || !vid_play_request) break;
 				
@@ -365,6 +478,8 @@ static void decode_thread(void* arg)
 			}
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
 			
+			network_waiting_status = NULL;
+			
 			if (icon_thumbnail_handle != -1) thumbnail_cancel_request(icon_thumbnail_handle), icon_thumbnail_handle = -1;
 			deinit_streams();
 			while (Util_speaker_is_playing(0) && vid_play_request) usleep(10000);
@@ -387,7 +502,7 @@ static void decode_thread(void* arg)
 		else
 			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 
-		while (vid_thread_suspend)
+		while (vid_thread_suspend && !vid_play_request && !vid_change_video_request)
 			usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
 	}
 
@@ -420,7 +535,7 @@ static void convert_thread(void* arg)
 					result = network_decoder.get_decoded_video_frame(vid_width, vid_height, network_decoder.hw_decoder_enabled ? &video : &yuv_video, &pts);
 					osTickCounterUpdate(&counter0);
 					if (result.code != DEF_ERR_NEED_MORE_INPUT) break;
-					if (vid_pausing) usleep(10000);
+					if (vid_pausing || vid_pausing_seek) usleep(10000);
 					else usleep(3000);
 				} while (vid_play_request && !vid_seek_request && !vid_change_video_request);
 				
@@ -546,7 +661,7 @@ static void convert_thread(void* arg)
 			svcReleaseMutex(network_decoder_critical_lock);
 		} else usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 
-		while (vid_thread_suspend)
+		while (vid_thread_suspend && !vid_play_request && !vid_change_video_request)
 			usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
 	}
 	
@@ -728,6 +843,8 @@ Intent VideoPlayer_draw(void)
 		back_color = DEF_DRAW_BLACK;
 	}
 	
+	bool video_playing_bar_show = video_is_playing();
+	
 	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 
 	if(var_need_reflesh || !var_eco_mode)
@@ -797,18 +914,11 @@ Intent VideoPlayer_draw(void)
 		//texture filter
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 10, 180, 145, 10);
 		Draw(vid_msg[vid_linear_filter], 12.5, 180, 0.4, 0.4, color);
-
-		//allow skip frames
-		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, 180, 145, 10);
-		Draw(vid_msg[3 + vid_allow_skip_frames], 167.5, 180, 0.4, 0.4, color);
-
-		//time bar
-		Draw(Util_convert_seconds_to_time(vid_current_pos) + "/" + Util_convert_seconds_to_time(vid_duration), 110, 210, 0.5, 0.5, color);
-		Draw_texture(var_square_image[0], DEF_DRAW_GREEN, 5, 195, 310, 10);
-		if(vid_duration != 0)
-			Draw_texture(var_square_image[0], 0xFF800080, 5, 195, 310 * (vid_current_pos / vid_duration), 10);
 		
+		video_draw_playing_bar();
+
 		// debug 
+		/*
 		svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
 		auto cur_video_stream_bak = cur_video_stream;
 		auto cur_audio_stream_bak = cur_audio_stream;
@@ -842,7 +952,7 @@ Intent VideoPlayer_draw(void)
 				Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl , 208, xr - xl, 3);
 			}
 		}
-		svcReleaseMutex(streams_lock);
+		svcReleaseMutex(streams_lock);*/
 
 		if(vid_detail_mode)
 		{
@@ -890,7 +1000,6 @@ Intent VideoPlayer_draw(void)
 		if(Util_err_query_error_show_flag())
 			Util_err_draw();
 
-		Draw_bot_ui();
 		Draw_touch_pos();
 
 		Draw_apply_draw();
@@ -904,13 +1013,20 @@ Intent VideoPlayer_draw(void)
 		Util_expl_main(key);
 	else
 	{
-		if (key.p_start || (key.p_touch && key.touch_x >= 110 && key.touch_x <= 230 && key.touch_y >= 220 && key.touch_y <= 240)) {
+		if (video_playing_bar_show) video_update_playing_bar(key);
+		if (key.p_start) {
 			intent.next_scene = SceneType::SEARCH;
 		} else if(key.p_a) {
 			if(vid_play_request) {
-				if (vid_pausing) Util_speaker_resume(0);
-				else Util_speaker_pause(0);
-				vid_pausing = !vid_pausing;
+				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+				if (vid_pausing) {
+					if (!vid_pausing_seek) Util_speaker_resume(0);
+					vid_pausing = false;
+				} else {
+					if (!vid_pausing_seek) Util_speaker_pause(0);
+					vid_pausing = true;
+				}
+				svcReleaseMutex(small_resource_lock);
 			} else {
 				network_waiting_status = NULL;
 				vid_play_request = true;
@@ -923,36 +1039,9 @@ Intent VideoPlayer_draw(void)
 			vid_play_request = false;
 			var_need_reflesh = true;
 		}
-		else if(key.p_x)
-		{
-			/*
-			Util_expl_set_show_flag(true);
-			Util_expl_set_callback(Sapp0_callback);
-			Util_expl_set_cancel_callback(Sapp0_cancel);*/
-			{ // input video id
-				SwkbdState keyboard;
-				swkbdInit(&keyboard, SWKBD_TYPE_WESTERN, 2, 11);
-				swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY);
-				swkbdSetValidation(&keyboard, SWKBD_FIXEDLEN, 0, 0);
-				swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
-				swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
-				swkbdSetInitialText(&keyboard, "t8JXBtezzOc");
-				char video_id[64];
-				add_cpu_limit(50);
-				auto button_pressed = swkbdInputText(&keyboard, video_id, 12);
-				remove_cpu_limit(50);
-				if (button_pressed == SWKBD_BUTTON_RIGHT) send_change_video_request(std::string("https://www.youtube.com/watch?v=") + video_id);
-			}
-			
-		}
 		else if(key.p_y)
 		{
 			vid_detail_mode = !vid_detail_mode;
-			var_need_reflesh = true;
-		}
-		else if(key.p_touch && key.touch_x >= 5 && key.touch_x <= 314 && key.touch_y >= 195 && key.touch_y <= 204)
-		{
-			send_seek_request((vid_duration * 1000) * (((double)key.touch_x - 5) / 310));
 			var_need_reflesh = true;
 		}
 		else if(key.p_touch && key.touch_x >= 165 && key.touch_x <= 309 && key.touch_y >= 165 && key.touch_y <= 174)
@@ -966,11 +1055,6 @@ Intent VideoPlayer_draw(void)
 			for(int i = 0; i < 8; i++)
 				Draw_c2d_image_set_filter(&vid_image[i], vid_linear_filter);
 
-			var_need_reflesh = true;
-		}
-		else if(key.p_touch && key.touch_x >= 165 && key.touch_x <= 309 && key.touch_y >= 180 && key.touch_y <= 189)
-		{
-			vid_allow_skip_frames = !vid_allow_skip_frames;
 			var_need_reflesh = true;
 		}
 		else if(key.h_touch || key.p_touch)

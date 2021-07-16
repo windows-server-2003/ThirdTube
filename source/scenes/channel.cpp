@@ -3,9 +3,9 @@
 #include <numeric>
 
 #include "scenes/channel.hpp"
+#include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
 
-#define VIDEO_LIST_Y_HIGH 220
 #define VIDEOS_VERTICAL_INTERVAL 60
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -28,6 +28,7 @@ namespace Channel {
 	bool already_init = false;
 	bool exiting = false;
 	
+	int VIDEO_LIST_Y_HIGH = 240;
 	VerticalScroller videos_scroller = VerticalScroller(0, 320, 0, VIDEO_LIST_Y_HIGH);
 	
 	int selected_tab = 0;
@@ -56,9 +57,11 @@ static void on_channel_load() { // this will be called while resource_lock is lo
 	thumbnail_handles.assign(channel_info.videos.size(), -1);
 	if (channel_info.icon_url != "") icon_thumbnail_handle = thumbnail_request(channel_info.icon_url, SceneType::CHANNEL, 1001);
 	if (channel_info.banner_url != "") banner_thumbnail_handle = thumbnail_request(channel_info.banner_url, SceneType::CHANNEL, 1000);
+	var_need_reflesh = true;
 }
 static void on_channel_load_more() {
 	thumbnail_handles.resize(channel_info.videos.size(), -1);
+	var_need_reflesh = true;
 }
 
 static bool send_load_request(std::string url) {
@@ -245,6 +248,10 @@ Intent Channel_draw(void)
 	
 	thumbnail_set_active_scene(SceneType::CHANNEL);
 	
+	bool video_playing_bar_show = video_is_playing();
+	VIDEO_LIST_Y_HIGH = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
+	videos_scroller.change_area(0, 320, 0, VIDEO_LIST_Y_HIGH);
+	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	int video_num = channel_info.videos.size();
 	int displayed_l, displayed_r;
@@ -312,8 +319,7 @@ Intent Channel_draw(void)
 		
 		draw_channel_content(channel_info_bak, key, color);
 		
-		Draw_texture(var_square_image[0], color, 0, VIDEO_LIST_Y_HIGH, 320, 1);
-		Draw_texture(var_square_image[0], back_color, 0, VIDEO_LIST_Y_HIGH + 1, 320, 240 - VIDEO_LIST_Y_HIGH - 1);
+		if (video_playing_bar_show) video_draw_playing_bar();
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
@@ -352,6 +358,7 @@ Intent Channel_draw(void)
 		}
 		auto released_point = videos_scroller.update(key, content_height);
 		
+		if (video_playing_bar_show) video_update_playing_bar(key);
 		// handle touches
 		if (released_point.second != -1) do {
 			int released_x = released_point.first;
