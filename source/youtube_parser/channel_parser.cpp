@@ -83,6 +83,7 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 				res.banner_url = banner["url"].string_value();
 			}*/
 		}
+		if (res.banner_url.substr(0, 2) == "//") res.banner_url = "https:" + res.banner_url;
 	}
 	{ // icon
 		int max_width = -1;
@@ -94,6 +95,7 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 				res.icon_url = icon["url"].string_value();
 			}
 		}
+		if (res.icon_url.substr(0, 2) == "//") res.icon_url = "https:" + res.icon_url;
 	}
 	debug(res.banner_url);
 	debug(res.icon_url);

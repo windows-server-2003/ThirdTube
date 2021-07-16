@@ -149,6 +149,7 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 			}
 		}
 		res.author.icon_url = icon_48 != "" ? icon_48 : icon_largest;
+		if (res.author.icon_url.substr(0, 2) == "//") res.author.icon_url = "https:" + res.author.icon_url;
 	};
 	
 	bool ok = false;

@@ -35,6 +35,8 @@ struct YouTubeSearchResult {
 	
 	std::string continue_token;
 	std::string continue_key;
+	
+	bool has_continue() const { return continue_token != "" && continue_key != ""; }
 };
 YouTubeSearchResult youtube_parse_search(std::string url);
 // takes the previous result, returns the new result with both old items and new items

@@ -59,7 +59,7 @@ bool is_webpage_loading_requested(LoadRequestType request_type) {
 static std::vector<std::string> truncate_str(std::string input_str, int max_width, double x_size, double y_size) {
 	if (input_str == "") return {""};
 	
-	std::vector<std::string> input(128);
+	std::vector<std::string> input(129);
 	{
 		int out_num;
 		Exfont_text_parse(input_str, &input[0], 128, &out_num);
@@ -180,10 +180,10 @@ static void load_search_continue(SearchRequestArg arg) {
 	auto new_result = youtube_continue_search(prev_result);
 	
 	Util_log_save("wloader/search-c", "truncate start");
-	std::vector<std::vector<std::string> > new_wrapped_titles(new_result.results.size());
-	for (size_t i = 0; i < new_result.results.size(); i++) {
+	std::vector<std::vector<std::string> > wrapped_titles_add(new_result.results.size() - prev_result.results.size());
+	for (size_t i = prev_result.results.size(); i < new_result.results.size(); i++) {
 		std::string cur_str = new_result.results[i].type == YouTubeSearchResult::Item::VIDEO ? new_result.results[i].video.title : new_result.results[i].channel.name;
-		new_wrapped_titles[i] = truncate_str(cur_str, arg.max_width, arg.text_size_x, arg.text_size_y);
+		wrapped_titles_add[i - prev_result.results.size()] = truncate_str(cur_str, arg.max_width, arg.text_size_x, arg.text_size_y);
 	}
 	Util_log_save("wloader/search-c", "truncate end");
 	
@@ -197,7 +197,7 @@ static void load_search_continue(SearchRequestArg arg) {
 	if (new_result.error != "") arg.result->error = new_result.error;
 	else {
 		*arg.result = new_result;
-		*arg.wrapped_titles = new_wrapped_titles;
+		arg.wrapped_titles->insert(arg.wrapped_titles->end(), wrapped_titles_add.begin(), wrapped_titles_add.end());
 	}
 	if (arg.on_load_complete) arg.on_load_complete();
 	svcReleaseMutex(arg.lock);
@@ -235,9 +235,9 @@ static void load_search_channel_continue(ChannelLoadRequestArg arg) {
 	auto new_result = youtube_channel_page_continue(prev_result);
 	
 	Util_log_save("wloader/channel-c", "truncate start");
-	std::vector<std::vector<std::string> > new_wrapped_titles(new_result.videos.size());
-	for (size_t i = 0; i < new_result.videos.size(); i++)
-		new_wrapped_titles[i] = truncate_str(new_result.videos[i].title, arg.max_width, arg.text_size_x, arg.text_size_y);
+	std::vector<std::vector<std::string> > wrapped_titles_add(new_result.videos.size() - prev_result.videos.size());
+	for (size_t i = prev_result.videos.size(); i < new_result.videos.size(); i++)
+		wrapped_titles_add[i - prev_result.videos.size()] = truncate_str(new_result.videos[i].title, arg.max_width, arg.text_size_x, arg.text_size_y);
 	Util_log_save("wloader/channel-c", "truncate end");
 	
 	
@@ -250,7 +250,7 @@ static void load_search_channel_continue(ChannelLoadRequestArg arg) {
 	if (new_result.error != "") arg.result->error = new_result.error;
 	else {
 		*arg.result = new_result;
-		*arg.wrapped_titles = new_wrapped_titles;
+		arg.wrapped_titles->insert(arg.wrapped_titles->end(), wrapped_titles_add.begin(), wrapped_titles_add.end());
 	}
 	if (arg.on_load_complete) arg.on_load_complete();
 	svcReleaseMutex(arg.lock);

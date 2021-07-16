@@ -299,7 +299,8 @@ Intent Channel_draw(void)
 		if (selected_tab == 0) {
 			content_height += channel_info_bak.videos.size() * VIDEOS_VERTICAL_INTERVAL;
 			// load more
-			if (content_height - videos_scroller.get_offset() < VIDEO_LIST_Y_HIGH && !is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE)) {
+			if (content_height - videos_scroller.get_offset() < VIDEO_LIST_Y_HIGH && !is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE) &&
+				channel_info_bak.videos.size()) {
 				send_load_more_request();
 			}
 			if (channel_info_bak.error != "" || channel_info_bak.has_continue()) content_height += LOAD_MORE_MARGIN;

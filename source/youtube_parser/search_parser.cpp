@@ -55,6 +55,7 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSearchResult::I
 				}
 			}
 			cur_result.icon_url = best_icon;
+			if (cur_result.icon_url.substr(0, 2) == "//") cur_result.icon_url = "https:" + cur_result.icon_url;
 		}
 		
 		res.push_back(YouTubeSearchResult::Item(cur_result));
