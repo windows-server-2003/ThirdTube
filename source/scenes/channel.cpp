@@ -165,29 +165,29 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 	if (is_webpage_loading_requested(LoadRequestType::CHANNEL)) {
 		Draw("Loading", 0, 0, 0.5, 0.5, color);
 	} else  {
-		int y_offset = 0;
+		int y_offset = -videos_scroller.get_offset();
 		if (channel_info.banner_url != "") {
-			thumbnail_draw(banner_thumbnail_handle, 0, y_offset - videos_scroller.get_offset(), 320, BANNER_HEIGHT);
+			thumbnail_draw(banner_thumbnail_handle, 0, y_offset, 320, BANNER_HEIGHT);
 			y_offset += BANNER_HEIGHT;
 		}
 		y_offset += ICON_MARGIN;
 		if (channel_info.icon_url != "") {
-			thumbnail_draw(icon_thumbnail_handle, ICON_MARGIN, y_offset - videos_scroller.get_offset(), ICON_SIZE, ICON_SIZE);
+			thumbnail_draw(icon_thumbnail_handle, ICON_MARGIN, y_offset, ICON_SIZE, ICON_SIZE);
 		}
-		Draw(channel_info.name, ICON_SIZE + ICON_MARGIN * 3, y_offset - videos_scroller.get_offset() - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
+		Draw(channel_info.name, ICON_SIZE + ICON_MARGIN * 3, y_offset - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
 		y_offset += ICON_SIZE;
 		y_offset += ICON_MARGIN;
 		
-		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, 0, y_offset - videos_scroller.get_offset(), 320, TAB_SELECTOR_HEIGHT);
-		Draw_texture(var_square_image[0], DEF_DRAW_GRAY, selected_tab * 320 / TAB_NUM, y_offset - videos_scroller.get_offset(), 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
-		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, selected_tab * 320 / TAB_NUM, y_offset - videos_scroller.get_offset() + TAB_SELECTOR_HEIGHT - TAB_SELECTOR_SELECTED_LINE_HEIGHT,
+		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, 0, y_offset, 320, TAB_SELECTOR_HEIGHT);
+		Draw_texture(var_square_image[0], DEF_DRAW_GRAY, selected_tab * 320 / TAB_NUM, y_offset, 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
+		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, selected_tab * 320 / TAB_NUM, y_offset + TAB_SELECTOR_HEIGHT - TAB_SELECTOR_SELECTED_LINE_HEIGHT,
 			320 / TAB_NUM + 1, TAB_SELECTOR_SELECTED_LINE_HEIGHT);
 		y_offset += TAB_SELECTOR_HEIGHT;
 		
 		if (selected_tab == 0) { // videos
 			if (channel_info.video_num) {
 				for (int i = channel_info.displayed_l; i < channel_info.displayed_r; i++) {
-					int y_l = y_offset + i * VIDEOS_VERTICAL_INTERVAL - videos_scroller.get_offset();
+					int y_l = y_offset + i * VIDEOS_VERTICAL_INTERVAL;
 					int y_r = y_l + VIDEOS_VERTICAL_INTERVAL;
 					
 					if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r && videos_scroller.is_selecting()) {
@@ -209,19 +209,18 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 					if (is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE)) draw_string = "Loading...";
 					else if (channel_info.error != "") draw_string = channel_info.error;
 					
-					int y = y_offset - videos_scroller.get_offset();
-					if (y < VIDEO_LIST_Y_HIGH) {
+					if (y_offset < VIDEO_LIST_Y_HIGH) {
 						int width = Draw_get_width(draw_string, 0.5, 0.5);
-						Draw(draw_string, (320 - width) / 2, y, 0.5, 0.5, color);
+						Draw(draw_string, (320 - width) / 2, y_offset, 0.5, 0.5, color);
 					}
 					y_offset += LOAD_MORE_MARGIN;
 				}
 			} else Draw("Empty", 0, y_offset, 0.5, 0.5, color);
 		} else if (selected_tab == 1) { // channel description
-			Draw("Channel Description :", 3, y_offset - videos_scroller.get_offset(), MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
+			Draw("Channel Description :", 3, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
 			y_offset += Draw_get_height("Channel Description :", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 			y_offset += 3; // without this, the following description somehow overlaps with the above text
-			Draw(channel_info.description, 3, y_offset - videos_scroller.get_offset(), 0.5, 0.5, color);
+			Draw(channel_info.description, 3, y_offset, 0.5, 0.5, color);
 			y_offset += Draw_get_height(channel_info.description, 0.5, 0.5);
 		}
 	}
