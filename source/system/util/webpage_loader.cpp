@@ -22,7 +22,7 @@ static void delete_request(LoadRequestType request_type) {
 		delete ((SearchRequestArg *) requests[(int) request_type]);
 	} else if (request_type == LoadRequestType::CHANNEL || request_type == LoadRequestType::CHANNEL_CONTINUE) {
 		delete ((ChannelLoadRequestArg *) requests[(int) request_type]);
-	} else if (request_type == LoadRequestType::VIDEO || request_type == LoadRequestType::VIDEO_SUGGESTION_CONTINUE) {
+	} else if (request_type == LoadRequestType::VIDEO || request_type == LoadRequestType::VIDEO_SUGGESTION_CONTINUE || request_type == LoadRequestType::VIDEO_COMMENT_CONTINUE) {
 		delete ((VideoRequestArg *) requests[(int) request_type]);
 	}
 	// add here
@@ -199,9 +199,9 @@ static void load_video(VideoRequestArg arg) {
 		}
 	}
 	// wrap suggestion titles
-	std::vector<std::vector<std::string> > suggestion_wrapped_titles(tmp_video_info.suggestions.size());
+	std::vector<std::vector<std::string> > suggestion_titles_lines(tmp_video_info.suggestions.size());
 	for (size_t i = 0; i < tmp_video_info.suggestions.size(); i++)
-		suggestion_wrapped_titles[i] = truncate_str(tmp_video_info.suggestions[i].title, arg.suggestion_title_max_width, 2,
+		suggestion_titles_lines[i] = truncate_str(tmp_video_info.suggestions[i].title, arg.suggestion_title_max_width, 2,
 			arg.suggestion_title_text_size_x, arg.suggestion_title_text_size_y);
 	Util_log_save("wloader/video", "truncate end");
 	
@@ -209,7 +209,7 @@ static void load_video(VideoRequestArg arg) {
 	svcWaitSynchronization(arg.lock, std::numeric_limits<s64>::max());
 	*arg.result = tmp_video_info;
 	*arg.description_lines = description_lines;
-	*arg.suggestion_wrapped_titles = suggestion_wrapped_titles;
+	*arg.suggestion_titles_lines = suggestion_titles_lines;
 	*arg.title_lines = title_lines;
 	*arg.title_font_size = title_font_size;
 	
@@ -230,9 +230,9 @@ static void load_video_suggestion_continue(VideoRequestArg arg) {
 	remove_cpu_limit(25);
 	
 	// wrap suggestion titles
-	std::vector<std::vector<std::string> > suggestion_wrapped_titles_add(new_result.suggestions.size() - prev_result.suggestions.size());
+	std::vector<std::vector<std::string> > suggestion_titles_lines_add(new_result.suggestions.size() - prev_result.suggestions.size());
 	for (size_t i = prev_result.suggestions.size(); i < new_result.suggestions.size(); i++)
-		suggestion_wrapped_titles_add[i - prev_result.suggestions.size()] = truncate_str(new_result.suggestions[i].title, arg.suggestion_title_max_width, 2,
+		suggestion_titles_lines_add[i - prev_result.suggestions.size()] = truncate_str(new_result.suggestions[i].title, arg.suggestion_title_max_width, 2,
 			arg.suggestion_title_text_size_x, arg.suggestion_title_text_size_y);
 	Util_log_save("wloader/video", "truncate end");
 	
@@ -246,12 +246,63 @@ static void load_video_suggestion_continue(VideoRequestArg arg) {
 	if (new_result.error != "") arg.result->error = new_result.error;
 	else {
 		*arg.result = new_result;
-		arg.suggestion_wrapped_titles->insert(arg.suggestion_wrapped_titles->end(), suggestion_wrapped_titles_add.begin(), suggestion_wrapped_titles_add.end());
+		arg.suggestion_titles_lines->insert(arg.suggestion_titles_lines->end(), suggestion_titles_lines_add.begin(), suggestion_titles_lines_add.end());
 	}
 	if (arg.on_load_complete) arg.on_load_complete();
 	svcReleaseMutex(arg.lock);
 	release();
 }
+#define COMMENT_MAX_LINE_NUM 40 // this limit exists due to performance reason (TODO : more efficient truncating)
+static void load_video_comment_continue(VideoRequestArg arg) {
+	lock();
+	if (requests[(int) LoadRequestType::VIDEO]) {
+		release();
+		return;
+	}
+	auto prev_result = *arg.result;
+	release();
+	
+	add_cpu_limit(25);
+	auto new_result = youtube_video_page_load_more_comments(prev_result);
+	remove_cpu_limit(25);
+	
+	// wrap comments
+	Util_log_save("wloader/v-comment", "truncate end");
+	std::vector<std::vector<std::string> > comments_lines_add(new_result.comments.size() - prev_result.comments.size());
+	for (size_t i = prev_result.comments.size(); i < new_result.comments.size(); i++) {
+		auto &cur_comment = new_result.comments[i].content;
+		auto &result = comments_lines_add[i - prev_result.comments.size()];
+		auto itr = cur_comment.begin();
+		while (itr != cur_comment.end()) {
+			if (result.size() >= COMMENT_MAX_LINE_NUM) break;
+			auto next_itr = std::find(itr, cur_comment.end(), '\n');
+			auto cur_lines = truncate_str(std::string(itr, next_itr), arg.comment_max_width, COMMENT_MAX_LINE_NUM - result.size(),
+				arg.comment_text_size_x, arg.comment_text_size_y);
+			result.insert(result.end(), cur_lines.begin(), cur_lines.end());
+			
+			if (next_itr != cur_comment.end()) itr = std::next(next_itr);
+			else break;
+		}
+	}
+	Util_log_save("wloader/v-comment", "truncate end");
+	
+	
+	lock();
+	if (requests[(int) LoadRequestType::VIDEO]) {
+		release();
+		return;
+	}
+	svcWaitSynchronization(arg.lock, std::numeric_limits<s64>::max());
+	if (new_result.error != "") arg.result->error = new_result.error;
+	else {
+		*arg.result = new_result;
+		arg.comments_lines->insert(arg.comments_lines->end(), comments_lines_add.begin(), comments_lines_add.end());
+	}
+	if (arg.on_load_complete) arg.on_load_complete();
+	svcReleaseMutex(arg.lock);
+	release();
+}
+
 
 
 static bool should_be_running = true;
@@ -262,13 +313,8 @@ void webpage_loader_thread_func(void* arg) {
 	while (should_be_running) {
 		lock();
 		LoadRequestType next_type = LoadRequestType::NONE;
-		if (requests[(int) LoadRequestType::SEARCH]) next_type = LoadRequestType::SEARCH;
-		else if (requests[(int) LoadRequestType::SEARCH_CONTINUE]) next_type = LoadRequestType::SEARCH_CONTINUE;
-		else if (requests[(int) LoadRequestType::CHANNEL]) next_type = LoadRequestType::CHANNEL;
-		else if (requests[(int) LoadRequestType::CHANNEL_CONTINUE]) next_type = LoadRequestType::CHANNEL_CONTINUE;
-		else if (requests[(int) LoadRequestType::VIDEO]) next_type = LoadRequestType::VIDEO;
-		else if (requests[(int) LoadRequestType::VIDEO_SUGGESTION_CONTINUE]) next_type = LoadRequestType::VIDEO_SUGGESTION_CONTINUE;
 		// add here
+		for (int i = 0; i < 7; i++) if (requests[i]) next_type = (LoadRequestType) i;
 		
 		if (next_type != LoadRequestType::NONE) in_progress[(int) next_type] = true;
 		release();
@@ -283,6 +329,7 @@ void webpage_loader_thread_func(void* arg) {
 		if (next_type == LoadRequestType::CHANNEL_CONTINUE) load_search_channel_continue(*((ChannelLoadRequestArg *) requests[(int) LoadRequestType::CHANNEL_CONTINUE]));
 		if (next_type == LoadRequestType::VIDEO) load_video(*((VideoRequestArg *) requests[(int) LoadRequestType::VIDEO]));
 		if (next_type == LoadRequestType::VIDEO_SUGGESTION_CONTINUE) load_video_suggestion_continue(*((VideoRequestArg *) requests[(int) LoadRequestType::VIDEO_SUGGESTION_CONTINUE]));
+		if (next_type == LoadRequestType::VIDEO_COMMENT_CONTINUE) load_video_comment_continue(*((VideoRequestArg *) requests[(int) LoadRequestType::VIDEO_COMMENT_CONTINUE]));
 		// add here
 		
 		lock();

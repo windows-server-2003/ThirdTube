@@ -200,6 +200,12 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 			res.error = "INNERTUBE_API_KEY not found";
 		}
 	}
+	
+	for (auto i : initial_data["engagementPanels"].array_items()) if (i["engagementPanelSectionListRenderer"] != Json()) {
+		for (auto j : i["engagementPanelSectionListRenderer"]["content"]["sectionListRenderer"]["continuations"].array_items()) if (j["reloadContinuationData"] != Json()) {
+			res.comment_continue_token = j["reloadContinuationData"]["continuation"].string_value();
+		}
+	}
 }
 
 YouTubeVideoDetail youtube_parse_video_page(std::string url) {
@@ -284,25 +290,85 @@ YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDe
 	if (new_result.continue_token == "") debug("failed to get next continue token");*/
 	return new_result;
 }
+YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetail &prev_result) {
+	YouTubeVideoDetail new_result = prev_result;
+	
+	if (prev_result.comment_continue_token == "") {
+		new_result.error = "comment continue token empty";
+		return new_result;
+	}
+	Json comment_data;
+	{
+		std::string received_str = http_get("https://m.youtube.com/watch_comment?action_get_comments=1&pbj=1&ctoken=" + prev_result.comment_continue_token, 
+			{{"X-YouTube-Client-Version", "2.20210714.00.00"}, {"X-YouTube-Client-Name", "2"}});
+		if (received_str != "") {
+			std::string json_err;
+			comment_data = Json::parse(received_str, json_err);
+			if (json_err != "") debug("[comment] json parsing failed : " + json_err);
+		}
+	}
+	if (comment_data == Json()) {
+		new_result.error = "Failed to load comments";
+		return new_result;
+	}
+	new_result.comment_continue_token = "";
+	for (auto i : comment_data.array_items()) if (i["response"] != Json()) {
+		for (auto comment : i["response"]["continuationContents"]["commentSectionContinuation"]["items"].array_items()) if (comment["commentThreadRenderer"] != Json()) {
+			auto comment_renderer = comment["commentThreadRenderer"]["comment"]["commentRenderer"];
+			YouTubeVideoDetail::Comment cur_comment;
+			// get the icon of the author with minimum size
+			cur_comment.id = comment_renderer["commentId"].string_value();
+			cur_comment.content = get_text_from_object(comment_renderer["contentText"]);
+			cur_comment.reply_num = comment_renderer["replyCount"].int_value(); // Json.int_value() defaults to zero, so... it works
+			cur_comment.author.name = get_text_from_object(comment_renderer["authorText"]);
+			cur_comment.author.url = "https://m.youtube.com" + comment_renderer["authorEndpoint"]["browseEndpoint"]["canonicalBaseUrl"].string_value();
+			{
+				int min_width = 1000000;
+				for (auto icon : comment_renderer["authorThumbnail"]["thumbnails"].array_items()) {
+					int cur_width = icon["width"].int_value();
+					if (min_width > cur_width) {
+						min_width = cur_width;
+						cur_comment.author.icon_url = icon["url"].string_value();
+					}
+				}
+			}
+			new_result.comments.push_back(cur_comment);
+		}
+		for (auto j : i["response"]["continuationContents"]["commentSectionContinuation"]["continuations"].array_items()) if (j["nextContinuationData"] != Json())
+			new_result.comment_continue_token = j["nextContinuationData"]["continuation"].string_value();
+	}
+	return new_result;
+}
 
 #ifdef _WIN32
 int main() {
 	std::string url;
 	std::cin >> url;
 	auto result = youtube_parse_video_page(url);
-	for (auto i : result.suggestions) {
-		std::cerr << i.title << " " << i.url << std::endl;
-	}
 	
-	for (int cnt = 0; cnt < 3; cnt++) {
-		std::cerr << "load more... : " << cnt << std::endl;
+	int cnt = 0;
+	while (result.has_more_comments()) {
 		
-		auto new_result = youtube_video_page_load_more_suggestions(result);
+		auto new_result = youtube_video_page_load_more_comments(result);
 		
-		for (int i = result.suggestions.size(); i < (int) new_result.suggestions.size(); i++) {
-			std::cerr << new_result.suggestions[i].title << " " << new_result.suggestions[i].url << std::endl;
+		if (new_result.error != "") {
+			std::cout << new_result.error << std::endl;
+			break;
 		}
+		/*
+		for (int i = result.comments.size(); i < (int) new_result.comments.size(); i++) {
+			auto cur_comment = new_result.comments[i];
+			std::cerr << i << cur_comment.author.name << " " << cur_comment.author.url << " " << cur_comment.author.icon_url << " " << cur_comment.id << " " << cur_comment.reply_num << std::endl;
+			std::cerr << cur_comment.content << std::endl;
+			std::cerr << std::endl;
+		}*/
 		result = new_result;
+		
+		int size = 0;
+		for (auto i : new_result.comments) size += i.content.size();
+		std::cout << cnt << " : " << new_result.comments.size() << " comments : " << size << std::endl;
+		std::cout << new_result.comments.back().content << std::endl;
+		cnt++;
 	}
 	return 0;
 }

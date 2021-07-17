@@ -132,7 +132,6 @@ void NetworkStreamDownloader::downloader_thread() {
 			double margin_percentage;
 			if (first_not_downloaded_block == read_head_block) margin_percentage = 0;
 			else margin_percentage = (double) (first_not_downloaded_block * BLOCK_SIZE - read_heads[i]) / streams[i]->len * 100;
-			// Util_log_save("net/dl", std::to_string(margin_percentage_min) + " " + std::to_string(margin_percentage) + " " + std::to_string(streams[i]->len) + " " + std::to_string(first_not_downloaded_block));
 			if (margin_percentage_min > margin_percentage) {
 				margin_percentage_min = margin_percentage;
 				cur_stream_index = i;
@@ -165,9 +164,7 @@ void NetworkStreamDownloader::downloader_thread() {
 			auto context = network_result.second;
 			std::vector<u8> data(expected_len);
 			u32 len_read;
-				Util_log_save("net/dl", "dl");
 			httpcDownloadData(&context, &data[0], expected_len, &len_read);
-				Util_log_save("net/dl", "dl ok");
 			if (len_read != expected_len) {
 				Util_log_save(LOG_THREAD_STR, "size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(len_read));
 				cur_stream->error = true;
@@ -221,24 +218,24 @@ std::pair<std::string, httpcContext> access_http_get(std::string url, std::map<s
 		if (!request_headers.count("User-Agent")) ret = httpcAddRequestHeaderField(&context, "User-Agent", "httpc-example/1.0.0");
 		for (auto i : request_headers) ret = httpcAddRequestHeaderField(&context, i.first.c_str(), i.second.c_str());
 
-	Util_log_save("http", "begin req");
+		// Util_log_save("http", "begin req");
 		ret = httpcBeginRequest(&context);
-	Util_log_save("http", "begin req ok");
+		// Util_log_save("http", "begin req ok");
 		if (ret != 0) {
 			httpcCloseContext(&context);
 			return {"httpcBeginRequest() failed : " + std::to_string(ret), context};
 		}
 
-	Util_log_save("http", "get st");
+		// Util_log_save("http", "get st");
 		ret = httpcGetResponseStatusCode(&context, &statuscode);
-	Util_log_save("http", "get st ok");
+		// Util_log_save("http", "get st ok");
 		if (ret != 0) {
 			httpcCloseContext(&context);
 			return {"httpcGetResponseStatusCode() failed : " + std::to_string(ret), context};
 		}
 
 		if ((statuscode >= 301 && statuscode <= 303) || (statuscode >= 307 && statuscode <= 308)) {
-	Util_log_save("http", "redir");
+			Util_log_save("http", "redir");
 			char newurl[0x1000];
 			ret = httpcGetResponseHeader(&context, "Location", newurl, 0x1000);
 			Util_log_save("httpc", "redirect");
@@ -270,17 +267,17 @@ std::pair<std::string, httpcContext> access_http_post(std::string url, std::vect
 		for (auto i : request_headers) ret = httpcAddRequestHeaderField(&context, i.first.c_str(), i.second.c_str());
 		httpcAddPostDataRaw(&context, (u32 *) &content[0], content.size());
 
-		Util_log_save("http/post", "begin req");
+		// Util_log_save("http/post", "begin req");
 		ret = httpcBeginRequest(&context);
-		Util_log_save("http/post", "begin req ok");
+		// Util_log_save("http/post", "begin req ok");
 		if (ret != 0) {
 			httpcCloseContext(&context);
 			return {"httpcBeginRequest() failed : " + std::to_string(ret), context};
 		}
 
-		Util_log_save("http/post", "get st");
+		// Util_log_save("http/post", "get st");
 		ret = httpcGetResponseStatusCode(&context, &statuscode);
-		Util_log_save("http/post", "get st ok : " + std::to_string(statuscode));
+		// Util_log_save("http/post", "get st ok : " + std::to_string(statuscode));
 		if (ret != 0) {
 			httpcCloseContext(&context);
 			return {"httpcGetResponseStatusCode() failed : " + std::to_string(ret), context};
@@ -290,7 +287,6 @@ std::pair<std::string, httpcContext> access_http_post(std::string url, std::vect
 			Util_log_save("http/post", "redir");
 			char newurl[0x1000];
 			ret = httpcGetResponseHeader(&context, "Location", newurl, 0x1000);
-			Util_log_save("httpc", "redirect");
 			url = std::string(newurl);
 			httpcCloseContext(&context); // close this context before we try the next
 		}

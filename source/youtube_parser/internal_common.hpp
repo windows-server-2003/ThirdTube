@@ -27,7 +27,7 @@
 using namespace json11;
 
 namespace youtube_parser {
-	std::string http_get(const std::string &url);
+	std::string http_get(const std::string &url, std::map<std::string, std::string> header = {});
 	std::string http_post_json(const std::string &url, const std::string &json);
 	
 	std::string url_decode(std::string input);

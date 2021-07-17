@@ -56,13 +56,25 @@ struct YouTubeVideoDetail {
 	size_t both_stream_len;
 	
 	std::vector<YouTubeVideoSuccinct> suggestions;
+	struct Comment {
+		YouTubeChannelSuccinct author;
+		std::string content;
+		std::string id;
+		int reply_num;
+	};
+	std::vector<Comment> comments;
+	
 	std::string continue_key;
 	std::string suggestions_continue_token;
+	std::string comment_continue_token;
 	
 	bool has_more_suggestions() { return continue_key != "" && suggestions_continue_token != ""; }
+	bool has_more_comments() { return comment_continue_token != ""; }
 };
+// this function does not load comments; call youtube_video_page_load_more_comments() if necessary
 YouTubeVideoDetail youtube_parse_video_page(std::string url);
 YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDetail &prev_result);
+YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetail &prev_result);
 
 
 

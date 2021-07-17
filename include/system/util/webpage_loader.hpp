@@ -13,6 +13,7 @@ enum class LoadRequestType {
 	CHANNEL_CONTINUE,
 	VIDEO,
 	VIDEO_SUGGESTION_CONTINUE,
+	VIDEO_COMMENT_CONTINUE,
 	NONE // used internally
 };
 struct SearchRequestArg {
@@ -53,11 +54,15 @@ struct VideoRequestArg {
 	int suggestion_title_max_width;
 	float suggestion_title_text_size_x;
 	float suggestion_title_text_size_y;
+	int comment_max_width;
+	float comment_text_size_x;
+	float comment_text_size_y;
 	
 	std::vector<std::string> *title_lines;
 	float *title_font_size;
 	std::vector<std::string> *description_lines;
-	std::vector<std::vector<std::string> > *suggestion_wrapped_titles;
+	std::vector<std::vector<std::string> > *suggestion_titles_lines;
+	std::vector<std::vector<std::string> > *comments_lines;
 	
 	void (*on_load_complete) (void);
 };
