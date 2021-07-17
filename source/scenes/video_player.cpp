@@ -222,6 +222,7 @@ static void send_change_video_request(std::string url) {
 static void send_seek_request(double pos) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	vid_seek_pos = pos;
+	vid_seek_pos = std::max(0.0, std::min((double) vid_seek_pos, (vid_duration - 2) * 1000));
 	vid_current_pos = pos / 1000;
 	vid_seek_request = true;
 	if (network_decoder.ready) // avoid locking while initing

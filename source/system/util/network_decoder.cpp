@@ -36,6 +36,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	NetworkStream *stream = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->second;
 	size_t buf_size = buf_size_;
 	
+	if (stream->read_head >= stream->len) return AVERROR_EOF;
 	// network_waiting_status = cacher->waiting_status;
 	bool cpu_limited = false;
 	while (!stream->is_data_available(stream->read_head, std::min(buf_size, stream->len - stream->read_head))) {
