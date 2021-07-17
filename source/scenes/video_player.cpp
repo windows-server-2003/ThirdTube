@@ -982,7 +982,7 @@ static void draw_video_content(Hid_info key, int color) {
 			for (int i = 0; i < (int) title_lines.size(); i++) {
 				Draw(title_lines[i], ICON_SIZE + SMALL_MARGIN * 2, y_offset - 3 + 15 * i, title_font_size, title_font_size, color);
 			}
-			Draw(cur_video_info.author.name, ICON_SIZE + SMALL_MARGIN * 2, y_offset + 15 * title_lines.size(), 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+			Draw(cur_video_info.author.name, ICON_SIZE + SMALL_MARGIN * 2, y_offset + 15 * (int) title_lines.size(), 0.5, 0.5, DEF_DRAW_DARK_GRAY);
 			y_offset += ICON_SIZE + SMALL_MARGIN;
 			
 			Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
