@@ -346,13 +346,13 @@ Intent Search_draw(void)
 			if (key.p_a) {
 				if (!is_webpage_loading_requested(LoadRequestType::SEARCH)) {
 					SwkbdState keyboard;
-					swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 11);
+					swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 32);
 					swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY | SWKBD_PREDICTIVE_INPUT);
 					swkbdSetValidation(&keyboard, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
 					swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
 					swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
 					swkbdSetInitialText(&keyboard, cur_search_word.c_str());
-					char search_word[128];
+					char search_word[129];
 					add_cpu_limit(40);
 					auto button_pressed = swkbdInputText(&keyboard, search_word, 32);
 					remove_cpu_limit(40);
