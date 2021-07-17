@@ -20,8 +20,6 @@
 
 #define TAB_NUM 2
 
-#define MIDDLE_FONT_SIZE 0.641
-
 namespace Channel {
 	std::string string_resource[DEF_CHANNEL_NUM_OF_MSG];
 	bool thread_suspend = false;
@@ -66,6 +64,8 @@ static void on_channel_load_more() {
 
 static bool send_load_request(std::string url) {
 	if (!is_webpage_loading_requested(LoadRequestType::CHANNEL)) {
+		cancel_webpage_loading(LoadRequestType::CHANNEL_CONTINUE);
+		
 		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 		
 		cur_channel_url = url;

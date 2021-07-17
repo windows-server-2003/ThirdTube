@@ -54,6 +54,8 @@ static void on_search_more_complete() {
 
 static bool send_search_request(std::string search_word) {
 	if (!is_webpage_loading_requested(LoadRequestType::SEARCH)) {
+		cancel_webpage_loading(LoadRequestType::SEARCH_CONTINUE);
+		
 		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 		cur_search_word = search_word;
 		reset_search_result();
@@ -85,7 +87,7 @@ static bool send_load_more_request() {
 		request->text_size_x = 0.5;
 		request->text_size_y = 0.5;
 		request->wrapped_titles = &wrapped_titles;
-		request->on_load_complete = on_search_more_complete; // we don't have to reset hid/scroll state after load-more
+		request->on_load_complete = on_search_more_complete;
 		request_webpage_loading(LoadRequestType::SEARCH_CONTINUE, request);
 		res = true;
 	}

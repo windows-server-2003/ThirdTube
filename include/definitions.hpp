@@ -85,6 +85,9 @@
 #define DEF_DRAW_WEAK_YELLOW 0x5000C5FF
 #define DEF_DRAW_NO_COLOR 0x0
 
+// font size
+#define MIDDLE_FONT_SIZE 0.641
+
 //error num
 #define DEF_ERR_SUMMARY 0
 #define DEF_ERR_DESCRIPTION 1

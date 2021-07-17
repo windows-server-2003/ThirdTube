@@ -46,6 +46,7 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 struct YouTubeVideoDetail {
 	std::string error;
 	std::string title;
+	std::string description;
 	YouTubeChannelSuccinct author;
 	std::string audio_stream_url;
 	size_t audio_stream_len;
@@ -53,8 +54,15 @@ struct YouTubeVideoDetail {
 	size_t video_stream_len;
 	std::string both_stream_url;
 	size_t both_stream_len;
+	
+	std::vector<YouTubeVideoSuccinct> suggestions;
+	std::string continue_key;
+	std::string suggestions_continue_token;
+	
+	bool has_more_suggestions() { return continue_key != "" && suggestions_continue_token != ""; }
 };
 YouTubeVideoDetail youtube_parse_video_page(std::string url);
+YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDetail &prev_result);
 
 
 
