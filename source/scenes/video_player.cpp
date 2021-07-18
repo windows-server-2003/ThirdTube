@@ -452,17 +452,13 @@ static void decode_thread(void* arg)
 				svcReleaseMutex(small_resource_lock);
 				stream_downloader.add_stream(cur_video_stream);
 				stream_downloader.add_stream(cur_audio_stream);
-				svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max());
 				result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
-				svcReleaseMutex(network_decoder_critical_lock);
 			} else {
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_stream = new NetworkStream(cur_video_info.both_stream_url, cur_video_info.both_stream_len);
 				svcReleaseMutex(small_resource_lock);
 				stream_downloader.add_stream(cur_video_stream);
-				svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max());
 				result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
-				svcReleaseMutex(network_decoder_critical_lock);
 			}
 			if(result.code != 0) vid_play_request = false;
 			/*

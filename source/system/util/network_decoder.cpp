@@ -76,6 +76,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 		cpu_limited = false;
 		remove_cpu_limit(25);
 	}
+	decoder->network_waiting_status = NULL;
 	return AVERROR_EOF;
 }
 static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // size or AVERROR_EOF
@@ -122,6 +123,12 @@ Result_with_string NetworkDecoder::init_(int type, AVMediaType expected_codec_ty
 			return result;
 		}
 		format_context[type] = avformat_alloc_context();
+		if (!format_context[type]) {
+			result.error_description = "format context allocation failed";
+			result.code = DEF_ERR_OUT_OF_MEMORY;
+			result.string = DEF_ERR_OUT_OF_MEMORY_STR;
+			return result;
+		}
 		format_context[type]->pb = io_context[type];
 		ffmpeg_result = avformat_open_input(&format_context[type], "yay", NULL, NULL);
 		if (ffmpeg_result != 0) {

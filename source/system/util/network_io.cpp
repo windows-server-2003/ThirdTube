@@ -263,7 +263,7 @@ std::pair<std::string, httpcContext> access_http_post(std::string url, std::vect
 		ret = httpcSetSSLOpt(&context, SSLCOPT_DisableVerify); // to access https:// websites
 		ret = httpcSetKeepAlive(&context, HTTPC_KEEPALIVE_ENABLED);
 		ret = httpcAddRequestHeaderField(&context, "Connection", "Keep-Alive");
-		if (!request_headers.count("User-Agent")) ret = httpcAddRequestHeaderField(&context, "User-Agent", "httpc-example/1.0.0");
+		if (!request_headers.count("User-Agent")) ret = httpcAddRequestHeaderField(&context, "User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36");
 		for (auto i : request_headers) ret = httpcAddRequestHeaderField(&context, i.first.c_str(), i.second.c_str());
 		httpcAddPostDataRaw(&context, (u32 *) &content[0], content.size());
 
