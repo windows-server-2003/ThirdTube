@@ -15,7 +15,7 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSearchResult::I
 	if (content["compactVideoRenderer"] != Json()) {
 		auto video_renderer = content["compactVideoRenderer"];
 		YouTubeVideoSuccinct cur_result;
-		std::string video_id = video_renderer["navigationEndpoint"]["watchEndpoint"]["videoId"].string_value();
+		std::string video_id = video_renderer["videoId"].string_value();
 		cur_result.url = "https://m.youtube.com/watch?v=" + video_id;
 		cur_result.title = get_text_from_object(video_renderer["title"]);
 		cur_result.duration_text = get_text_from_object(video_renderer["lengthText"]);
@@ -169,15 +169,15 @@ int main() {
 	
 	auto out = [&] (YouTubeSearchResult::Item item) {
 		if (item.type == YouTubeSearchResult::Item::VIDEO) {
-			std::cerr << "video " << item.video.title << std::endl;
+			std::cerr << "video " << item.video.title << " " << item.video.url << std::endl;
 		} else {
 			std::cerr << "channel " << item.channel.name << std::endl;
 		}
 	};
 	
-	/*
 	for (auto i : result.results) out(i);
 	
+	/*
 	for (int i = 0; i < 3; i++) {
 		std::cerr << std::endl;
 		std::cerr << i << std::endl;
