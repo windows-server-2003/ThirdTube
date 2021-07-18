@@ -1069,8 +1069,12 @@ static void draw_video_content(Hid_info key, int color) {
 			
 			y_offset += cur_height;
 		}
-		if (cur_video_info.has_more_comments() || cur_video_info.error != "") {
-			std::string draw_string = cur_video_info.error != "" ? cur_video_info.error : "Loading...";
+		if (cur_video_info.has_more_comments() || cur_video_info.comments_disabled || !cur_video_info.comments.size() || cur_video_info.error != "") {
+			std::string draw_string;
+			if (cur_video_info.comments_disabled) draw_string = "Comments are disabled";
+			else if (cur_video_info.error != "") draw_string = cur_video_info.error;
+			else if (cur_video_info.has_more_comments()) draw_string = "Loading...";
+			else draw_string = "No comments";
 			if (y_offset < CONTENT_Y_HIGH) {
 				int width = Draw_get_width(draw_string, 0.5, 0.5);
 				Draw(draw_string, (320.0 - width) / 2, y_offset, 0.5, 0.5, color);
