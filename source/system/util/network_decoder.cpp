@@ -282,8 +282,16 @@ Result_with_string NetworkDecoder::init(NetworkStream *video_stream, NetworkStre
 	
 	if (request_hw_decoder) {
 		if (!mvd_inited) {
-			Result mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE * 2, NULL);
-			if (mvd_result != 0) Util_log_save("dec/init", "mvdstdInit() returned " + std::to_string(mvd_result));
+			Util_log_save("dec/init", "free linear space : " + std::to_string(linearSpaceFree() / 1000) + " KB");
+			Result mvd_result = -1;
+			for (int mb = 15; mb >= 5; mb--) {
+				mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, 1000000 * mb, NULL);
+				if (mvd_result == 0) {
+					Util_log_save("dec/init", "mvdstdInit ok at " + std::to_string(mb) + " MB");
+					break;
+				}
+			}
+			if (mvd_result != 0) Util_log_save("dec/init", "mvdstdInit returned " + std::to_string(mvd_result) + " with a minimum size of work buffer");
 			else mvd_inited = true;
 		}
 		mvd_first = true;
@@ -522,7 +530,6 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		
 		memcpy_asm(video_mvd_tmp_frames.get_next_pushed(), mvd_frame, (*width * *height * 2) / 32 * 32);
 		video_mvd_tmp_frames.push();
-		
 	} else Util_log_save("", "mvdstdProcessVideoFrame()...", result.code);
 	
 	linearFree(mvd_packet);
