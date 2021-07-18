@@ -511,7 +511,6 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
 		result.code = mvdstdProcessVideoFrame(mvd_packet, offset, 0, NULL);
 		Util_log_add(log_num, "", result.code);
-		mvd_first = false;
 	}
 
 	if (MVD_CHECKNALUPROC_SUCCESS(result.code)) {
@@ -528,10 +527,13 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		result.code = 0;
 		mvdstdRenderVideoFrame(&config, true);
 		
-		memcpy_asm(video_mvd_tmp_frames.get_next_pushed(), mvd_frame, (*width * *height * 2) / 32 * 32);
-		video_mvd_tmp_frames.push();
+		if (!mvd_first) { // when changing video, it somehow outputs a frame of previous video, so ignore the first one
+			memcpy_asm(video_mvd_tmp_frames.get_next_pushed(), mvd_frame, (*width * *height * 2) / 32 * 32);
+			video_mvd_tmp_frames.push();
+		}
 	} else Util_log_save("", "mvdstdProcessVideoFrame()...", result.code);
 	
+	mvd_first = false;
 	linearFree(mvd_packet);
 	mvd_packet = NULL;
 	av_packet_free(&packet_read);
