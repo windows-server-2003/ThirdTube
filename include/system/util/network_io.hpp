@@ -5,6 +5,8 @@
 // one instance per one url (once constructed, the url is not changeable)
 struct NetworkStream {
 	static constexpr size_t BLOCK_SIZE = 0x20000; // 128 KiB
+	static constexpr size_t MAX_CACHE_BLOCKS = 100;
+	
 	size_t block_num = 0;
 	std::string url;
 	Handle downloaded_data_lock; // std::map needs locking when searching and inserting at the same time

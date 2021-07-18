@@ -48,6 +48,16 @@ std::vector<u8> NetworkStream::get_data(size_t start, size_t size) {
 void NetworkStream::set_data(size_t block, const std::vector<u8> &data) {
 	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
 	downloaded_data[block] = data;
+	if (downloaded_data.size() > MAX_CACHE_BLOCKS) { // ensure it doesn't cache too much and run out of memory
+		size_t read_head_block = read_head / BLOCK_SIZE;
+		if (downloaded_data.begin()->first < read_head_block) {
+			Util_log_save("net/dl", "free " + std::to_string(downloaded_data.begin()->first));
+			downloaded_data.erase(downloaded_data.begin());
+		} else {
+			Util_log_save("net/dl", "free " + std::to_string(std::prev(downloaded_data.end())->first));
+			downloaded_data.erase(std::prev(downloaded_data.end()));
+		}
+	}
 	svcReleaseMutex(downloaded_data_lock);
 }
 double NetworkStream::get_download_percentage() {
