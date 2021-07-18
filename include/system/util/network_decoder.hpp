@@ -95,6 +95,7 @@ private :
 	Handle buffered_pts_list_lock; // lock of buffered_pts_list
 	std::multiset<double> buffered_pts_list; // used for HW decoder to determine the pts when outputting a frame
 	bool mvd_first = false;
+	bool mvd_inited = false;
 	
 	Result_with_string init_(int, AVMediaType);
 	Result_with_string init_video_decoder(bool &);

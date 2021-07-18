@@ -47,9 +47,9 @@ int Util_log_save(std::string type, std::string text, int result)
 	log_spend_time[log_current_log_num] = log_up_time_ms;
 
 	if (result == 1234567890)
-		sprintf(app_log_cache, "[%.5f][%s] %s", log_up_time_ms / 1000, type.c_str(), text.c_str());
+		snprintf(app_log_cache, 2048, "[%.5f][%s] %s", log_up_time_ms / 1000, type.c_str(), text.c_str());
 	else
-		sprintf(app_log_cache, "[%.5f][%s] %s 0x%x", log_up_time_ms / 1000, type.c_str(), text.c_str(), result);
+		snprintf(app_log_cache, 2048, "[%.5f][%s] %s 0x%x", log_up_time_ms / 1000, type.c_str(), text.c_str(), result);
 
 	log_logs[log_current_log_num] = app_log_cache;
 	log_current_log_num++;
@@ -82,9 +82,9 @@ void Util_log_add(int add_log_num, std::string add_text, int result)
 	log_up_time_ms += osTickCounterRead(&log_up_time_stopwatch);
 
 	if (result != 1234567890)
-		sprintf(app_log_add_cache, "%s0x%x (%.2fms)", add_text.c_str(), result, (log_up_time_ms - log_spend_time[add_log_num]));
+		snprintf(app_log_add_cache, 2048, "%s0x%x (%.2fms)", add_text.c_str(), result, (log_up_time_ms - log_spend_time[add_log_num]));
 	else
-		sprintf(app_log_add_cache, "%s (%.2fms)", add_text.c_str(), (log_up_time_ms - log_spend_time[add_log_num]));
+		snprintf(app_log_add_cache, 2048, "%s (%.2fms)", add_text.c_str(), (log_up_time_ms - log_spend_time[add_log_num]));
 
 	log_logs[add_log_num] += app_log_add_cache;
 	if(log_show_logs)

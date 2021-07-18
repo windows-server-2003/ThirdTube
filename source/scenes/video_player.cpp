@@ -851,8 +851,6 @@ void VideoPlayer_init(void)
 	if(new_3ds)
 	{
 		add_cpu_limit(NEW_3DS_CPU_LIMIT);
-		Result mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE * 2, NULL);
-		if (mvd_result != 0) Util_log_save("init", "mvdstdInit() returned " + std::to_string(mvd_result));
 		vid_decode_thread = threadCreate(decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	}
@@ -958,7 +956,6 @@ void VideoPlayer_exit(void)
 	APT_CheckNew3DS(&new_3ds);
 	if (new_3ds) {
 		remove_cpu_limit(NEW_3DS_CPU_LIMIT);
-		mvdstdExit();
 	} else {
 		remove_cpu_limit(OLD_3DS_CPU_LIMIT);
 	}
@@ -1552,12 +1549,7 @@ Intent VideoPlayer_draw(void)
 		else
 			vid_lr_count = 0;
 		
-		if (key.p_select) {
-			if (!Util_log_query_log_show_flag() && !var_debug_mode) Util_log_set_log_show_flag(true);
-			else if (!var_debug_mode) var_debug_mode = true;
-			else if (!Util_log_query_log_show_flag()) var_debug_mode = false;
-			else Util_log_set_log_show_flag(false);
-		}
+		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	}
 
 	if(Util_log_query_log_show_flag())

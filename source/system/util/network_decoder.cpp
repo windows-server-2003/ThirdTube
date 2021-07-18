@@ -19,6 +19,10 @@ void NetworkDecoder::deinit() {
 		avformat_close_input(&format_context[type]);
 	}
 	if (hw_decoder_enabled) {
+		if (mvd_inited) {
+			mvdstdExit();
+			mvd_inited = false;
+		}
 		for (auto i : video_mvd_tmp_frames.deinit()) free(i);
 		linearFree(mvd_frame);
 		mvd_frame = NULL;
@@ -276,7 +280,14 @@ Result_with_string NetworkDecoder::init(NetworkStream *video_stream, NetworkStre
 	this->network_stream[VIDEO] = video_stream;
 	this->network_stream[AUDIO] = audio_stream;
 	
-	if (request_hw_decoder) mvd_first = true;
+	if (request_hw_decoder) {
+		if (!mvd_inited) {
+			Result mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, MVD_DEFAULT_WORKBUF_SIZE * 2, NULL);
+			if (mvd_result != 0) Util_log_save("dec/init", "mvdstdInit() returned " + std::to_string(mvd_result));
+			else mvd_inited = true;
+		}
+		mvd_first = true;
+	}
 	hw_decoder_enabled = request_hw_decoder;
 	
 	result = init_(VIDEO, AVMEDIA_TYPE_VIDEO);

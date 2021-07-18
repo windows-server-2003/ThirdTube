@@ -95,7 +95,7 @@ bool thumbnail_is_available(const std::string &url) {
 }
 bool thumbnail_is_available(int handle) {
 	if (handle == -1) return false;
-	return thumbnail_is_available(requests[handle].url);
+	return thumbnail_is_available(requests[handle].url); // TODO : lock
 }
 bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len) {
 	if (handle == -1) return false;
@@ -115,12 +115,10 @@ bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len
 static std::vector<u8> http_get(const std::string &url) {
 	constexpr int BLOCK = 0x40000; // 256 KB
 	add_cpu_limit(30);
-	Util_log_save("thumb-dl", "accessing...");
 	// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
 	auto network_res = access_http_get(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
 	std::vector<u8> res;
 	if (network_res.first == "") {
-		Util_log_save("thumb-dl", "downloading...");
 		std::vector<u8> buffer(BLOCK);
 		while (1) {
 			u32 len_read;
@@ -132,7 +130,6 @@ static std::vector<u8> http_get(const std::string &url) {
 		httpcCloseContext(&network_res.second);
 	} else Util_log_save("thumb-dl", "failed accessing : " + network_res.first);
 	
-	Util_log_save("thumb-dl", "download ok");
 	remove_cpu_limit(30);
 	return res;
 }
