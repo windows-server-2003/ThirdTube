@@ -67,9 +67,11 @@ struct YouTubeVideoDetail {
 	std::string continue_key;
 	std::string suggestions_continue_token;
 	std::string comment_continue_token;
+	int comment_continue_type; // -1 : unavailable, 0 : using watch_comments, 1 : using innertube
+	bool comments_disabled;
 	
 	bool has_more_suggestions() { return continue_key != "" && suggestions_continue_token != ""; }
-	bool has_more_comments() { return comment_continue_token != ""; }
+	bool has_more_comments() { return comment_continue_type != -1; }
 };
 // this function does not load comments; call youtube_video_page_load_more_comments() if necessary
 YouTubeVideoDetail youtube_parse_video_page(std::string url);
