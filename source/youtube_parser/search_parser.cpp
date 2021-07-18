@@ -86,7 +86,6 @@ YouTubeSearchResult youtube_parse_search(std::string url) {
 		}
 		if (i["continuationItemRenderer"] != Json()) {
 			res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
-			debug(res.continue_token);
 		}
 	}
 	{

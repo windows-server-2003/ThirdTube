@@ -235,11 +235,11 @@ std::pair<std::string, httpcContext> access_http_get(std::string url, std::map<s
 		}
 
 		if ((statuscode >= 301 && statuscode <= 303) || (statuscode >= 307 && statuscode <= 308)) {
-			Util_log_save("http", "redir");
+			Util_log_save("http", "redir from : " + url);
 			char newurl[0x1000];
 			ret = httpcGetResponseHeader(&context, "Location", newurl, 0x1000);
-			Util_log_save("httpc", "redirect");
 			url = std::string(newurl);
+			Util_log_save("http", "redir to   : " + url);
 			httpcCloseContext(&context); // close this context before we try the next
 		}
 	} while ((statuscode >= 301 && statuscode <= 303) || (statuscode >= 307 && statuscode <= 308));

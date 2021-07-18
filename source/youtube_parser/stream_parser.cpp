@@ -235,7 +235,7 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	extract_metadata(res, html);
 	
 	debug(res.title);
-	debug(res.author.name);
+	// debug(res.author.name);
 	// debug(res.description);
 	return res;
 }

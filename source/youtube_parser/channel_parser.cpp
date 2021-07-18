@@ -97,9 +97,9 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 		}
 		if (res.icon_url.substr(0, 2) == "//") res.icon_url = "https:" + res.icon_url;
 	}
-	debug(res.banner_url);
-	debug(res.icon_url);
-	debug(res.description);
+	// debug(res.banner_url);
+	// debug(res.icon_url);
+	// debug(res.description);
 	
 	{
 		std::regex pattern(std::string(R"***("INNERTUBE_API_KEY":"([\w-]+)")***"));

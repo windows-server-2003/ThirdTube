@@ -164,7 +164,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 			usleep(50000);
 			continue;
 		}
-		Util_log_save("thumb-dl", "size:" + std::to_string(requests.size()));
+		// Util_log_save("thumb-dl", "size:" + std::to_string(requests.size()));
 		auto encoded_data = http_get(next_url);
 		
 		int w, h;
@@ -201,7 +201,6 @@ void thumbnail_downloader_thread_func(void *arg) {
 					if (requested_urls.count(next_url)) { // in case the request is cancelled while downloading
 						requested_urls[next_url].is_loaded = true;
 						requested_urls[next_url].data = {w, h, texture_w, texture_h, result_image};
-						Util_log_save("thumb-dl", "successfully loaded thumbnail : " + next_url);
 					}
 					release();
 				}
