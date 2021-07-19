@@ -25,10 +25,11 @@
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 30
 
-#define TAB_NUM 3
+#define TAB_NUM 4
 #define TAB_GENERAL 0
 #define TAB_SUGGESTIONS 1
 #define TAB_COMMENTS 2
+#define TAB_ADVANCED 3
 
 namespace VideoPlayer {
 	bool vid_main_run = false;
@@ -107,7 +108,7 @@ namespace VideoPlayer {
 	float title_font_size;
 	std::vector<std::string> description_lines;
 	
-	const std::string tab_strings[TAB_NUM] = {"Info", "Suggestions", "Comments"};
+	const std::string tab_strings[TAB_NUM] = {"Info", "Suggestions", "Comments", "Advanced"};
 	
 	NetworkDecoder network_decoder;
 	Handle network_decoder_critical_lock; // locked when seeking or deiniting
@@ -298,14 +299,18 @@ bool video_is_playing() {
 #define SMALL_FONT_SIZE 0.4
 
 namespace Bar {
-	static bool bar_grabbed = false;
-	static int last_touch_x = -1;
-	static int last_touch_y = -1;
-	static float bar_x_l, bar_x_r;
+	bool bar_grabbed = false;
+	int last_touch_x = -1;
+	int last_touch_y = -1;
+	float bar_x_l, bar_x_r;
+	constexpr int MAXIMIZE_ICON_WIDTH = 28;
+	constexpr int TIME_STR_RIGHT_MARGIN = 2;
+	constexpr int TIME_STR_LEFT_MARGIN = 3;
 	void video_draw_playing_bar() {
 		// draw
 		float y_l = 240 - VIDEO_PLAYING_BAR_HEIGHT;
 		float y_center = 240 - (float) VIDEO_PLAYING_BAR_HEIGHT / 2;
+		
 		
 		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, 0, y_l, 320, VIDEO_PLAYING_BAR_HEIGHT);
 		
@@ -313,7 +318,7 @@ namespace Bar {
 			C2D_DrawCircleSolid(6, y_center, 0, 2, DEF_DRAW_WHITE);
 			C2D_DrawCircleSolid(12, y_center, 0, 2, DEF_DRAW_WHITE);
 			C2D_DrawCircleSolid(18, y_center, 0, 2, DEF_DRAW_WHITE);
-		} else if (vid_pausing || vid_pausing_seek) { // pausing
+		} else if (vid_pausing || vid_pausing_seek || !vid_play_request) { // pausing
 			C2D_DrawTriangle(8, y_l + 3, DEF_DRAW_WHITE,
 							 8, 240 - 4, DEF_DRAW_WHITE,
 							 8 + (VIDEO_PLAYING_BAR_HEIGHT - 6) * std::sqrt(3) / 2, y_center, DEF_DRAW_WHITE,
@@ -322,19 +327,26 @@ namespace Bar {
 			C2D_DrawRectSolid(8, y_l + 3, 0, 4, VIDEO_PLAYING_BAR_HEIGHT - 6, DEF_DRAW_WHITE);
 			C2D_DrawRectSolid(16, y_l + 3, 0, 4, VIDEO_PLAYING_BAR_HEIGHT - 6, DEF_DRAW_WHITE);
 		}
+		// maximize icon
+		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - MAXIMIZE_ICON_WIDTH + 4, y_l + 3, 8, 3);
+		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - MAXIMIZE_ICON_WIDTH + 4, y_l + 3, 3, 5);
+		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - MAXIMIZE_ICON_WIDTH + 4, 240 - 6, 8, 3);
+		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - MAXIMIZE_ICON_WIDTH + 4, 240 - 8, 3, 5);
+		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - 12, y_l + 3, 8, 3);
+		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - 7, y_l + 3, 3, 5);
+		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - 12, 240 - 6, 8, 3);
+		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - 7, 240 - 8, 3, 5);
 		
 		double vid_progress = vid_current_pos / vid_duration;
 		if (bar_grabbed) vid_progress = std::max(0.0f, std::min(1.0f, (last_touch_x - bar_x_l) / (bar_x_r - bar_x_l)));
-		else if (vid_seek_request) vid_progress = vid_seek_pos / vid_duration;
+		else if (vid_seek_request) vid_progress = vid_current_pos / vid_duration;
 		
-		constexpr int TIME_STR_RIGHT_MARGIN = 2;
-		constexpr int TIME_STR_LEFT_MARGIN = 3;
 		std::string time_str0 = Util_convert_seconds_to_time(vid_progress * vid_duration);
 		std::string time_str1 = "/ " + Util_convert_seconds_to_time(vid_duration);
 		float time_str0_w = Draw_get_width(time_str0, SMALL_FONT_SIZE, SMALL_FONT_SIZE);
 		float time_str1_w = Draw_get_width(time_str1, SMALL_FONT_SIZE, SMALL_FONT_SIZE);
 		bar_x_l = 30;
-		bar_x_r = 320 - std::max(time_str0_w, time_str1_w) - TIME_STR_RIGHT_MARGIN - TIME_STR_LEFT_MARGIN;
+		bar_x_r = 320 - std::max(time_str0_w, time_str1_w) - TIME_STR_RIGHT_MARGIN - TIME_STR_LEFT_MARGIN - MAXIMIZE_ICON_WIDTH;
 		
 		
 		float time_str_w = std::max(time_str0_w, time_str1_w);
@@ -346,7 +358,7 @@ namespace Bar {
 			C2D_DrawCircleSolid(bar_x_l + (bar_x_r - bar_x_l) * vid_progress, y_center, 0, bar_grabbed ? 6 : 4, 0xFF3333D0);
 		}
 	}
-	void video_update_playing_bar(Hid_info key) {
+	void video_update_playing_bar(Hid_info key, Intent *intent) {
 		float y_l = 240 - VIDEO_PLAYING_BAR_HEIGHT;
 		float y_center = 240 - (float) VIDEO_PLAYING_BAR_HEIGHT / 2;
 		
@@ -362,6 +374,10 @@ namespace Bar {
 			}
 			bar_grabbed = false;
 		}
+		if (key.p_touch && key.touch_x >= 320 - MAXIMIZE_ICON_WIDTH && key.touch_y >= 240 - VIDEO_PLAYING_BAR_HEIGHT && vid_thread_suspend) {
+			intent->next_scene = SceneType::VIDEO_PLAYER;
+			intent->arg = vid_url;
+		}
 		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 		if (!vid_pausing_seek && bar_grabbed && !vid_pausing) Util_speaker_pause(0);
 		if (vid_pausing_seek && !bar_grabbed && !vid_pausing) Util_speaker_resume(0);
@@ -369,12 +385,17 @@ namespace Bar {
 		
 		// start/stop
 		if (!get_network_waiting_status() && !vid_pausing_seek && key.p_touch && key.touch_x < 22 && y_l <= key.touch_y) {
-			if (vid_pausing) {
-				vid_pausing = false;
-				Util_speaker_resume(0);
+			if (vid_play_request) {
+				if (vid_pausing) {
+					vid_pausing = false;
+					Util_speaker_resume(0);
+				} else {
+					vid_pausing = true;
+					Util_speaker_pause(0);
+				}
 			} else {
-				vid_pausing = true;
-				Util_speaker_pause(0);
+				network_waiting_status = NULL;
+				vid_play_request = true;
 			}
 		}
 		svcReleaseMutex(small_resource_lock);
@@ -383,7 +404,7 @@ namespace Bar {
 		last_touch_y = key.touch_y;
 	}
 }
-void video_update_playing_bar(Hid_info key) { Bar::video_update_playing_bar(key); }
+void video_update_playing_bar(Hid_info key, Intent *intent) { Bar::video_update_playing_bar(key, intent); }
 void video_draw_playing_bar() { Bar::video_draw_playing_bar(); }
 
 
@@ -1011,27 +1032,6 @@ static void draw_video_content(Hid_info key, int color) {
 			y_offset += SMALL_MARGIN;
 			Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
 			y_offset += SMALL_MARGIN;
-			
-			{
-				const char *message = get_network_waiting_status();
-				if (message) Draw(message, 0, y_offset, 0.5, 0.5, color);
-				y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
-			}
-			{
-				u32 cpu_limit;
-				APT_GetAppCpuTimeLimit(&cpu_limit);
-				Draw("CPU Limit : " + std::to_string(cpu_limit) + " " + std::to_string(vid_duration), 0, y_offset, 0.5, 0.5, color);
-				y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
-			}
-			//controls
-			Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, y_offset, 145, 10);
-			Draw(vid_msg[2], 167.5, y_offset, 0.4, 0.4, color);
-
-			//texture filter
-			Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 10, y_offset, 145, 10);
-			Draw(vid_msg[vid_linear_filter], 12.5, y_offset, 0.4, 0.4, color);
-			
-			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		} else {
 			std::string draw_str = "Loading...";
 			int width = Draw_get_width(draw_str, 0.5, 0.5);
@@ -1106,6 +1106,116 @@ static void draw_video_content(Hid_info key, int color) {
 			}
 			y_offset += COMMENT_LOAD_MORE_MARGIN;
 		}
+	} else if (selected_tab == TAB_ADVANCED) {
+		Draw(vid_video_format, 0, y_offset, 0.5, 0.5, color);
+		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+		Draw(vid_audio_format, 0, y_offset, 0.5, 0.5, color);
+		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+		Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, y_offset, 0.5, 0.5, color);
+		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+		Draw(std::string("HW Decoder : ") + (network_decoder.hw_decoder_enabled ? "Enabled" : "Disabled"), 0, y_offset, 0.5, 0.5, color);
+		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+		
+		{
+			const char *message = get_network_waiting_status();
+			Draw("Waiting Status : " + std::string(message ? message : ""), 0, y_offset, 0.5, 0.5, color);
+			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+		}
+		{
+			u32 cpu_limit;
+			APT_GetAppCpuTimeLimit(&cpu_limit);
+			Draw("CPU Limit : " + std::to_string(cpu_limit) + "%", 0, y_offset, 0.5, 0.5, color);
+			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+		}
+		//controls
+		/*
+		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, y_offset, 145, 10);
+		Draw(vid_msg[2], 167.5, y_offset, 0.4, 0.4, color);*/
+
+		//texture filter
+		y_offset += SMALL_MARGIN;
+		{
+			Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 15, y_offset, 135, DEFAULT_FONT_VERTICAL_INTERVAL);
+			int width = Draw_get_width(vid_msg[vid_linear_filter], 0.4, 0.4);
+			Draw(vid_msg[vid_linear_filter], (15.0 + 15.0 + 135.0) / 2 - width / 2, y_offset, 0.4, 0.4, color);
+		}
+		{
+			u32 button_color = is_webpage_loading_requested(LoadRequestType::VIDEO) ? DEF_DRAW_LIGHT_GRAY : DEF_DRAW_WEAK_AQUA;
+			Draw_texture(var_square_image[0], button_color, 170, y_offset, 135, DEFAULT_FONT_VERTICAL_INTERVAL);
+			int width = Draw_get_width("Reload", 0.4, 0.4);
+			Draw("Reload", (170.0 + 170.0 + 135.0) / 2 - width / 2, y_offset, 0.4, 0.4, color);
+		}
+		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+		y_offset += SMALL_MARGIN;
+		
+		// stream download progress
+		svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
+		if (cur_video_stream) {
+			int sample = 50;
+			auto percentage_list = cur_video_stream->get_download_percentage_list(sample);
+			int bar_len = 310;
+			for (int i = 0; i < sample; i++) {
+				int a = 0xFF;
+				int r = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int g = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int b = 0xA0 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int xl = 5 + bar_len * i / sample;
+				int xr = 5 + bar_len * (i + 1) / sample;
+				Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl, y_offset, xr - xl, 3);
+			}
+			float head_x = 5 + bar_len * ((float) cur_video_stream->read_head / cur_video_stream->len);
+			Draw_texture(var_square_image[0], DEF_DRAW_RED, head_x - 1, y_offset, 3, 3);
+		}
+		y_offset += SMALL_MARGIN;
+		if (cur_audio_stream) {
+			int sample = 50;
+			auto percentage_list = cur_audio_stream->get_download_percentage_list(sample);
+			int bar_len = 310;
+			for (int i = 0; i < sample; i++) {
+				int a = 0xFF;
+				int r = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int g = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int b = 0xC0 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
+				int xl = 5 + bar_len * i / sample;
+				int xr = 5 + bar_len * (i + 1) / sample;
+				Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl, y_offset, xr - xl, 3);
+			}
+			float head_x = 5 + bar_len * ((float) cur_audio_stream->read_head / cur_audio_stream->len);
+			Draw_texture(var_square_image[0], DEF_DRAW_RED, head_x - 1, y_offset, 3, 3);
+		}
+		y_offset += SMALL_MARGIN;
+		svcReleaseMutex(streams_lock);
+		
+		y_offset += SMALL_MARGIN;
+		Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_BLACK, 320 - SMALL_MARGIN - 1, y_offset, DEF_DRAW_BLACK, 1);
+		y_offset += SMALL_MARGIN;
+		
+		//decoding detail
+		for(int i = 0; i < 319; i++)
+		{
+			Draw_line(i, y_offset + 90 - vid_time[1][i], DEF_DRAW_BLUE, i + 1, y_offset + 90 - vid_time[1][i + 1], DEF_DRAW_BLUE, 1);//Thread 1
+			Draw_line(i, y_offset + 90 - vid_time[0][i], DEF_DRAW_RED, i + 1, y_offset + 90 - vid_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
+		}
+
+		Draw_line(0, y_offset + 90, color, 320, y_offset + 90, color, 2);
+		Draw_line(0, y_offset + 90 - vid_frametime, 0xFFFFFF00, 320, y_offset + 90 - vid_frametime, 0xFFFFFF00, 2);
+		if(vid_total_frames != 0 && vid_min_time != 0  && vid_recent_total_time != 0)
+		{
+			Draw("avg " + std::to_string(1000 / (vid_total_time / vid_total_frames)).substr(0, 5) + " min " + std::to_string(1000 / vid_max_time).substr(0, 5) 
+			+  " max " + std::to_string(1000 / vid_min_time).substr(0, 5) + " recent avg " + std::to_string(1000 / (vid_recent_total_time / 90)).substr(0, 5) +  " fps",
+			0, y_offset + 90, 0.4, 0.4, color);
+		}
+
+		Draw("Deadline : " + std::to_string(vid_frametime).substr(0, 5) + "ms", 0, y_offset + 100, 0.4, 0.4, 0xFFFFFF00);
+		Draw("Video decode : " + std::to_string(vid_video_time).substr(0, 5) + "ms", 0, y_offset + 110, 0.4, 0.4, DEF_DRAW_RED);
+		Draw("Audio decode : " + std::to_string(vid_audio_time).substr(0, 5) + "ms", 0, y_offset + 120, 0.4, 0.4, DEF_DRAW_RED);
+		//Draw("Data copy 0 : " + std::to_string(vid_copy_time[0]).substr(0, 5) + "ms", 160, 120, 0.4, 0.4, DEF_DRAW_BLUE);
+		Draw("Color convert : " + std::to_string(vid_convert_time).substr(0, 5) + "ms", 160, y_offset + 110, 0.4, 0.4, DEF_DRAW_BLUE);
+		Draw("Data copy 1 : " + std::to_string(vid_copy_time[1]).substr(0, 5) + "ms", 160, y_offset + 120, 0.4, 0.4, DEF_DRAW_BLUE);
+		Draw("Thread 0 : " + std::to_string(vid_time[0][319]).substr(0, 6) + "ms", 0, y_offset + 130, 0.5, 0.5, DEF_DRAW_RED);
+		Draw("Thread 1 : " + std::to_string(vid_time[1][319]).substr(0, 6) + "ms", 160, y_offset + 130, 0.5, 0.5, DEF_DRAW_BLUE);
+		Draw("Zoom : x" + std::to_string(vid_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_x) + " Y : " + std::to_string((int)vid_y), 0, y_offset + 140, 0.5, 0.5, color);
+		y_offset += 160;
 	}
 	svcReleaseMutex(small_resource_lock);
 }
@@ -1166,11 +1276,6 @@ Intent VideoPlayer_draw(void)
 
 			//codec info
 			// TODO : move these to debug tab
-			/*
-			Draw(vid_video_format, 0, 10, 0.5, 0.5, color);
-			Draw(vid_audio_format, 0, 20, 0.5, 0.5, color);
-			Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, 30, 0.5, 0.5, color);
-			Draw(std::string("HW Decoder : ") + (network_decoder.hw_decoder_enabled ? "Enabled" : "Disabled"), 0, 40, 0.5, 0.5, color);*/
 			
 			/*
 			if(vid_play_request)
@@ -1184,73 +1289,8 @@ Intent VideoPlayer_draw(void)
 				if(vid_width > 1024 && vid_height > 1024)
 					Draw_texture(vid_image[image_num * 4 + 3].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 40, (vid_y + vid_tex_height[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 3] * vid_zoom, vid_tex_height[image_num * 4 + 3] * vid_zoom);
 			}*/
-
-			// debug 
-			/*
-			svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
-			auto cur_video_stream_bak = cur_video_stream;
-			auto cur_audio_stream_bak = cur_audio_stream;
-			if (cur_video_stream_bak) {
-				Draw("Video Download : " + std::to_string((int) std::round(cur_video_stream_bak->get_download_percentage())) + "%", 0, 150, 0.5, 0.5, color);
-				int sample = 50;
-				auto percentage_list = cur_video_stream_bak->get_download_percentage_list(sample);
-				int bar_len = 310;
-				for (int i = 0; i < sample; i++) {
-					int a = 0xFF;
-					int r = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-					int g = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-					int b = 0xA0 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-					int xl = 5 + bar_len * i / sample;
-					int xr = 5 + bar_len * (i + 1) / sample;
-					Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl , 205, xr - xl, 3);
-				}
-			}
-			if (cur_audio_stream_bak) {
-				Draw("Audio Download : " + std::to_string((int) std::round(cur_audio_stream_bak->get_download_percentage())) + "%", 0, 160, 0.5, 0.5, color);
-				int sample = 50;
-				auto percentage_list = cur_audio_stream_bak->get_download_percentage_list(sample);
-				int bar_len = 310;
-				for (int i = 0; i < sample; i++) {
-					int a = 0xFF;
-					int r = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-					int g = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-					int b = 0xC0 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-					int xl = 5 + bar_len * i / sample;
-					int xr = 5 + bar_len * (i + 1) / sample;
-					Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl , 208, xr - xl, 3);
-				}
-			}
-			svcReleaseMutex(streams_lock);*/
 			
 			/*
-			if(vid_detail_mode)
-			{
-				//decoding detail
-				for(int i = 0; i < 319; i++)
-				{
-					Draw_line(i, y_offset + 110 - vid_time[1][i], DEF_DRAW_BLUE, i + 1, y_offset + 110 - vid_time[1][i + 1], DEF_DRAW_BLUE, 1);//Thread 1
-					Draw_line(i, y_offset + 110 - vid_time[0][i], DEF_DRAW_RED, i + 1, y_offset + 110 - vid_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
-				}
-
-				Draw_line(0, y_offset + 110, color, 320, y_offset + 110, color, 2);
-				Draw_line(0, y_offset + 110 - vid_frametime, 0xFFFFFF00, 320, y_offset + 110 - vid_frametime, 0xFFFFFF00, 2);
-				if(vid_total_frames != 0 && vid_min_time != 0  && vid_recent_total_time != 0)
-				{
-					Draw("avg " + std::to_string(1000 / (vid_total_time / vid_total_frames)).substr(0, 5) + " min " + std::to_string(1000 / vid_max_time).substr(0, 5) 
-					+  " max " + std::to_string(1000 / vid_min_time).substr(0, 5) + " recent avg " + std::to_string(1000 / (vid_recent_total_time / 90)).substr(0, 5) +  " fps",
-					0, y_offset + 110, 0.4, 0.4, color);
-				}
-
-				Draw("Deadline : " + std::to_string(vid_frametime).substr(0, 5) + "ms", 0, y_offset + 120, 0.4, 0.4, 0xFFFFFF00);
-				Draw("Video decode : " + std::to_string(vid_video_time).substr(0, 5) + "ms", 0, y_offset + 130, 0.4, 0.4, DEF_DRAW_RED);
-				Draw("Audio decode : " + std::to_string(vid_audio_time).substr(0, 5) + "ms", 0, y_offset + 140, 0.4, 0.4, DEF_DRAW_RED);
-				//Draw("Data copy 0 : " + std::to_string(vid_copy_time[0]).substr(0, 5) + "ms", 160, 120, 0.4, 0.4, DEF_DRAW_BLUE);
-				Draw("Color convert : " + std::to_string(vid_convert_time).substr(0, 5) + "ms", 160, y_offset + 130, 0.4, 0.4, DEF_DRAW_BLUE);
-				Draw("Data copy 1 : " + std::to_string(vid_copy_time[1]).substr(0, 5) + "ms", 160, y_offset + 140, 0.4, 0.4, DEF_DRAW_BLUE);
-				Draw("Thread 0 : " + std::to_string(vid_time[0][319]).substr(0, 6) + "ms", 0, y_offset + 150, 0.5, 0.5, DEF_DRAW_RED);
-				Draw("Thread 1 : " + std::to_string(vid_time[1][319]).substr(0, 6) + "ms", 160, y_offset + 150, 0.5, 0.5, DEF_DRAW_BLUE);
-				Draw("Zoom : x" + std::to_string(vid_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_x) + " Y : " + std::to_string((int)vid_y), 0, y_offset + 160, 0.5, 0.5, color);
-			}
 
 			if(vid_show_controls)
 			{
@@ -1386,10 +1426,6 @@ Intent VideoPlayer_draw(void)
 				content_height += SMALL_MARGIN + ICON_SIZE + SMALL_MARGIN + SMALL_MARGIN;
 				content_height += description_lines.size() * DEFAULT_FONT_VERTICAL_INTERVAL;
 				content_height += SMALL_MARGIN * 2;
-				
-				content_height += DEFAULT_FONT_VERTICAL_INTERVAL; // network status
-				content_height += DEFAULT_FONT_VERTICAL_INTERVAL; // cpu limit
-				content_height += DEFAULT_FONT_VERTICAL_INTERVAL; // texture / controls button
 			}
 		} else if (selected_tab == TAB_SUGGESTIONS) {
 			content_height = cur_video_info.suggestions.size() * SUGGESTIONS_VERTICAL_INTERVAL;
@@ -1398,6 +1434,11 @@ Intent VideoPlayer_draw(void)
 			content_height += SMALL_MARGIN;
 			for (auto &i : comments_lines) content_height += SMALL_MARGIN + std::max<int>(SMALL_MARGIN + COMMENT_ICON_SIZE, DEFAULT_FONT_VERTICAL_INTERVAL * (i.size() + 1));
 			if (cur_video_info.has_more_comments() || cur_video_info.error != "") content_height += COMMENT_LOAD_MORE_MARGIN;
+		} else if (selected_tab == TAB_ADVANCED) {
+			content_height += DEFAULT_FONT_VERTICAL_INTERVAL * 6;
+			content_height += SMALL_MARGIN + DEFAULT_FONT_VERTICAL_INTERVAL; // texture filter button
+			content_height += SMALL_MARGIN * 5;
+			content_height += 160;
 		}
 		auto released_point = scroller[selected_tab].update(key, content_height);
 		int released_x = released_point.first;
@@ -1411,14 +1452,7 @@ Intent VideoPlayer_draw(void)
 					vid_show_controls = !vid_show_controls;
 					var_need_reflesh = true;
 				}
-				else if(released_x >= 10 && released_x <= 154 && released_y >= 180 && released_y <= 189)
-				{
-					vid_linear_filter = !vid_linear_filter;
-					for(int i = 0; i < 8; i++)
-						Draw_c2d_image_set_filter(&vid_image[i], vid_linear_filter);
-
-					var_need_reflesh = true;
-				}*/
+				*/
 				if (released_x < ICON_SIZE + SMALL_MARGIN && released_y < ICON_SIZE + SMALL_MARGIN) {
 					intent.next_scene = SceneType::CHANNEL;
 					intent.arg = cur_video_info.author.url;
@@ -1446,7 +1480,6 @@ Intent VideoPlayer_draw(void)
 				}
 			} while (0);
 		} else if (selected_tab == TAB_COMMENTS) {
-			// TODO : implement this
 			do {
 				if (released_x != -1) {
 					bool finish = false;
@@ -1470,12 +1503,33 @@ Intent VideoPlayer_draw(void)
 					send_load_more_comments_request();
 				}
 			} while (0);
+		} else if (selected_tab == TAB_ADVANCED) {
+			int y_offset = 0;
+			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL * 6;
+			y_offset += SMALL_MARGIN;
+			if (released_x != -1) {
+				// filter button
+				if (released_x >= 15 && released_x < 150 && released_y >= y_offset && released_y < y_offset + DEFAULT_FONT_VERTICAL_INTERVAL) {
+					vid_linear_filter = !vid_linear_filter;
+					for(int i = 0; i < 8; i++)
+						Draw_c2d_image_set_filter(&vid_image[i], vid_linear_filter);
+
+					var_need_reflesh = true;
+				}
+				// reload
+				if (released_x >= 170 && released_x < 305 && released_y >= y_offset && released_y < y_offset + DEFAULT_FONT_VERTICAL_INTERVAL) {
+					if (!is_webpage_loading_requested(LoadRequestType::VIDEO)) {
+						send_change_video_request(vid_url);
+					}
+				}
+			}
+			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+			y_offset += SMALL_MARGIN * 5;
+			y_offset += 160;
 		}
 		
-		if (video_playing_bar_show) video_update_playing_bar(key);
-		if (key.p_start) {
-			intent.next_scene = SceneType::SEARCH;
-		} else if(key.p_a) {
+		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		if (key.p_a) {
 			if(vid_play_request) {
 				if (vid_pausing) {
 					if (!vid_pausing_seek) Util_speaker_resume(0);

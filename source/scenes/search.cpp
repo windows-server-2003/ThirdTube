@@ -349,16 +349,11 @@ Intent Search_draw(void)
 		} else content_height = 0;
 		auto released_point = results_scroller.update(key, content_height);
 		
-		bool ignore = false;
-		if (key.p_start) {
-			// TODO : implement confirm dialog
-			intent.next_scene = SceneType::EXIT;
-			ignore = true;
-		}
-		if (!ignore && key.p_touch && key.touch_y < RESULT_Y_LOW) {
+		if (key.p_start) intent.next_scene = SceneType::EXIT;
+		if (key.p_touch && key.touch_y < RESULT_Y_LOW) {
 			search();
 		}
-		if (!ignore && released_point.first != -1) {
+		if (released_point.first != -1) {
 			int released_y = released_point.second;
 			if (released_y < search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL) {
 				int index = released_y / RESULTS_VERTICAL_INTERVAL;
@@ -368,29 +363,25 @@ Intent Search_draw(void)
 						if (search_result_bak.results[index].type == YouTubeSearchResult::Item::VIDEO) {
 							intent.next_scene = SceneType::VIDEO_PLAYER;
 							intent.arg = search_result_bak.results[index].video.url;
-							ignore = true;
 						} else if (search_result_bak.results[index].type == YouTubeSearchResult::Item::CHANNEL) {
 							intent.next_scene = SceneType::CHANNEL;
 							intent.arg = search_result_bak.results[index].channel.url;
-							ignore = true;
 						}
 					}
 				} else Util_log_save("search", "unexpected : item that is not displayed is selected");
 			}
 		}
-		if (!ignore) {
-			if (video_playing_bar_show) video_update_playing_bar(key);
-			if (key.p_a) {
-				search();
-			} else if (RESULT_Y_LOW + search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset() < RESULT_Y_HIGH &&
-				!is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE) && search_result_bak.result_num) {
-				
-				send_load_more_request();
-			} else if(key.h_touch || key.p_touch)
-				var_need_reflesh = true;
+		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		if (key.p_a) {
+			search();
+		} else if (RESULT_Y_LOW + search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset() < RESULT_Y_HIGH &&
+			!is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE) && search_result_bak.result_num) {
 			
-			if (key.p_b) intent.next_scene = SceneType::BACK;
-		}
+			send_load_more_request();
+		} else if(key.h_touch || key.p_touch)
+			var_need_reflesh = true;
+		
+		if (key.p_b) intent.next_scene = SceneType::BACK;
 	}
 
 	if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());

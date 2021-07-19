@@ -4,7 +4,7 @@
 #define VIDEO_PLAYING_BAR_HEIGHT 20
 bool video_is_playing(void);
 void video_draw_playing_bar();
-void video_update_playing_bar(Hid_info key);
+void video_update_playing_bar(Hid_info key, Intent *intent);
 
 bool VideoPlayer_query_init_flag(void);
 

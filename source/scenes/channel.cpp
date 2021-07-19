@@ -381,7 +381,7 @@ Intent Channel_draw(void)
 		}
 		auto released_point = videos_scroller.update(key, content_height);
 		
-		if (video_playing_bar_show) video_update_playing_bar(key);
+		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		// handle touches
 		if (released_point.second != -1) do {
 			int released_x = released_point.first;
