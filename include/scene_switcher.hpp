@@ -7,11 +7,16 @@ enum class SceneType {
 	CHANNEL,
 	// used for intent
 	NO_CHANGE,
+	BACK,
 	EXIT
 };
 struct Intent {
 	SceneType next_scene;
 	std::string arg;
+	
+	bool operator == (const Intent &rhs) {
+		return next_scene == rhs.next_scene && arg == rhs.arg;
+	}
 };
 
 

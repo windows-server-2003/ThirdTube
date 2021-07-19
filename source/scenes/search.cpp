@@ -388,6 +388,8 @@ Intent Search_draw(void)
 				send_load_more_request();
 			} else if(key.h_touch || key.p_touch)
 				var_need_reflesh = true;
+			
+			if (key.p_b) intent.next_scene = SceneType::BACK;
 		}
 	}
 

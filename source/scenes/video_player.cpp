@@ -71,7 +71,8 @@ namespace VideoPlayer {
 	int vid_lr_count = 0;
 	int vid_cd_count = 0;
 	int vid_mvd_image_num = 0;
-	static std::string vid_url = "";
+	std::string vid_url = "";
+	std::string vid_change_waiting = "";
 	std::string vid_video_format = "n/a";
 	std::string vid_audio_format = "n/a";
 	std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
@@ -161,13 +162,15 @@ static void deinit_streams() {
 }
 
 static void on_load_video_complete() { // called while `small_resource_lock` is locked
-	suggestion_thumbnail_handles.assign(cur_video_info.suggestions.size(), -1);
-	icon_thumbnail_handle = thumbnail_request(cur_video_info.author.icon_url, SceneType::VIDEO_PLAYER, 1000, ThumbnailType::ICON);
-	for (int i = 0; i < TAB_NUM; i++) scroller[i].reset();
-	var_need_reflesh = true;
-	
-	vid_change_video_request = true;
-	network_decoder.is_locked = true;
+	if (vid_change_waiting == "") {
+		suggestion_thumbnail_handles.assign(cur_video_info.suggestions.size(), -1);
+		icon_thumbnail_handle = thumbnail_request(cur_video_info.author.icon_url, SceneType::VIDEO_PLAYER, 1000, ThumbnailType::ICON);
+		for (int i = 0; i < TAB_NUM; i++) scroller[i].reset();
+		var_need_reflesh = true;
+		
+		vid_change_video_request = true;
+		network_decoder.is_locked = true;
+	}
 }
 static void on_load_more_suggestions_complete() { // called while `small_resource_lock` is locked
 	suggestion_thumbnail_handles.resize(cur_video_info.suggestions.size(), -1);
@@ -250,17 +253,25 @@ static bool send_load_more_comments_request() {
 }
 
 
+static void send_change_video_request_wo_lock(std::string url) {
+	if (is_webpage_loading_requested(LoadRequestType::VIDEO)) {
+		vid_change_waiting = url;
+	} else {
+		vid_change_waiting = "";
+		vid_play_request = false;
+		if (vid_url != url) {
+			reset_video_info();
+			selected_tab = TAB_GENERAL;
+		} else free_video_info();
+		vid_url = url;
+		send_load_request(url);
+	}
+	var_need_reflesh = true;
+}
 static void send_change_video_request(std::string url) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-	vid_play_request = false;
-	if (vid_url != url) {
-		reset_video_info();
-		selected_tab = TAB_GENERAL;
-	} else free_video_info();
-	vid_url = url;
-	send_load_request(url);
+	send_change_video_request_wo_lock(url);
 	svcReleaseMutex(small_resource_lock);
-	var_need_reflesh = true;
 }
 
 static void send_seek_request(double pos) {
@@ -1480,18 +1491,27 @@ Intent VideoPlayer_draw(void)
 
 			var_need_reflesh = true;
 		}
+		/*
+		TODO : reinstate this
 		else if(key.p_b)
 		{
 			vid_play_request = false;
 			var_need_reflesh = true;
-		}
+		}*/
 		else if(key.p_y)
 		{
 			vid_detail_mode = !vid_detail_mode;
 			var_need_reflesh = true;
 		}
+		else if (key.p_b)
+		{
+			intent.next_scene = SceneType::BACK;
+		}
 		else if(key.h_touch || key.p_touch)
 			var_need_reflesh = true;
+		
+		if (vid_change_waiting != "" && !is_webpage_loading_requested(LoadRequestType::VIDEO))
+			send_change_video_request_wo_lock(vid_change_waiting);
 		
 		svcReleaseMutex(small_resource_lock);
 		/* ****************************** LOCK END ******************************  */

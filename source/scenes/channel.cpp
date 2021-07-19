@@ -420,9 +420,8 @@ Intent Channel_draw(void)
 			}
 		} while (0);
 		
-		if (key.p_b) {
-			intent.next_scene = SceneType::SEARCH;
-		}
+		if (key.p_b) intent.next_scene = SceneType::BACK;
+		
 		if(key.h_touch || key.p_touch)
 			var_need_reflesh = true;
 		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());

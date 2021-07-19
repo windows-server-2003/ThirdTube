@@ -137,6 +137,8 @@ void Menu_exit(void)
 	Util_log_save(DEF_MENU_EXIT_STR, "Exited.");
 }
 
+static std::vector<Intent> scene_stack = {{SceneType::SEARCH, ""}};
+
 bool Menu_main(void)
 {
 	sprintf(var_status, "%02dfps %04d/%02d/%02d %02d:%02d:%02d ", (int)Draw_query_fps(), var_years, var_months, var_days, var_hours, var_minutes, var_seconds);
@@ -161,10 +163,21 @@ bool Menu_main(void)
 	if (intent.next_scene == SceneType::EXIT) return false;
 	else if (intent.next_scene != SceneType::NO_CHANGE) {
 		current_scene = intent.next_scene;
-		if (current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_resume(intent.arg);
-		else if (current_scene == SceneType::SEARCH) Search_resume(intent.arg);
-		else if (current_scene == SceneType::CHANNEL) Channel_resume(intent.arg);
-		else if (current_scene == SceneType::SETTING) Sem_resume(intent.arg);
+		std::string arg = intent.arg;
+		
+		if (scene_stack.size() >= 2 && intent == scene_stack[scene_stack.size() - 2]) intent.next_scene = SceneType::BACK;
+		if (current_scene == SceneType::BACK) {
+			if (scene_stack.size() <= 1) return false;
+			scene_stack.pop_back();
+			current_scene = scene_stack.back().next_scene;
+			arg = scene_stack.back().arg;
+			Util_log_save("back", arg);
+		} else scene_stack.push_back(intent);
+		
+		if (current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_resume(arg);
+		else if (current_scene == SceneType::SEARCH) Search_resume(arg);
+		else if (current_scene == SceneType::CHANNEL) Channel_resume(arg);
+		else if (current_scene == SceneType::SETTING) Sem_resume(arg);
 	}
 	
 	return true;
