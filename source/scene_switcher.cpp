@@ -162,17 +162,13 @@ bool Menu_main(void)
 	
 	if (intent.next_scene == SceneType::EXIT) return false;
 	else if (intent.next_scene != SceneType::NO_CHANGE) {
-		current_scene = intent.next_scene;
-		std::string arg = intent.arg;
-		
 		if (scene_stack.size() >= 2 && intent == scene_stack[scene_stack.size() - 2]) intent.next_scene = SceneType::BACK;
-		if (current_scene == SceneType::BACK) {
-			if (scene_stack.size() <= 1) return false;
-			scene_stack.pop_back();
-			current_scene = scene_stack.back().next_scene;
-			arg = scene_stack.back().arg;
-			Util_log_save("back", arg);
+		if (intent.next_scene == SceneType::BACK) {
+			if (scene_stack.size() >= 2) scene_stack.pop_back();
 		} else scene_stack.push_back(intent);
+		
+		current_scene = scene_stack.back().next_scene;
+		std::string arg = scene_stack.back().arg;
 		
 		if (current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_resume(arg);
 		else if (current_scene == SceneType::SEARCH) Search_resume(arg);
