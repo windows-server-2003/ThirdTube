@@ -5,10 +5,12 @@
 #include "scenes/search.hpp"
 #include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
+#include "ui/scroller.hpp"
 
-#define RESULTS_VERTICAL_INTERVAL 60
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
+#define RESULTS_MARGIN 6
+#define RESULTS_VERTICAL_INTERVAL (THUMBNAIL_HEIGHT + RESULTS_MARGIN)
 #define LOAD_MORE_HEIGHT 30
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 25
@@ -29,7 +31,7 @@ namespace Search {
 	Thread search_thread;
 	
 	const int RESULT_Y_LOW = 20;
-	int RESULT_Y_HIGH = 240; // changes according to whether the video playing bar should be drawn or not
+	int RESULT_Y_HIGH = 240; // changes according to whether the video playing bar is drawn or not
 	
 	VerticalScroller results_scroller = VerticalScroller(0, 320, RESULT_Y_LOW, RESULT_Y_HIGH);
 };
@@ -158,11 +160,13 @@ struct TemporaryCopyOfSearchResult {
 static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key, int color) {
 	if (result.result_num) {
 		for (int i = result.displayed_l; i < result.displayed_r; i++) {
-			int y_l = RESULT_Y_LOW + i * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset();
-			int y_r = y_l + RESULTS_VERTICAL_INTERVAL;
+			int y_l = RESULT_Y_LOW + i * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset() + RESULTS_MARGIN;
+			int y_r = y_l + THUMBNAIL_HEIGHT;
 			
-			if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r && results_scroller.is_selecting()) {
-				Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 0, y_l, 320, RESULTS_VERTICAL_INTERVAL);
+			if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r) {
+				u8 darkness = std::min<int>(0xFF, 0xD0 + (1 - results_scroller.selected_overlap_darkness()) * 0x30);
+				u32 color = 0xFF000000 | darkness << 16 | darkness << 8 | darkness;
+				Draw_texture(var_square_image[0], color, 0, y_l, 320, y_r - y_l);
 			}
 			
 			if (result.results[i].type == YouTubeSearchResult::Item::VIDEO) {
@@ -176,6 +180,7 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 				thumbnail_draw(thumbnail_handles[i], 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 			} else if (result.results[i].type == YouTubeSearchResult::Item::CHANNEL) {
 				auto cur_channel = result.results[i].channel;
+				Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 0, y_l, THUMBNAIL_WIDTH, y_r - y_l);
 				Draw(cur_channel.name, THUMBNAIL_WIDTH + 3, y_l, 0.5, 0.5, color);
 				// icon
 				thumbnail_draw(thumbnail_handles[i], (THUMBNAIL_WIDTH - THUMBNAIL_HEIGHT) / 2, y_l, THUMBNAIL_HEIGHT, THUMBNAIL_HEIGHT);
@@ -187,16 +192,17 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 			if (is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE)) draw_str = "Loading...";
 			else if (result.error != "") draw_str = result.error;
 			
-			int y = RESULT_Y_LOW + result.result_num * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset();
+			int y = RESULT_Y_LOW + result.result_num * RESULTS_VERTICAL_INTERVAL + RESULTS_MARGIN - results_scroller.get_offset();
 			if (y < RESULT_Y_HIGH) {
 				int width = Draw_get_width(draw_str, 0.5, 0.5);
 				Draw(draw_str, (320 - width) / 2, y, 0.5, 0.5, color);
 			}
 		}
-	} else if (is_webpage_loading_requested(LoadRequestType::SEARCH)) {
-		Draw("Loading", 0, RESULT_Y_LOW, 0.5, 0.5, color);
-		
-	} else Draw("Empty", 0, RESULT_Y_LOW, 0.5, 0.5, color);
+	} else {
+		std::string draw_str = is_webpage_loading_requested(LoadRequestType::SEARCH) ? "Loading..." : "Empty";
+		int width = Draw_get_width(draw_str, 0.5, 0.5);
+		Draw(draw_str, (320.0f - width) / 2, RESULT_Y_LOW, 0.5, 0.5, color);
+	}
 }
 
 Intent Search_draw(void)
@@ -314,7 +320,8 @@ Intent Search_draw(void)
 	} else {
 		int content_height;
 		if (search_result_bak.result_num) {
-			content_height = search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL;
+			content_height = 0;
+			if (search_result_bak.result_num) content_height += search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL + RESULTS_MARGIN;
 			if (search_result_bak.error != "" || search_result_bak.has_continue) content_height += LOAD_MORE_HEIGHT;
 		} else content_height = 0;
 		auto released_point = results_scroller.update(key, content_height);
@@ -329,15 +336,18 @@ Intent Search_draw(void)
 			int released_y = released_point.second;
 			if (released_y < search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL) {
 				int index = released_y / RESULTS_VERTICAL_INTERVAL;
+				int remainder = released_y % RESULTS_VERTICAL_INTERVAL;
 				if (displayed_l <= index && index < displayed_r) {
-					if (search_result_bak.results[index].type == YouTubeSearchResult::Item::VIDEO) {
-						intent.next_scene = SceneType::VIDEO_PLAYER;
-						intent.arg = search_result_bak.results[index].video.url;
-						ignore = true;
-					} else if (search_result_bak.results[index].type == YouTubeSearchResult::Item::CHANNEL) {
-						intent.next_scene = SceneType::CHANNEL;
-						intent.arg = search_result_bak.results[index].channel.url;
-						ignore = true;
+					if (remainder >= RESULTS_MARGIN) {
+						if (search_result_bak.results[index].type == YouTubeSearchResult::Item::VIDEO) {
+							intent.next_scene = SceneType::VIDEO_PLAYER;
+							intent.arg = search_result_bak.results[index].video.url;
+							ignore = true;
+						} else if (search_result_bak.results[index].type == YouTubeSearchResult::Item::CHANNEL) {
+							intent.next_scene = SceneType::CHANNEL;
+							intent.arg = search_result_bak.results[index].channel.url;
+							ignore = true;
+						}
 					}
 				} else Util_log_save("search", "unexpected : item that is not displayed is selected");
 			}

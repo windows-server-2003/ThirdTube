@@ -15,6 +15,8 @@ class VerticalScroller {
 	int last_touch_y = -1;
 	int first_touch_x = -1;
 	int first_touch_y = -1;
+	int touch_frames = 0;
+	float selected_darkness = 0;
 	bool grabbed = false;
 	bool scrolling = false;
 public :
@@ -36,6 +38,7 @@ public :
 	void reset(); // should be called when the scroll offset should be set to zero
 	bool is_grabbed() { return grabbed; }
 	bool is_scrolling() { return scrolling; }
+	float selected_overlap_darkness() { return selected_darkness; }
 	bool is_selecting() { return grabbed && !scrolling; }
 	int get_offset() { return offset; }
 };

@@ -5,14 +5,16 @@
 #include "scenes/channel.hpp"
 #include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
+#include "ui/scroller.hpp"
 
-#define VIDEOS_VERTICAL_INTERVAL 60
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
+#define VIDEOS_MARGIN 6
+#define VIDEOS_VERTICAL_INTERVAL (THUMBNAIL_HEIGHT + VIDEOS_MARGIN)
 #define LOAD_MORE_MARGIN 30
 #define BANNER_HEIGHT 55
 #define ICON_SIZE 55
-#define ICON_MARGIN 5
+#define SMALL_MARGIN 5
 #define TAB_SELECTOR_HEIGHT 20
 #define TAB_SELECTOR_SELECTED_LINE_HEIGHT 3
 
@@ -173,13 +175,13 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 			thumbnail_draw(banner_thumbnail_handle, 0, y_offset, 320, BANNER_HEIGHT);
 			y_offset += BANNER_HEIGHT;
 		}
-		y_offset += ICON_MARGIN;
+		y_offset += SMALL_MARGIN;
 		if (channel_info.icon_url != "") {
-			thumbnail_draw(icon_thumbnail_handle, ICON_MARGIN, y_offset, ICON_SIZE, ICON_SIZE);
+			thumbnail_draw(icon_thumbnail_handle, SMALL_MARGIN, y_offset, ICON_SIZE, ICON_SIZE);
 		}
-		Draw(channel_info.name, ICON_SIZE + ICON_MARGIN * 3, y_offset - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
+		Draw(channel_info.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
 		y_offset += ICON_SIZE;
-		y_offset += ICON_MARGIN;
+		y_offset += SMALL_MARGIN;
 		
 		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, 0, y_offset, 320, TAB_SELECTOR_HEIGHT);
 		Draw_texture(var_square_image[0], DEF_DRAW_GRAY, selected_tab * 320 / TAB_NUM, y_offset, 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
@@ -191,10 +193,12 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 			if (channel_info.video_num) {
 				for (int i = channel_info.displayed_l; i < channel_info.displayed_r; i++) {
 					int y_l = y_offset + i * VIDEOS_VERTICAL_INTERVAL;
-					int y_r = y_l + VIDEOS_VERTICAL_INTERVAL;
+					int y_r = y_l + THUMBNAIL_HEIGHT;
 					
-					if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r && videos_scroller.is_selecting()) {
-						Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 0, y_l, 320, VIDEOS_VERTICAL_INTERVAL);
+					if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r) {
+						u8 darkness = std::min<int>(0xFF, 0xD0 + (1 - videos_scroller.selected_overlap_darkness()) * 0x30);
+						u32 color = 0xFF000000 | darkness << 16 | darkness << 8 | darkness;
+						Draw_texture(var_square_image[0], color, 0, y_l, 320, y_r - y_l);
 					}
 					
 					auto cur_video = channel_info.videos[i];
@@ -225,6 +229,9 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 			y_offset += 3; // without this, the following description somehow overlaps with the above text
 			Draw(channel_info.description, 3, y_offset, 0.5, 0.5, color);
 			y_offset += Draw_get_height(channel_info.description, 0.5, 0.5);
+			y_offset += SMALL_MARGIN;
+			Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
+			y_offset += SMALL_MARGIN;
 		}
 	}
 }
@@ -259,7 +266,7 @@ Intent Channel_draw(void)
 		
 		int y_offset = 0;
 		if (channel_info.banner_url != "") y_offset += BANNER_HEIGHT;
-		y_offset += ICON_SIZE + ICON_MARGIN * 2 + TAB_SELECTOR_HEIGHT;
+		y_offset += ICON_SIZE + SMALL_MARGIN * 2 + TAB_SELECTOR_HEIGHT;
 		displayed_l = std::min(video_num, std::max(0, (videos_scroller.get_offset() - y_offset) / VIDEOS_VERTICAL_INTERVAL));
 		displayed_r = std::min(video_num, std::max(0, (videos_scroller.get_offset() - y_offset + VIDEO_LIST_Y_HIGH - 1) / VIDEOS_VERTICAL_INTERVAL + 1));
 	}
@@ -342,7 +349,7 @@ Intent Channel_draw(void)
 	} else {
 		int content_height = 0;
 		if (channel_info_bak.banner_url != "") content_height += BANNER_HEIGHT;
-		content_height += ICON_SIZE + ICON_MARGIN * 2 + TAB_SELECTOR_HEIGHT;
+		content_height += ICON_SIZE + SMALL_MARGIN * 2 + TAB_SELECTOR_HEIGHT;
 		if (selected_tab == 0) {
 			content_height += channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL;
 			// load more
@@ -355,6 +362,7 @@ Intent Channel_draw(void)
 			content_height += Draw_get_height("Channel Description :", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 			content_height += 3;
 			content_height += Draw_get_height(channel_info_bak.description, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
+			content_height += 3 + 3;
 		}
 		auto released_point = videos_scroller.update(key, content_height);
 		
@@ -365,7 +373,7 @@ Intent Channel_draw(void)
 			int released_y = released_point.second;
 			int y_offset = 0;
 			if (channel_info_bak.banner_url != "") y_offset += BANNER_HEIGHT;
-			y_offset += ICON_SIZE + ICON_MARGIN * 2;
+			y_offset += ICON_SIZE + SMALL_MARGIN * 2;
 			
 			if (y_offset <= released_y && released_y < y_offset + TAB_SELECTOR_HEIGHT) {
 				int next_tab_index = released_x * TAB_NUM / 320;
@@ -377,11 +385,14 @@ Intent Channel_draw(void)
 			if (selected_tab == 0) {
 				if (y_offset <= released_y && released_y < y_offset + (int) channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL) {
 					int index = (released_y - y_offset) / VIDEOS_VERTICAL_INTERVAL;
-					if (displayed_l <= index && index < displayed_r) {
-						intent.next_scene = SceneType::VIDEO_PLAYER;
-						intent.arg = channel_info_bak.videos[index].url;
-						break;
-					} else Util_log_save("channel", "unexpected : a video that is not displayed is selected");
+					int remainder = (released_y - y_offset) % VIDEOS_VERTICAL_INTERVAL;
+					if (remainder < THUMBNAIL_HEIGHT) {
+						if (displayed_l <= index && index < displayed_r) {
+							intent.next_scene = SceneType::VIDEO_PLAYER;
+							intent.arg = channel_info_bak.videos[index].url;
+							break;
+						} else Util_log_save("channel", "unexpected : a video that is not displayed is selected");
+					}
 				}
 				y_offset += channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL;
 				if (channel_info_bak.error != "" || channel_info_bak.has_continue) y_offset += LOAD_MORE_MARGIN;
@@ -389,6 +400,7 @@ Intent Channel_draw(void)
 				y_offset += Draw_get_height("Channel Description :", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 				y_offset += 3;
 				y_offset += Draw_get_height(channel_info_bak.description, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
+				y_offset += SMALL_MARGIN + SMALL_MARGIN;
 				// nothing to do on the description
 			}
 		} while (0);
