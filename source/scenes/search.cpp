@@ -23,7 +23,7 @@ namespace Search {
 	bool already_init = false;
 	bool exiting = false;
 	Handle resource_lock;
-	std::string cur_search_word = "CITRUS";
+	std::string cur_search_word = "";
 	YouTubeSearchResult search_result;
 	int thumbnail_request_l = 0;
 	int thumbnail_request_r = 0;
