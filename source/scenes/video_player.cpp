@@ -1217,6 +1217,7 @@ static void draw_video_content(Hid_info key, int color) {
 		Draw("Zoom : x" + std::to_string(vid_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_x) + " Y : " + std::to_string((int)vid_y), 0, y_offset + 140, 0.5, 0.5, color);
 		y_offset += 160;
 	}
+	scroller[selected_tab].draw_slider_bar();
 	svcReleaseMutex(small_resource_lock);
 }
 

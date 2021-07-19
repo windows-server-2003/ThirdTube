@@ -207,6 +207,7 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 		int width = Draw_get_width(draw_str, 0.5, 0.5);
 		Draw(draw_str, (320.0f - width) / 2, RESULT_Y_LOW, 0.5, 0.5, color);
 	}
+	results_scroller.draw_slider_bar();
 }
 
 static void search() {

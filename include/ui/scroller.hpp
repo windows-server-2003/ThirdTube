@@ -11,11 +11,14 @@ class VerticalScroller {
 	
 	int offset = 0;
 	
+	int content_height;
 	int last_touch_x = -1;
 	int last_touch_y = -1;
 	int first_touch_x = -1;
 	int first_touch_y = -1;
 	int touch_frames = 0;
+	std::deque<int> touch_moves;
+	float inertia = 0;
 	float selected_darkness = 0;
 	bool grabbed = false;
 	bool scrolling = false;
@@ -34,6 +37,7 @@ public :
 	// if the touch is released on the content without scrolling, returns the relative coordinates of the releasing position from the top-left of the content
 	// otherwise, returns {-1, -1}
 	std::pair<int, int> update(Hid_info key, int content_y_len); // should only be called while the scroller is in the foreground
+	void draw_slider_bar();
 	void on_resume(); // should be called when the scroller is back in the foreground
 	void reset(); // should be called when the scroll offset should be set to zero
 	bool is_grabbed() { return grabbed; }

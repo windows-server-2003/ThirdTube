@@ -249,6 +249,7 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 			y_offset += SMALL_MARGIN;
 		}
 	}
+	videos_scroller.draw_slider_bar();
 }
 
 
