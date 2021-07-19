@@ -26,6 +26,7 @@ struct URLStatus {
 	std::set<int> handles;
 	bool is_loaded = false;
 	LoadedThumbnail data;
+	ThumbnailType type;
 };
 static std::map<std::string, URLStatus> requested_urls;
 
@@ -40,7 +41,7 @@ static void release() {
 	svcReleaseMutex(lock_initialized);
 }
 
-int thumbnail_request(const std::string &url, SceneType scene_id, int priority) {
+int thumbnail_request(const std::string &url, SceneType scene_id, int priority, ThumbnailType type) {
 	if (url == "") return -1;
 	int handle;
 	lock();
@@ -53,6 +54,7 @@ int thumbnail_request(const std::string &url, SceneType scene_id, int priority) 
 		requests.push_back({url, scene_id, priority});
 	}
 	requested_urls[url].handles.insert(handle);
+	requested_urls[url].type = type;
 	release();
 	return handle;
 }
@@ -139,6 +141,7 @@ static bool should_be_running = true;
 void thumbnail_downloader_thread_func(void *arg) {
 	while (should_be_running) {
 		const std::string *next_url_ = NULL;
+		ThumbnailType next_type = ThumbnailType::DEFAULT;
 		lock();
 		{
 			int max_priority = -1;
@@ -153,6 +156,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 				if (max_priority < cur_url_priority) {
 					max_priority = cur_url_priority;
 					next_url_ = &i.first;
+					next_type = i.second.type;
 				}
 			}
 		}
@@ -170,17 +174,36 @@ void thumbnail_downloader_thread_func(void *arg) {
 		int w, h;
 		u8 *decoded_data = Image_decode(&encoded_data[0], encoded_data.size(), &w, &h);
 		if (decoded_data) {
+			// some special operations on the picture here (it shouldn't be here but...)
 			// for video thumbnail, crop to 16:9
-			if (next_url.find("https://i.ytimg.com/vi/") != std::string::npos && h > w * 9 / 16 + 1) {
+			if (next_type == ThumbnailType::VIDEO_THUMBNAIL && h > w * 9 / 16 + 1) {
 				int new_h = w * 9 / 16;
 				int vertical_offset = (h - new_h) / 2;
 				memmove(decoded_data, decoded_data + vertical_offset * w * 2, new_h * w * 2);
 				h = new_h;
 			}
-			if (w == 1060) { // channel banner : crop to 1024 to fit in the maximum texture size
+			// channel banner : crop to 1024 to fit in the maximum texture size
+			if (next_type == ThumbnailType::VIDEO_BANNER && w == 1060) {
 				for (int i = 0; i < h; i++) memmove(decoded_data + i * 1024 * 2, decoded_data + (i * 1060 + 18) * 2, 1024 * 2);
 				w = 1024;
 			}
+			// channel icon : round (definitely not the recommended way but we will fill the area outside the circle with white)
+			if (next_type == ThumbnailType::ICON) {
+				float radius = (float) h / 2;
+				for (int i = 0; i < h; i++) for (int j = 0; j < w; j++) {
+					float distance = std::hypot(radius - (i + 0.5), radius - (j + 0.5));
+					u8 b = decoded_data[(i * w + j) * 2 + 0] & ((1 << 5) - 1);
+					u8 g = (decoded_data[(i * w + j) * 2 + 0] >> 5) | ((decoded_data[(i * w + j) * 2 + 1] & ((1 << 3) - 1)) << 3);
+					u8 r = decoded_data[(i * w + j) * 2 + 1] >> 3;
+					float proportion = std::max(0.0f, std::min(1.0f, radius + 0.5f - distance));
+					b = b * proportion + ((1 << 5) - 1) * (1 - proportion);
+					g = g * proportion + ((1 << 6) - 1) * (1 - proportion);
+					r = r * proportion + ((1 << 5) - 1) * (1 - proportion);
+					decoded_data[(i * w + j) * 2 + 0] = b | g << 5;
+					decoded_data[(i * w + j) * 2 + 1] = g >> 3 | r << 3;
+				}
+			}
+			
 			
 			Image_data result_image;
 			int texture_w = 1;

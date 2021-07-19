@@ -132,20 +132,19 @@ static void extract_owner(Json slimOwnerRenderer, YouTubeVideoDetail &res) {
 	res.author.name = slimOwnerRenderer["channelName"].string_value();
 	res.author.url = slimOwnerRenderer["channelUrl"].string_value();
 	
-	std::string icon_48;
-	int max_width = -1;
-	std::string icon_largest;
+	constexpr int target_height = 70;
+	int min_distance = 100000;
+	std::string best_icon;
 	for (auto icon : slimOwnerRenderer["thumbnail"]["thumbnails"].array_items()) {
-		if (icon["height"].int_value() >= 256) continue; // too large
-		if (icon["height"].int_value() == 48) {
-			icon_48 = icon["url"].string_value();
-		}
-		if (max_width < icon["height"].int_value()) {
-			max_width = icon["height"].int_value();
-			icon_largest = icon["url"].string_value();
+		int cur_height = icon["height"].int_value();
+		if (cur_height >= 256) continue; // too large
+		if (min_distance > std::abs(target_height - cur_height)) {
+			min_distance = std::abs(target_height - cur_height);
+			best_icon = icon["url"].string_value();
 		}
 	}
-	res.author.icon_url = icon_48 != "" ? icon_48 : icon_largest;
+	res.author.icon_url = best_icon;
+	
 	if (res.author.icon_url.substr(0, 2) == "//") res.author.icon_url = "https:" + res.author.icon_url;
 }
 
@@ -318,14 +317,18 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 		cur_comment.author.name = get_text_from_object(comment_renderer["authorText"]);
 		cur_comment.author.url = "https://m.youtube.com" + comment_renderer["authorEndpoint"]["browseEndpoint"]["canonicalBaseUrl"].string_value();
 		{
-			int min_width = 1000000;
+			constexpr int target_height = 70;
+			int min_distance = 100000;
+			std::string best_icon;
 			for (auto icon : comment_renderer["authorThumbnail"]["thumbnails"].array_items()) {
-				int cur_width = icon["width"].int_value();
-				if (min_width > cur_width) {
-					min_width = cur_width;
-					cur_comment.author.icon_url = icon["url"].string_value();
+				int cur_height = icon["height"].int_value();
+				if (cur_height >= 256) continue; // too large
+				if (min_distance > std::abs(target_height - cur_height)) {
+					min_distance = std::abs(target_height - cur_height);
+					best_icon = icon["url"].string_value();
 				}
 			}
+			cur_comment.author.icon_url = best_icon;
 		}
 		return cur_comment;
 	};

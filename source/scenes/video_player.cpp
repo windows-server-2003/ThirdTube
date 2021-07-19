@@ -159,7 +159,7 @@ static void deinit_streams() {
 
 static void on_load_video_complete() { // called while `small_resource_lock` is locked
 	suggestion_thumbnail_handles.assign(cur_video_info.suggestions.size(), -1);
-	icon_thumbnail_handle = thumbnail_request(cur_video_info.author.icon_url, SceneType::VIDEO_PLAYER, 1000);
+	icon_thumbnail_handle = thumbnail_request(cur_video_info.author.icon_url, SceneType::VIDEO_PLAYER, 1000, ThumbnailType::ICON);
 	for (int i = 0; i < TAB_NUM; i++) scroller[i].reset();
 	var_need_reflesh = true;
 	
@@ -1285,7 +1285,8 @@ Intent VideoPlayer_draw(void)
 			for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
 			
 			for (auto i : cancelling_indexes) thumbnail_cancel_request(suggestion_thumbnail_handles[i]), suggestion_thumbnail_handles[i] = -1;
-			for (auto i : new_indexes) suggestion_thumbnail_handles[i] = thumbnail_request(cur_video_info.suggestions[i].thumbnail_url, SceneType::VIDEO_PLAYER, 0);
+			for (auto i : new_indexes) suggestion_thumbnail_handles[i] =
+				thumbnail_request(cur_video_info.suggestions[i].thumbnail_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::VIDEO_THUMBNAIL);
 			
 			suggestion_thumbnail_request_l = request_target_l;
 			suggestion_thumbnail_request_r = request_target_r;
@@ -1324,7 +1325,7 @@ Intent VideoPlayer_draw(void)
 			for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
 			
 			for (auto i : cancelling_indexes) thumbnail_cancel_request(comment_thumbnail_handles[i]), comment_thumbnail_handles[i] = -1;
-			for (auto i : new_indexes) comment_thumbnail_handles[i] = thumbnail_request(cur_video_info.comments[i].author.icon_url, SceneType::VIDEO_PLAYER, 0);
+			for (auto i : new_indexes) comment_thumbnail_handles[i] = thumbnail_request(cur_video_info.comments[i].author.icon_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::ICON);
 			
 			comment_thumbnail_request_l = request_target_l;
 			comment_thumbnail_request_r = request_target_r;

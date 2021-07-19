@@ -53,8 +53,8 @@ static void reset_channel_info() {
 }
 static void on_channel_load() { // this will be called while resource_lock is locked
 	thumbnail_handles.assign(channel_info.videos.size(), -1);
-	if (channel_info.icon_url != "") icon_thumbnail_handle = thumbnail_request(channel_info.icon_url, SceneType::CHANNEL, 1001);
-	if (channel_info.banner_url != "") banner_thumbnail_handle = thumbnail_request(channel_info.banner_url, SceneType::CHANNEL, 1000);
+	if (channel_info.icon_url != "") icon_thumbnail_handle = thumbnail_request(channel_info.icon_url, SceneType::CHANNEL, 1001, ThumbnailType::ICON);
+	if (channel_info.banner_url != "") banner_thumbnail_handle = thumbnail_request(channel_info.banner_url, SceneType::CHANNEL, 1000, ThumbnailType::VIDEO_BANNER);
 	var_need_reflesh = true;
 }
 static void on_channel_load_more() {
@@ -292,7 +292,7 @@ Intent Channel_draw(void)
 		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
 		
 		for (auto i : cancelling_indexes) thumbnail_cancel_request(thumbnail_handles[i]), thumbnail_handles[i] = -1;
-		for (auto i : new_indexes) thumbnail_handles[i] = thumbnail_request(channel_info.videos[i].thumbnail_url, SceneType::CHANNEL, 0);
+		for (auto i : new_indexes) thumbnail_handles[i] = thumbnail_request(channel_info.videos[i].thumbnail_url, SceneType::CHANNEL, 0, ThumbnailType::VIDEO_THUMBNAIL);
 		
 		thumbnail_request_l = request_target_l;
 		thumbnail_request_r = request_target_r;

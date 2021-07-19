@@ -252,7 +252,8 @@ Intent Search_draw(void)
 		for (auto i : new_indexes) {
 			std::string url = search_result.results[i].type == YouTubeSearchResult::Item::VIDEO ?
 				search_result.results[i].video.thumbnail_url : search_result.results[i].channel.icon_url;
-			thumbnail_handles[i] = thumbnail_request(url, SceneType::SEARCH, 0);
+			ThumbnailType type = search_result.results[i].type == YouTubeSearchResult::Item::VIDEO ? ThumbnailType::VIDEO_THUMBNAIL : ThumbnailType::ICON;
+			thumbnail_handles[i] = thumbnail_request(url, SceneType::SEARCH, 0, type);
 		}
 		
 		thumbnail_request_l = request_target_l;
