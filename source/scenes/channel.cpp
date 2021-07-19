@@ -42,6 +42,8 @@ namespace Channel {
 	int banner_thumbnail_handle = -1;
 	int icon_thumbnail_handle = -1;
 	std::vector<std::vector<std::string> > wrapped_titles;
+	
+	const std::string tab_strings[TAB_NUM] = {"Videos", "Info"};
 };
 using namespace Channel;
 
@@ -172,21 +174,30 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 	} else  {
 		int y_offset = -videos_scroller.get_offset();
 		if (channel_info.banner_url != "") {
-			thumbnail_draw(banner_thumbnail_handle, 0, y_offset, 320, BANNER_HEIGHT);
+			thumbnail_draw(banner_thumbnail_handle, 0, y_offset, 320, BANNER_HEIGHT); // banner
 			y_offset += BANNER_HEIGHT;
 		}
 		y_offset += SMALL_MARGIN;
 		if (channel_info.icon_url != "") {
-			thumbnail_draw(icon_thumbnail_handle, SMALL_MARGIN, y_offset, ICON_SIZE, ICON_SIZE);
+			thumbnail_draw(icon_thumbnail_handle, SMALL_MARGIN, y_offset, ICON_SIZE, ICON_SIZE); // icon
 		}
-		Draw(channel_info.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
+		Draw(channel_info.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color); // channel name
 		y_offset += ICON_SIZE;
 		y_offset += SMALL_MARGIN;
 		
+		// tab selector
 		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, 0, y_offset, 320, TAB_SELECTOR_HEIGHT);
 		Draw_texture(var_square_image[0], DEF_DRAW_GRAY, selected_tab * 320 / TAB_NUM, y_offset, 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
 		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, selected_tab * 320 / TAB_NUM, y_offset + TAB_SELECTOR_HEIGHT - TAB_SELECTOR_SELECTED_LINE_HEIGHT,
 			320 / TAB_NUM + 1, TAB_SELECTOR_SELECTED_LINE_HEIGHT);
+		for (int i = 0; i < TAB_NUM; i++) {
+			float font_size = 0.4;
+			float center = (1 + 2 * i) * 320 / (2 * TAB_NUM);
+			float width = Draw_get_width(tab_strings[i], font_size, font_size);
+			float y = y_offset + 3;
+			if (i == selected_tab) y -= 1;
+			Draw(tab_strings[i], center - width / 2, y, font_size, font_size, DEF_DRAW_BLACK);
+		}
 		y_offset += TAB_SELECTOR_HEIGHT;
 		
 		if (selected_tab == 0) { // videos

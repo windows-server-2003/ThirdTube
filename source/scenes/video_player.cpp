@@ -106,6 +106,8 @@ namespace VideoPlayer {
 	float title_font_size;
 	std::vector<std::string> description_lines;
 	
+	const std::string tab_strings[TAB_NUM] = {"Info", "Suggestions", "Comments"};
+	
 	NetworkDecoder network_decoder;
 	Handle network_decoder_critical_lock; // locked when seeking or deiniting
 };
@@ -1248,6 +1250,14 @@ Intent VideoPlayer_draw(void)
 		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, 0, CONTENT_Y_HIGH, 320, TAB_SELECTOR_HEIGHT);
 		Draw_texture(var_square_image[0], DEF_DRAW_GRAY, selected_tab * 320 / TAB_NUM, CONTENT_Y_HIGH, 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
 		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, selected_tab * 320 / TAB_NUM, CONTENT_Y_HIGH, 320 / TAB_NUM + 1, TAB_SELECTOR_SELECTED_LINE_HEIGHT);
+		for (int i = 0; i < TAB_NUM; i++) {
+			float font_size = 0.4;
+			float center = (1 + 2 * i) * 320 / (2 * TAB_NUM);
+			float width = Draw_get_width(tab_strings[i], font_size, font_size);
+			float y = CONTENT_Y_HIGH + 3;
+			if (i == selected_tab) y += 1;
+			Draw(tab_strings[i], center - width / 2, y, font_size, font_size, DEF_DRAW_BLACK);
+		}
 		
 		// playing bar
 		video_draw_playing_bar();
