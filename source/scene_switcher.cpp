@@ -18,6 +18,8 @@ void Menu_check_connectivity_thread(void* arg);
 void Menu_worker_thread(void* arg);
 void Menu_update_thread(void* arg);
 
+static Result sound_init_result;
+static bool is_new_3ds;
 
 void Menu_init(void)
 {
@@ -39,8 +41,10 @@ void Menu_init(void)
 	Util_log_save(DEF_MENU_INIT_STR, "romfsInit()...", romfsInit());
 	Util_log_save(DEF_MENU_INIT_STR, "cfguInit()...", cfguInit());
 	Util_log_save(DEF_MENU_INIT_STR, "amInit()...", amInit());
-	Util_log_save(DEF_MENU_INIT_STR, "ndspInit()...", ndspInit());//0xd880A7FA
+	Util_log_save(DEF_MENU_INIT_STR, "ndspInit()...", (sound_init_result = ndspInit()));//0xd880A7FA
 	Util_log_save(DEF_MENU_INIT_STR, "APT_SetAppCpuTimeLimit()...", APT_SetAppCpuTimeLimit(30));
+	
+	APT_CheckNew3DS(&is_new_3ds);
 
 	Sem_init();
 	Sem_suspend();
@@ -141,6 +145,36 @@ static std::vector<Intent> scene_stack = {{SceneType::SEARCH, ""}};
 
 bool Menu_main(void)
 {
+	if (sound_init_result != 0 || !is_new_3ds) {
+		std::string error_msg;
+		if (!is_new_3ds) error_msg = "This app only supports New 3DSes due to performance issues";
+		else error_msg = std::string("Could not initialize NDSP (sound service)\nThis is probably because you haven't run DSP1\n") +
+			"You can download it from the link below\n\nhttps://github.com/zoogie/DSP1/releases/";
+		error_msg += "\n\nPress A to close the app";
+		
+		Hid_info key;
+		Util_hid_query_key_state(&key);
+		Util_hid_key_flag_reset();
+		
+		Draw_frame_ready();
+		Draw_screen_ready(0, DEF_DRAW_WHITE);
+		
+		{
+			int width = Draw_get_width(error_msg, 0.5, 0.5);
+			int height = Draw_get_height(error_msg, 0.5, 0.5);
+			Draw(error_msg, (400 - width) / 2, (240 - height) / 2, 0.5, 0.5, DEF_DRAW_BLACK);
+		}
+		Draw_top_ui();
+
+		Draw_screen_ready(1, DEF_DRAW_WHITE);
+		
+		Draw_apply_draw();
+		
+		if (key.h_a) return false;
+		return true;
+	}
+	
+	
 	sprintf(var_status, "%02dfps %04d/%02d/%02d %02d:%02d:%02d ", (int)Draw_query_fps(), var_years, var_months, var_days, var_hours, var_minutes, var_seconds);
 	if(var_debug_mode)
 		var_need_reflesh = true;

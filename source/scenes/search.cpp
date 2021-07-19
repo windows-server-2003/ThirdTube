@@ -304,8 +304,7 @@ Intent Search_draw(void)
 			Util_log_draw();
 
 		Draw_top_ui();
-		Draw("Press START to exit the app", 0, 225, 0.5, 0.5, color);
-
+		
 		Draw_screen_ready(1, back_color);
 		
 		// (!) : I don't know how to draw textures truncated, so I will just fill the margin with white again
@@ -350,7 +349,6 @@ Intent Search_draw(void)
 		} else content_height = 0;
 		auto released_point = results_scroller.update(key, content_height);
 		
-		if (key.p_start) intent.next_scene = SceneType::EXIT;
 		if (key.p_touch && key.touch_y < RESULT_Y_LOW) {
 			search();
 		}
