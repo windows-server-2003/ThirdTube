@@ -12,6 +12,7 @@
 #define RESULTS_MARGIN 6
 #define RESULTS_VERTICAL_INTERVAL (THUMBNAIL_HEIGHT + RESULTS_MARGIN)
 #define LOAD_MORE_HEIGHT 30
+#define SEARCH_BOX_MARGIN 4
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 25
 
@@ -29,8 +30,9 @@ namespace Search {
 	std::vector<int> thumbnail_handles;
 	std::vector<std::vector<std::string> > wrapped_titles;
 	Thread search_thread;
+	bool search_done = false;
 	
-	const int RESULT_Y_LOW = 20;
+	const int RESULT_Y_LOW = 25;
 	int RESULT_Y_HIGH = 240; // changes according to whether the video playing bar is drawn or not
 	
 	VerticalScroller results_scroller = VerticalScroller(0, 320, RESULT_Y_LOW, RESULT_Y_HIGH);
@@ -42,11 +44,13 @@ static void reset_search_result() {
 	thumbnail_handles.clear();
 	thumbnail_request_l = thumbnail_request_r = 0;
 	search_result = YouTubeSearchResult();
+	search_done = false;
 }
 
 static void on_search_complete() {
 	thumbnail_handles.assign(search_result.results.size(), -1);
 	results_scroller.reset();
+	search_done = true;
 	var_need_reflesh = true;
 }
 static void on_search_more_complete() {
@@ -199,9 +203,26 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 			}
 		}
 	} else {
-		std::string draw_str = is_webpage_loading_requested(LoadRequestType::SEARCH) ? "Loading..." : "Empty";
+		std::string draw_str = is_webpage_loading_requested(LoadRequestType::SEARCH) ? "Loading..." : (search_done ? "No Results" : "");
 		int width = Draw_get_width(draw_str, 0.5, 0.5);
 		Draw(draw_str, (320.0f - width) / 2, RESULT_Y_LOW, 0.5, 0.5, color);
+	}
+}
+
+static void search() {
+	if (!is_webpage_loading_requested(LoadRequestType::SEARCH)) {
+		SwkbdState keyboard;
+		swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 32);
+		swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY | SWKBD_PREDICTIVE_INPUT);
+		swkbdSetValidation(&keyboard, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
+		swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
+		swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
+		swkbdSetInitialText(&keyboard, cur_search_word.c_str());
+		char search_word[129];
+		add_cpu_limit(40);
+		auto button_pressed = swkbdInputText(&keyboard, search_word, 32);
+		remove_cpu_limit(40);
+		if (button_pressed == SWKBD_BUTTON_RIGHT) send_search_request(search_word);
 	}
 }
 
@@ -293,7 +314,9 @@ Intent Search_draw(void)
 
 		// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
 		
-		Draw("Search scene (Press A to search)", 0, 0, 0.5, 0.5, color);
+		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_LIGHT_GRAY, SEARCH_BOX_MARGIN, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 2, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2);
+		if (cur_search_word == "") Draw("Tap here or press A to search", SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEF_DRAW_GRAY);
+		else Draw(cur_search_word, SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEF_DRAW_BLACK);
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		
@@ -332,6 +355,9 @@ Intent Search_draw(void)
 			intent.next_scene = SceneType::EXIT;
 			ignore = true;
 		}
+		if (!ignore && key.p_touch && key.touch_y < RESULT_Y_LOW) {
+			search();
+		}
 		if (!ignore && released_point.first != -1) {
 			int released_y = released_point.second;
 			if (released_y < search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL) {
@@ -355,20 +381,7 @@ Intent Search_draw(void)
 		if (!ignore) {
 			if (video_playing_bar_show) video_update_playing_bar(key);
 			if (key.p_a) {
-				if (!is_webpage_loading_requested(LoadRequestType::SEARCH)) {
-					SwkbdState keyboard;
-					swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 32);
-					swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY | SWKBD_PREDICTIVE_INPUT);
-					swkbdSetValidation(&keyboard, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
-					swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
-					swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
-					swkbdSetInitialText(&keyboard, cur_search_word.c_str());
-					char search_word[129];
-					add_cpu_limit(40);
-					auto button_pressed = swkbdInputText(&keyboard, search_word, 32);
-					remove_cpu_limit(40);
-					if (button_pressed == SWKBD_BUTTON_RIGHT) send_search_request(search_word);
-				}
+				search();
 			} else if (RESULT_Y_LOW + search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset() < RESULT_Y_HIGH &&
 				!is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE) && search_result_bak.result_num) {
 				

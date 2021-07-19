@@ -233,11 +233,15 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 					}
 					y_offset += LOAD_MORE_MARGIN;
 				}
-			} else Draw("Empty", 0, y_offset, 0.5, 0.5, color);
+			} else {
+				std::string draw_string = "No Videos";
+				int width = Draw_get_width(draw_string, 0.5, 0.5);
+				Draw(draw_string, (320.0 - width) / 2, y_offset, 0.5, 0.5, color);
+			}
 		} else if (selected_tab == 1) { // channel description
-			Draw("Channel Description :", 3, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
-			y_offset += Draw_get_height("Channel Description :", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
-			y_offset += 3; // without this, the following description somehow overlaps with the above text
+			Draw("Channel Description", 3, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
+			y_offset += Draw_get_height("Channel Description", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
+			y_offset += SMALL_MARGIN; // without this, the following description somehow overlaps with the above text
 			Draw(channel_info.description, 3, y_offset, 0.5, 0.5, color);
 			y_offset += Draw_get_height(channel_info.description, 0.5, 0.5);
 			y_offset += SMALL_MARGIN;
@@ -370,10 +374,10 @@ Intent Channel_draw(void)
 			}
 			if (channel_info_bak.error != "" || channel_info_bak.has_continue) content_height += LOAD_MORE_MARGIN;
 		} else if (selected_tab == 1) {
-			content_height += Draw_get_height("Channel Description :", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
-			content_height += 3;
+			content_height += Draw_get_height("Channel Description", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
+			content_height += SMALL_MARGIN;
 			content_height += Draw_get_height(channel_info_bak.description, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
-			content_height += 3 + 3;
+			content_height += SMALL_MARGIN + SMALL_MARGIN;
 		}
 		auto released_point = videos_scroller.update(key, content_height);
 		
@@ -408,8 +412,8 @@ Intent Channel_draw(void)
 				y_offset += channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL;
 				if (channel_info_bak.error != "" || channel_info_bak.has_continue) y_offset += LOAD_MORE_MARGIN;
 			} else {
-				y_offset += Draw_get_height("Channel Description :", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
-				y_offset += 3;
+				y_offset += Draw_get_height("Channel Description", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
+				y_offset += SMALL_MARGIN;
 				y_offset += Draw_get_height(channel_info_bak.description, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 				y_offset += SMALL_MARGIN + SMALL_MARGIN;
 				// nothing to do on the description

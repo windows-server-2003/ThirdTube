@@ -1021,7 +1021,11 @@ static void draw_video_content(Hid_info key, int color) {
 			Draw(vid_msg[vid_linear_filter], 12.5, y_offset, 0.4, 0.4, color);
 			
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
-		} else Draw("Loading...", 0, 0, 0.5, 0.5, color);
+		} else {
+			std::string draw_str = "Loading...";
+			int width = Draw_get_width(draw_str, 0.5, 0.5);
+			Draw(draw_str, (320.0f - width) / 2, 0, 0.5, 0.5, color);
+		}
 	} else if (selected_tab == TAB_SUGGESTIONS) {
 		if (cur_video_info.suggestions.size()) {
 			int suggestion_num = cur_video_info.suggestions.size();
@@ -1055,7 +1059,11 @@ static void draw_video_content(Hid_info key, int color) {
 				}
 				y_offset += SUGGESTION_LOAD_MORE_MARGIN;
 			}
-		} else Draw("Empty", 0, 0, 0.5, 0.5, color);
+		} else {
+			std::string draw_string = "Empty";
+			int width = Draw_get_width(draw_string, 0.5, 0.5);
+			Draw(draw_string, (320.0 - width) / 2, 0, 0.5, 0.5, color);
+		}
 	} else if (selected_tab == TAB_COMMENTS) {
 		y_offset += SMALL_MARGIN;
 		for (int i = 0; i < (int) cur_video_info.comments.size(); i++) {
@@ -1385,6 +1393,8 @@ Intent VideoPlayer_draw(void)
 		int released_y = released_point.second;
 		if (selected_tab == TAB_GENERAL) {
 			if (released_x != -1) {
+				// TODO : move these to somewhere else
+				/*
 				if(released_x >= 165 && released_x <= 309 && released_y >= 165 && released_y <= 174)
 				{
 					vid_show_controls = !vid_show_controls;
@@ -1397,6 +1407,10 @@ Intent VideoPlayer_draw(void)
 						Draw_c2d_image_set_filter(&vid_image[i], vid_linear_filter);
 
 					var_need_reflesh = true;
+				}*/
+				if (released_x < ICON_SIZE + SMALL_MARGIN && released_y < ICON_SIZE + SMALL_MARGIN) {
+					intent.next_scene = SceneType::CHANNEL;
+					intent.arg = cur_video_info.author.url;
 				}
 			}
 		} else if (selected_tab == TAB_SUGGESTIONS) {
@@ -1423,6 +1437,20 @@ Intent VideoPlayer_draw(void)
 		} else if (selected_tab == TAB_COMMENTS) {
 			// TODO : implement this
 			do {
+				if (released_x != -1) {
+					bool finish = false;
+					int y_offset = SMALL_MARGIN;
+					for (int i = 0; i < (int) cur_video_info.comments.size(); i++) {
+						if (released_x < COMMENT_ICON_SIZE + SMALL_MARGIN && released_y >= y_offset && released_y < y_offset + COMMENT_ICON_SIZE) {
+							intent.next_scene = SceneType::CHANNEL;
+							intent.arg = cur_video_info.comments[i].author.url;
+							finish = true;
+							break;
+						}
+						y_offset += SMALL_MARGIN + std::max<int>(SMALL_MARGIN + COMMENT_ICON_SIZE, DEFAULT_FONT_VERTICAL_INTERVAL * (comments_lines[i].size() + 1));
+					}
+					if (finish) break;
+				}
 				int load_more_y = -scroller[selected_tab].get_offset() + SMALL_MARGIN;
 				for (auto &i : comments_lines) load_more_y += SMALL_MARGIN + std::max<int>(SMALL_MARGIN + COMMENT_ICON_SIZE, DEFAULT_FONT_VERTICAL_INTERVAL * (i.size() + 1));
 				if (cur_video_info.has_more_comments() && cur_video_info.error == "" && load_more_y < CONTENT_Y_HIGH &&
