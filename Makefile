@@ -40,12 +40,12 @@ GRAPHICS	:=	gfx
 ROMFS		:=	romfs
 GFXBUILD	:=	$(ROMFS)/gfx
 #---------------------------------------------------------------------------------
-APP_VER					:= 1041
-APP_TITLE				:= Video player for 3DS
-APP_DESCRIPTION				:= Video player for 3DS
-APP_AUTHOR				:= Core_2_Extreme
-PRODUCT_CODE				:= CTR-Vid
-UNIQUE_ID				:= 0xEC600
+APP_VER					:= 0
+APP_TITLE				:= ThirdTube
+APP_DESCRIPTION				:= A YouTube client for the new 3DS
+APP_AUTHOR				:= windows_server_2003
+PRODUCT_CODE				:= CTR-TYT
+UNIQUE_ID				:= 0xBF74D
 
 BANNER_AUDIO				:= resource/banner.wav
 BANNER_IMAGE				:= resource/banner.png
