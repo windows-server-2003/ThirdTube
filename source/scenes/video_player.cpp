@@ -1571,6 +1571,7 @@ Intent VideoPlayer_draw(void)
 		svcReleaseMutex(small_resource_lock);
 		/* ****************************** LOCK END ******************************  */
 		
+		/*
 		if(key.p_c_down || key.p_c_up || key.p_c_right || key.p_c_left || key.h_c_down || key.h_c_up || key.h_c_right || key.h_c_left
 		|| key.p_d_down || key.p_d_up || key.p_d_right || key.p_d_left || key.h_d_down || key.h_d_up || key.h_d_right || key.h_d_left)
 		{
@@ -1674,6 +1675,7 @@ Intent VideoPlayer_draw(void)
 		}
 		else
 			vid_lr_count = 0;
+		*/
 		
 		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	}
