@@ -6,6 +6,7 @@
 #include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
 #include "ui/scroller.hpp"
+#include "ui/overlay.hpp"
 
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -117,6 +118,8 @@ bool Channel_query_init_flag(void) {
 void Channel_resume(std::string arg)
 {
 	if (arg != "" && arg != cur_channel_url) send_load_request(arg);
+	overlay_menu_on_resume();
+	videos_scroller.on_resume();
 	thread_suspend = false;
 	var_need_reflesh = true;
 }
@@ -343,6 +346,7 @@ Intent Channel_draw(void)
 		draw_channel_content(channel_info_bak, key, color);
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
+		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
@@ -363,6 +367,8 @@ Intent Channel_draw(void)
 	} else if(Util_expl_query_show_flag()) {
 		Util_expl_main(key);
 	} else {
+		update_overlay_menu(&key, &intent, SceneType::CHANNEL);
+		
 		int content_height = 0;
 		if (channel_info_bak.banner_url != "") content_height += BANNER_HEIGHT;
 		content_height += ICON_SIZE + SMALL_MARGIN * 2 + TAB_SELECTOR_HEIGHT;

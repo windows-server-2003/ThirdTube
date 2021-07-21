@@ -10,8 +10,9 @@
 #define DEF_SEND_APP_INFO_URL (std::string)"https://script.google.com/macros/s/AKfycbyn_blFyKWXCgJr6NIF8x6ETs7CHRN5FXKYEAAIrzV6jPYcCkI/exec"
 #define DEF_CHECK_UPDATE_URL (std::string)"https://script.google.com/macros/s/AKfycbwTd3jzV0npUE9MNKmZIv3isazVR5D9_7A8rexsG1vr9SE7iavDBxgtzlph8dZipwu9/exec"
 #define DEF_HTTP_USER_AGENT (std::string)"video player for 3ds v1.1.0"
-#define DEF_CURRENT_APP_VER (std::string)"v0.0.0"
-#define DEF_CURRENT_APP_VER_INT 1
+#define DEF_CURRENT_APP_VER (std::string)"0.0.0"
+#define DEF_CURRENT_APP_VER_INT 0
+#define GITHUB_URL std::string("https://github.com/windows-server-2003/ThirdTube")
 // #define DEF_ENABLE_SUB_APP0
 //#define DEF_ENABLE_SUB_APP1
 //#define DEF_ENABLE_SUB_APP2
@@ -66,6 +67,9 @@
 #define DEF_EXFONT_LOAD_FONT_THREAD_STR (std::string)"Exfont/Load font thread"
 
 //abgr8888 color
+// COLOR_GRAY(0xFF) = WHITE, COLOR_GRAY(0x00) = BLACK
+#define COLOR_GRAY(x) (0xFF000000 | (x) << 16 | (x) << 8 | (x))
+
 #define DEF_DRAW_RED 0xFF0000FF
 #define DEF_DRAW_GREEN 0xFF00FF00
 #define DEF_DRAW_BLUE 0xFFFF0000

@@ -5,6 +5,7 @@ enum class SceneType {
 	SEARCH,
 	SETTING,
 	CHANNEL,
+	ABOUT,
 	// used for intent
 	NO_CHANGE,
 	BACK,
@@ -17,6 +18,7 @@ struct Intent {
 	bool operator == (const Intent &rhs) {
 		return next_scene == rhs.next_scene && arg == rhs.arg;
 	}
+	bool operator != (const Intent &rhs) { return !(*this == rhs); }
 };
 
 

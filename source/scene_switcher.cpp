@@ -4,6 +4,8 @@
 #include "scenes/video_player.hpp"
 #include "scenes/search.hpp"
 #include "scenes/channel.hpp"
+#include "scenes/about.hpp"
+// add here
 
 bool menu_thread_run = false;
 bool menu_check_exit_request = false;
@@ -52,8 +54,12 @@ void Menu_init(void)
 	VideoPlayer_suspend();
 	Channel_init();
 	Channel_suspend();
+	About_init();
+	About_suspend();
+	// add here
 	Search_init(); // first running
 	current_scene = SceneType::SEARCH;
+	
 	thumbnail_downloader_thread = threadCreate(thumbnail_downloader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	webpage_loader_thread = threadCreate(webpage_loader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
@@ -106,6 +112,8 @@ void Menu_exit(void)
 	Channel_exit();
 	Search_exit();
 	Sem_exit();
+	About_exit();
+	// add here
 
 	Util_hid_exit();
 	Util_expl_exit();
@@ -192,10 +200,14 @@ bool Menu_main(void)
 	} else if (current_scene == SceneType::SETTING) {
 		intent = Sem_draw();
 		if (intent.next_scene != SceneType::NO_CHANGE) Sem_suspend();
+	} else if (current_scene == SceneType::ABOUT) {
+		intent = About_draw();
+		if (intent.next_scene != SceneType::NO_CHANGE) About_suspend();
 	}
+	// add here
 	
 	if (intent.next_scene == SceneType::EXIT) return false;
-	else if (intent.next_scene != SceneType::NO_CHANGE) {
+	else if (intent.next_scene != SceneType::NO_CHANGE && intent != scene_stack.back()) {
 		if (scene_stack.size() >= 2 && intent == scene_stack[scene_stack.size() - 2]) intent.next_scene = SceneType::BACK;
 		if (intent.next_scene == SceneType::BACK) {
 			if (scene_stack.size() >= 2) scene_stack.pop_back();
@@ -208,6 +220,8 @@ bool Menu_main(void)
 		else if (current_scene == SceneType::SEARCH) Search_resume(arg);
 		else if (current_scene == SceneType::CHANNEL) Channel_resume(arg);
 		else if (current_scene == SceneType::SETTING) Sem_resume(arg);
+		else if (current_scene == SceneType::ABOUT) About_resume(arg);
+		// add here
 	}
 	
 	return true;

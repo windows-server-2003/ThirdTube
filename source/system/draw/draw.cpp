@@ -558,6 +558,21 @@ float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 	return x_max;
 }
 
+
+void Draw_x_centered(std::string text, float x0, float x1, float y, float text_size_x, float text_size_y, int abgr8888) {
+	float x = x0 + (x1 - x0 - Draw_get_width(text, text_size_x, text_size_y)) / 2;
+	Draw(text, x, y, text_size_x, text_size_y, abgr8888);
+}
+void Draw_y_centered(std::string text, float x, float y0, float y1, float text_size_x, float text_size_y, int abgr8888) {
+	float y = y0 + (y1 - y0 - Draw_get_height(text, text_size_x, text_size_y)) / 2;
+	Draw(text, x, y, text_size_x, text_size_y, abgr8888);
+}
+void Draw_xy_centered(std::string text, float x0, float x1, float y0, float y1, float text_size_x, float text_size_y, int abgr8888) {
+	float x = x0 + (x1 - x0 - Draw_get_width(text, text_size_x, text_size_y)) / 2;
+	float y = y0 + (y1 - y0 - Draw_get_height(text, text_size_x, text_size_y)) / 2;
+	Draw(text, x, y, text_size_x, text_size_y, abgr8888);
+}
+
 Result_with_string Draw_load_texture(std::string file_name, int sheet_map_num, C2D_Image return_image[], int start_num, int num_of_array)
 {
 	size_t num_of_images;

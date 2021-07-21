@@ -6,6 +6,7 @@
 #include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
 #include "ui/scroller.hpp"
+#include "ui/overlay.hpp"
 
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -112,6 +113,7 @@ void Search_resume(std::string arg)
 {
 	(void) arg;
 	results_scroller.on_resume();
+	overlay_menu_on_resume();
 	thread_suspend = false;
 	var_need_reflesh = true;
 }
@@ -319,6 +321,7 @@ Intent Search_draw(void)
 		else Draw(cur_search_word, SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEF_DRAW_BLACK);
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
+		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
@@ -341,12 +344,15 @@ Intent Search_draw(void)
 		Util_expl_main(key);
 		results_scroller.on_resume();
 	} else {
+		update_overlay_menu(&key, &intent, SceneType::SEARCH);
+		
 		int content_height;
 		if (search_result_bak.result_num) {
 			content_height = 0;
 			if (search_result_bak.result_num) content_height += search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL + RESULTS_MARGIN;
 			if (search_result_bak.error != "" || search_result_bak.has_continue) content_height += LOAD_MORE_HEIGHT;
 		} else content_height = 0;
+		
 		auto released_point = results_scroller.update(key, content_height);
 		
 		if (key.p_touch && key.touch_y < RESULT_Y_LOW) {

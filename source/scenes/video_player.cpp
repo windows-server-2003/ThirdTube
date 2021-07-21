@@ -5,6 +5,7 @@
 
 #include "scenes/video_player.hpp"
 #include "ui/scroller.hpp"
+#include "ui/overlay.hpp"
 
 #define REQUEST_HW_DECODER true
 #define VIDEO_AUDIO_SEPERATE false
@@ -856,6 +857,8 @@ void VideoPlayer_resume(std::string arg)
 		if (arg != vid_url) send_change_video_request(arg);
 		else if (!vid_play_request) vid_play_request = true;
 	}
+	for (auto i : scroller) i.on_resume();
+	overlay_menu_on_resume();
 	vid_thread_suspend = false;
 	vid_main_run = true;
 	var_need_reflesh = true;
@@ -1321,6 +1324,7 @@ Intent VideoPlayer_draw(void)
 		
 		// playing bar
 		video_draw_playing_bar();
+		draw_overlay_menu(240 - VIDEO_PLAYING_BAR_HEIGHT - TAB_SELECTOR_HEIGHT - OVERLAY_MENU_ICON_SIZE);
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
@@ -1409,7 +1413,8 @@ Intent VideoPlayer_draw(void)
 			for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {comment_thumbnail_handles[i], 500 - dist(i)};
 			thumbnail_set_priorities(priority_list);
 		}
-
+		
+		update_overlay_menu(&key, &intent, SceneType::VIDEO_PLAYER);
 		// tab selector
 		{
 			auto released_point = tab_selector_scroller.update(key, TAB_SELECTOR_HEIGHT);
