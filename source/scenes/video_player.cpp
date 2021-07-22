@@ -28,8 +28,8 @@
 
 #define TAB_NUM 4
 #define TAB_GENERAL 0
-#define TAB_SUGGESTIONS 1
-#define TAB_COMMENTS 2
+#define TAB_COMMENTS 1
+#define TAB_SUGGESTIONS 2
 #define TAB_ADVANCED 3
 
 namespace VideoPlayer {
