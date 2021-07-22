@@ -19,23 +19,23 @@ The name is derived from the fact that it is the third YouTube client on 3DS, fo
 
 ## Features
 
- - 360p Video Playback
+ - 360p Video Playback  
    480p might be possible and could be considered in the future development
- - Searching
- - Video suggestion
- - Comments
+ - Searching  
+ - Video suggestion  
+ - Comments  
  - No ads  
    As this app web-scrapes YouTube, it's more like "Ads are not implemented" rather than "We have ad-blocking functionality".  
    Of course, I will never "implement" it :)  
 
 ## Controls
 Currently, most of the controls are done by touching.  
-You can always use B button to go back to the previous scene.
-Using the hamburger menu at the right bottom, you can jump to the Search, Settings, or About scene or exit the app.
+You can always use B button to go back to the previous scene.  
+Using the hamburger menu at the right bottom, you can jump to the Search, Settings, or About scene or exit the app.  
 
 ## Requirments
-A New 3DS (including a new 2DS) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.
-I haven't tested the minimum system version, but at least 8.1.0-0 is needed.
+A New 3DS (including a new 2DS) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.  
+I haven't tested the minimum system version, but at least 8.1.0-0 is needed.  
 
 ## Known issues
 
