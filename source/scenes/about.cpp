@@ -26,8 +26,14 @@ namespace About {
 	const std::vector<std::string> license_lines = {
 		"You can redistribute and/or modify this software",
 		"under the terms of the GNU General Public",
-		"License GPL v3 or under the terms of",
-		"any later revisions of the GPL."
+		"License (GPL) v3 or under the terms of",
+		"any later revisions of the GPL.",
+	};
+	const std::vector<std::pair<std::string, std::string> > third_party_licenses = {
+		{"FFmpeg", "by the FFmpeg developers under LGPLv2"},
+		{"json11", "by Dropbox under MIT License"},
+		{"libctru", "by devkitPro under zlib License"},
+		{"stb", "by Sean Barrett under MIT License"}
 	};
 	
 	int CONTENT_Y_HIGH = 240;
@@ -129,6 +135,20 @@ static void draw_about() {
 			y_offset += DEFAULT_FONT_INTERVAL;
 		}
 	}
+	{ // Thirdparty licenses
+		y_offset += SMALL_MARGIN * 2;
+		Draw("Third-party Licenses", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
+		y_offset += MIDDLE_FONT_INTERVAL;
+		y_offset += SMALL_MARGIN;
+		Draw_line(SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 320 - SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 1);
+		y_offset += SMALL_MARGIN;
+		for (auto license : third_party_licenses) {
+			Draw(license.first, SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+			y_offset += DEFAULT_FONT_INTERVAL;
+			Draw(license.second, SMALL_MARGIN * 3, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN;
+		}
+	}
 	scroller.draw_slider_bar();
 }
 
@@ -203,6 +223,8 @@ Intent About_draw(void)
 		for (auto i : credits) content_height += (MIDDLE_FONT_INTERVAL + i.second.size() * DEFAULT_FONT_INTERVAL);
 		// license section
 		content_height += MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 4 + DEFAULT_FONT_INTERVAL * license_lines.size();
+		// third-party licenses section
+		content_height += MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 4 + (DEFAULT_FONT_INTERVAL * 2 + SMALL_MARGIN) * third_party_licenses.size();
 		// for the additional margin below the content
 		content_height += SMALL_MARGIN * 2;
 		

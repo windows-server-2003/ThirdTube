@@ -96,6 +96,7 @@ namespace VideoPlayer {
 	
 	Handle small_resource_lock; // locking basically all std::vector, std::string, etc
 	YouTubeVideoDetail cur_video_info;
+	int video_retry_left = 0;
 	int suggestion_thumbnail_request_l = 0;
 	int suggestion_thumbnail_request_r = 0;
 	std::vector<int> suggestion_thumbnail_handles;
