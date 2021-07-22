@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include "youtube_parser/parser.hpp"
 
 void load_settings() {
 	char buf[0x1001] = { 0 };
@@ -33,6 +34,7 @@ void load_settings() {
 	
 	Util_cset_set_wifi_state(true);
 	Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
+	youtube_change_content_language(var_lang_content);
 }
 void save_settings() {
 	std::string data = 

@@ -122,8 +122,10 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 	// POST to get more results
 	Json yt_result;
 	{
-		std::string post_content = R"({"context": {"client": {"hl": "ja", "gl": "JP", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
+		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
 			+ prev_result.continue_token + "\"}";
+		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
+		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		
 		std::string post_url = "https://m.youtube.com/youtubei/v1/search?key=" + prev_result.continue_key;
 		

@@ -5,6 +5,7 @@
 #include "scenes/video_player.hpp"
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
+#include "youtube_parser/parser.hpp"
 
 #define SMALL_MARGIN 3
 #define DEFAULT_FONT_INTERVAL 13
@@ -264,7 +265,10 @@ Intent Sem_draw(void)
 				auto prev_value = var_lang_content;
 				if (key.touch_x >= 40 && key.touch_x < 140) var_lang_content = "en";
 				if (key.touch_x >= 180 && key.touch_x < 280) var_lang_content = "ja";
-				if (var_lang_content != prev_value) save_settings_request = true;
+				if (var_lang_content != prev_value) {
+					save_settings_request = true;
+					youtube_change_content_language(var_lang_content);
+				}
 			}
 			y_offset += 20;
 			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 3;

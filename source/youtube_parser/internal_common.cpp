@@ -1,18 +1,27 @@
 #include <regex>
 #include "internal_common.hpp"
 
+void youtube_change_content_language(std::string language_code) {
+	youtube_parser::language_code = language_code;
+	youtube_parser::country_code = language_code == "en" ? "US" : "JP";
+}
+
 namespace youtube_parser {
+	std::string language_code = "en";
+	std::string country_code = "US";
+	
 #ifdef _WIN32
 	std::string http_get(const std::string &url, std::map<std::string, std::string> header) {
 		static const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
 		if (!header.count("User-Agent")) header["User-Agent"] = user_agent;
+		if (!header.count("Accept-Language")) header["Accept-Language"] = language_code + ";q=0.9";
 		
 		{
 			std::ofstream file("wget_url.txt");
 			file << url;
 		}
 		
-		std::string command = "wget -i wget_url.txt -O wget_tmp.txt";
+		std::string command = "wget -i wget_url.txt -O wget_tmp.txt --no-check-certificate";
 		for (auto i : header) command += " --header=\"" + i.first + ": " + i.second + "\"";
 		
 		system(command.c_str());
@@ -35,11 +44,13 @@ namespace youtube_parser {
 	}
 #else
 	std::string http_get(const std::string &url, std::map<std::string, std::string> header) {
+		// use mobile version of User-Agent for smaller webpage size (and the whole parser is designed to parse the mobile version)
+		if (!header.count("User-Agent")) header["User-Agent"] = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
+		if (!header.count("Accept-Language")) header["Accept-Language"] = language_code + ";q=0.9";
+		
 		constexpr int BLOCK = 0x40000; // 256 KB
 		add_cpu_limit(25);
 		debug("accessing...");
-		// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
-		if (!header.count("User-Agent")) header["User-Agent"] = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
 		auto network_res = access_http_get(url, header);
 		std::string res;
 		if (network_res.first == "") {
