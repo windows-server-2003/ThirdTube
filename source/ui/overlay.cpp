@@ -17,6 +17,7 @@ struct Content {
 	enum class Type {
 		SEARCH,
 		EXIT,
+		SETTINGS,
 		ABOUT
 	};
 	Type type;
@@ -91,6 +92,7 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 	contents.clear();
 	if (current_scene != SceneType::SEARCH) contents.push_back({"Search", Content::Type::SEARCH});
 	contents.push_back({"Exit the app", Content::Type::EXIT});
+	contents.push_back({"Settings", Content::Type::SETTINGS});
 	if (current_scene != SceneType::ABOUT) contents.push_back({"About", Content::Type::ABOUT});
 	
 	if (menu_status == CONFIRMING_CLOSE) {
@@ -120,6 +122,9 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 					menu_status = CONFIRMING_CLOSE;
 				} else if (contents[id].type == Content::Type::ABOUT) {
 					intent->next_scene = SceneType::ABOUT;
+					intent->arg = "";
+				} else if (contents[id].type == Content::Type::SETTINGS) {
+					intent->next_scene = SceneType::SETTINGS;
 					intent->arg = "";
 				}
 			} else menu_status = CLOSED;

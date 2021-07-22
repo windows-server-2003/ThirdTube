@@ -1,7 +1,7 @@
 #pragma once
 
 //settings
-#define DEF_MAIN_DIR (std::string)"/3ds/ThirdTube"
+#define DEF_MAIN_DIR (std::string)"/3ds/ThirdTube/"
 #define DEF_UPDATE_DIR_PREFIX (std::string)"/3ds/Video_player_ver_"
 #define DEF_UPDATE_FILE_PREFIX (std::string)"video_player"
 #define DEF_LOG_COLOR 0xFFBBBB00

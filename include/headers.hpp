@@ -6,6 +6,7 @@
 #include <malloc.h>
 #include <string>
 #include <unistd.h>
+#include <limits>
 #include "citro2d.h"
 
 #include "definitions.hpp"

@@ -3,7 +3,7 @@
 enum class SceneType {
 	VIDEO_PLAYER,
 	SEARCH,
-	SETTING,
+	SETTINGS,
 	CHANNEL,
 	ABOUT,
 	// used for intent

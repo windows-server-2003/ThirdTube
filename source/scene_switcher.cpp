@@ -1,10 +1,10 @@
 ﻿#include "headers.hpp"
 
-#include "system/setting_menu.hpp"
 #include "scenes/video_player.hpp"
 #include "scenes/search.hpp"
 #include "scenes/channel.hpp"
 #include "scenes/about.hpp"
+#include "scenes/setting_menu.hpp"
 // add here
 
 bool menu_thread_run = false;
@@ -197,7 +197,7 @@ bool Menu_main(void)
 	} else if (current_scene == SceneType::CHANNEL) {
 		intent = Channel_draw();
 		if (intent.next_scene != SceneType::NO_CHANGE) Channel_suspend();
-	} else if (current_scene == SceneType::SETTING) {
+	} else if (current_scene == SceneType::SETTINGS) {
 		intent = Sem_draw();
 		if (intent.next_scene != SceneType::NO_CHANGE) Sem_suspend();
 	} else if (current_scene == SceneType::ABOUT) {
@@ -219,7 +219,7 @@ bool Menu_main(void)
 		if (current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_resume(arg);
 		else if (current_scene == SceneType::SEARCH) Search_resume(arg);
 		else if (current_scene == SceneType::CHANNEL) Channel_resume(arg);
-		else if (current_scene == SceneType::SETTING) Sem_resume(arg);
+		else if (current_scene == SceneType::SETTINGS) Sem_resume(arg);
 		else if (current_scene == SceneType::ABOUT) About_resume(arg);
 		// add here
 	}
@@ -391,6 +391,7 @@ void Menu_worker_thread(void* arg)
 	int count = 0;
 	Result_with_string result;
 
+	int prev_state = 2; // 0 : turned off, 1 : set to 10, 2 : full
 	while (menu_thread_run)
 	{
 		usleep(49000);
@@ -400,31 +401,29 @@ void Menu_worker_thread(void* arg)
 		{
 			Menu_get_system_info();
 			var_need_reflesh = true;
-			var_afk_time++;
 			count = 0;
+		}
+		
+		var_afk_time += 0.05;
+		
+		int cur_state;
+		if(var_afk_time > var_time_to_turn_off_lcd) cur_state = 0;
+		else if(var_afk_time > std::max<float>(var_time_to_turn_off_lcd * 0.5, (var_time_to_turn_off_lcd - 10))) cur_state = 1;
+		else cur_state = 2;
 
-			if(var_afk_time > var_time_to_turn_off_lcd)
-			{
-				result = Util_cset_set_screen_state(true, true, false);
-				if(result.code != 0)
-					Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Util_cset_set_screen_state()..." + result.string + result.error_description, result.code);
-			}
-			else if(var_afk_time > (var_time_to_turn_off_lcd - 10))
-			{
+		if (cur_state != prev_state) {
+			if (prev_state == 0) Util_cset_set_screen_state(true, true, true);
+			if (cur_state == 0) Util_cset_set_screen_state(true, true, false);
+			if (cur_state == 1) {
 				result = Util_cset_set_screen_brightness(true, true, 10);
 				if(result.code != 0)
 					Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Util_cset_set_screen_brightness()..." + result.string + result.error_description, result.code);
-			}
-			else
-			{
-				result = Util_cset_set_screen_state(true, true, true);
-				if(result.code != 0)
-					Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Util_cset_set_screen_state()..." + result.string + result.error_description, result.code);
-				
+			} else if (cur_state == 2) {
 				result = Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
 				if(result.code != 0)
 					Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Util_cset_set_screen_brightness()..." + result.string + result.error_description, result.code);
 			}
+			prev_state = cur_state;
 		}
 
 		if (var_flash_mode)
