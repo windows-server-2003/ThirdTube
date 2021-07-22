@@ -146,12 +146,13 @@ void draw_settings_menu() {
 		y_offset += SMALL_MARGIN * 3;
 	}
 	{ // Time to turn off the LCD
-		Draw(LOCALIZED(TIME_TO_TURN_OFF_LCD) + " : " + std::to_string(var_time_to_turn_off_lcd) + " " + LOCALIZED(SECONDS), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw(LOCALIZED(TIME_TO_TURN_OFF_LCD) + " : " + (var_time_to_turn_off_lcd <= 310 ? std::to_string(var_time_to_turn_off_lcd) + " " + LOCALIZED(SECONDS) :
+			LOCALIZED(NEVER_TURN_OFF)), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += DEFAULT_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN * 3;
 		float bar_x_l = 40;
 		float bar_x_r = 280;
-		float x = bar_x_l + (bar_x_r - bar_x_l) * (var_time_to_turn_off_lcd - 10) / (310 - 10);
+		float x = bar_x_l + (bar_x_r - bar_x_l) * std::min<float>(1.0f, (float) (var_time_to_turn_off_lcd - 10) / (310 - 10));
 		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, bar_x_l, y_offset, bar_x_r - bar_x_l, 3);
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, bar_x_l, y_offset, x - bar_x_l, 3);
 		C2D_DrawCircleSolid(x, y_offset + 1, 0, bar_holding == 1 ? 6 : 4, DEF_DRAW_WEAK_AQUA);
@@ -294,7 +295,8 @@ Intent Sem_draw(void)
 			var_lcd_brightness = 15 + (163 - 15) * std::max(0.0f, std::min<float>(1.0f,  (float) (key.touch_x - 40) / (280 - 40)));
 			change_brightness_request = true;
 		} else if (bar_holding == 1) {
-			var_time_to_turn_off_lcd = 10 + (310 - 10) * std::max(0.0f, std::min<float>(1.0f, (float) (key.touch_x - 40) / (280 - 40)));
+			if (key.touch_x >= 280) var_time_to_turn_off_lcd = 1000000000; // never turn off
+			else var_time_to_turn_off_lcd = 10 + (310 - 10) * std::max(0.0f, std::min<float>(1.0f, (float) (key.touch_x - 40) / (280 - 40)));
 		}
 		
 		if (key.p_b) intent.next_scene = SceneType::BACK;
