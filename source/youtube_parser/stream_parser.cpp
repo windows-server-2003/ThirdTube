@@ -185,6 +185,7 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 				for (auto i : content["slimVideoMetadataSectionRenderer"]["contents"].array_items()) {
 					if (i["slimVideoInformationRenderer"] != Json()) res.title = get_text_from_object(i["slimVideoInformationRenderer"]["title"]);
 					if (i["slimOwnerRenderer"] != Json()) extract_owner(i["slimOwnerRenderer"], res);
+					if (i["slimVideoDescriptionRenderer"] != Json()) res.description = get_text_from_object(i["slimVideoDescriptionRenderer"]["description"]);
 				}
 			}
 		}
