@@ -24,7 +24,6 @@
 #define TAB_NUM 2
 
 namespace Channel {
-	std::string string_resource[DEF_CHANNEL_NUM_OF_MSG];
 	bool thread_suspend = false;
 	bool already_init = false;
 	bool exiting = false;
@@ -43,8 +42,6 @@ namespace Channel {
 	int banner_thumbnail_handle = -1;
 	int icon_thumbnail_handle = -1;
 	std::vector<std::vector<std::string> > wrapped_titles;
-	
-	const std::string tab_strings[TAB_NUM] = {"Videos", "Info"};
 };
 using namespace Channel;
 
@@ -137,9 +134,6 @@ void Channel_init(void)
 	reset_channel_info();
 	svcCreateMutex(&resource_lock, false);
 	
-	// result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SEARCH_NUM_OF_MSG);
-	// Util_log_save(DEF_SAPP0_INIT_STR, "Util_load_msg()..." + result.string + result.error_description, result.code);
-
 	Channel_resume("");
 	already_init = true;
 }
@@ -150,10 +144,6 @@ void Channel_exit(void)
 	thread_suspend = false;
 	exiting = true;
 	
-	/*
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(search_thread, time_out));
-	threadFree(search_thread);*/
-
 	Util_log_save("search/exit", "Exited.");
 }
 
@@ -173,7 +163,7 @@ struct TemporaryCopyOfChannelInfo {
 };
 static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_info key, int color) {
 	if (is_webpage_loading_requested(LoadRequestType::CHANNEL)) {
-		Draw("Loading", 0, 0, 0.5, 0.5, color);
+		Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, color);
 	} else  {
 		int y_offset = -videos_scroller.get_offset();
 		if (channel_info.banner_url != "") {
@@ -195,11 +185,14 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 			320 / TAB_NUM + 1, TAB_SELECTOR_SELECTED_LINE_HEIGHT);
 		for (int i = 0; i < TAB_NUM; i++) {
 			float font_size = 0.4;
-			float center = (1 + 2 * i) * 320 / (2 * TAB_NUM);
-			float width = Draw_get_width(tab_strings[i], font_size, font_size);
+			float x_l = i * 320 / TAB_NUM;
+			float x_r = (i + 1) * 320 / TAB_NUM;
+			std::string tab_string;
+			if (i == 0) tab_string = LOCALIZED(VIDEOS);
+			else if (i == 1) tab_string = LOCALIZED(INFO);
 			float y = y_offset + 3;
 			if (i == selected_tab) y -= 1;
-			Draw(tab_strings[i], center - width / 2, y, font_size, font_size, DEF_DRAW_BLACK);
+			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEF_DRAW_BLACK);
 		}
 		y_offset += TAB_SELECTOR_HEIGHT;
 		
@@ -230,20 +223,13 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 					if (is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE)) draw_string = "Loading...";
 					else if (channel_info.error != "") draw_string = channel_info.error;
 					
-					if (y_offset < VIDEO_LIST_Y_HIGH) {
-						int width = Draw_get_width(draw_string, 0.5, 0.5);
-						Draw(draw_string, (320 - width) / 2, y_offset, 0.5, 0.5, color);
-					}
+					if (y_offset < VIDEO_LIST_Y_HIGH) Draw_x_centered(draw_string, 0, 320, y_offset, 0.5, 0.5, color);
 					y_offset += LOAD_MORE_MARGIN;
 				}
-			} else {
-				std::string draw_string = "No Videos";
-				int width = Draw_get_width(draw_string, 0.5, 0.5);
-				Draw(draw_string, (320.0 - width) / 2, y_offset, 0.5, 0.5, color);
-			}
+			} else Draw_x_centered(LOCALIZED(NO_VIDEOS), 0, 320, y_offset, 0.5, 0.5, color);
 		} else if (selected_tab == 1) { // channel description
-			Draw("Channel Description", 3, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
-			y_offset += Draw_get_height("Channel Description", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
+			Draw(LOCALIZED(CHANNEL_DESCRIPTION), 3, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
+			y_offset += Draw_get_height(LOCALIZED(CHANNEL_DESCRIPTION), MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 			y_offset += SMALL_MARGIN; // without this, the following description somehow overlaps with the above text
 			Draw(channel_info.description, 3, y_offset, 0.5, 0.5, color);
 			y_offset += Draw_get_height(channel_info.description, 0.5, 0.5);
@@ -381,7 +367,7 @@ Intent Channel_draw(void)
 			}
 			if (channel_info_bak.error != "" || channel_info_bak.has_continue) content_height += LOAD_MORE_MARGIN;
 		} else if (selected_tab == 1) {
-			content_height += Draw_get_height("Channel Description", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
+			content_height += Draw_get_height(LOCALIZED(CHANNEL_DESCRIPTION), MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 			content_height += SMALL_MARGIN;
 			content_height += Draw_get_height(channel_info_bak.description, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 			content_height += SMALL_MARGIN + SMALL_MARGIN;
@@ -419,7 +405,7 @@ Intent Channel_draw(void)
 				y_offset += channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL;
 				if (channel_info_bak.error != "" || channel_info_bak.has_continue) y_offset += LOAD_MORE_MARGIN;
 			} else {
-				y_offset += Draw_get_height("Channel Description", MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
+				y_offset += Draw_get_height(LOCALIZED(CHANNEL_DESCRIPTION), MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 				y_offset += SMALL_MARGIN;
 				y_offset += Draw_get_height(channel_info_bak.description, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 				y_offset += SMALL_MARGIN + SMALL_MARGIN;

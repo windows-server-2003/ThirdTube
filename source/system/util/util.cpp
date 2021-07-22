@@ -88,33 +88,27 @@ std::string Util_encode_to_escape(std::string in_data)
 	return return_data;
 }
 
-Result_with_string Util_load_msg(std::string file_name, std::string out_msg[], int num_of_msg)
-{
-	u8* fs_buffer = NULL;
-	u32 read_size = 0;
-	Result_with_string result;
-	fs_buffer = (u8*)malloc(0x2000);
-	if(fs_buffer == NULL)
-	{
-		result.code = DEF_ERR_OUT_OF_MEMORY;
-		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
-		return result;
+std::map<std::string, std::string> parse_xml_like_text(std::string data) {
+	int head = 0;
+	int n = data.size();
+	std::map<std::string, std::string> res;
+	while (head < n) {
+		while (head < n && data[head] != '<') head++;
+		head++;
+		if (head >= n) break;
+		std::string key;
+		while (head < n && data[head] != '>') key.push_back(data[head++]);
+		head++;
+		if (head >= n) break;
+		
+		std::string closing_pattern = "</" + key + ">";
+		auto closing_pos = data.find(closing_pattern, head);
+		if (closing_pos == std::string::npos) break;
+		std::string value = data.substr(head, closing_pos - head);
+		head = closing_pos + closing_pattern.size();
+		
+		res[key] = value;
 	}
-
-	result = Util_file_load_from_rom(file_name, "romfs:/gfx/msg/", fs_buffer, 0x2000, &read_size);
-	if (result.code != 0)
-	{
-		free(fs_buffer);
-		return result;
-	}
-
-	result = Util_parse_file((char*)fs_buffer, num_of_msg, out_msg);
-	if (result.code != 0)
-	{
-		free(fs_buffer);
-		return result;
-	}
-
-	free(fs_buffer);
-	return result;
+	return res;
 }
+

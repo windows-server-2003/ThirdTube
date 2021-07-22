@@ -13,31 +13,16 @@
 #define DEF_CURRENT_APP_VER (std::string)"0.0.0"
 #define DEF_CURRENT_APP_VER_INT 0
 #define GITHUB_URL std::string("https://github.com/windows-server-2003/ThirdTube")
-// #define DEF_ENABLE_SUB_APP0
-//#define DEF_ENABLE_SUB_APP1
-//#define DEF_ENABLE_SUB_APP2
-//#define DEF_ENABLE_SUB_APP3
-//#define DEF_ENABLE_SUB_APP4
-//#define DEF_ENABLE_SUB_APP5
-//#define DEF_ENABLE_SUB_APP6
-//#define DEF_ENABLE_SUB_APP7
 
 //video player
-#define DEF_SAPP0_NUM_OF_MSG 12
 #define DEF_SAPP0_NAME (std::string)"Video\nplayer"
-#define DEF_SAPP0_VER (std::string)"v0.0.0"
 #define DEF_SAPP0_MAIN_STR (std::string)"Vid/Main"
 #define DEF_SAPP0_INIT_STR (std::string)"Vid/Init"
 #define DEF_SAPP0_EXIT_STR (std::string)"Vid/Exit"
 #define DEF_SAPP0_DECODE_THREAD_STR (std::string)"Vid/Decode thread"
 #define DEF_SAPP0_CONVERT_THREAD_STR (std::string)"Vid/Convert thread"
 
-#define DEF_SEARCH_NUM_OF_MSG 1
-
-#define DEF_CHANNEL_NUM_OF_MSG 1
-
 //menu
-#define DEF_MENU_NUM_OF_MSG 5
 #define DEF_MENU_MAIN_STR (std::string)"Menu/Main"
 #define DEF_MENU_INIT_STR (std::string)"Menu/Init"
 #define DEF_MENU_EXIT_STR (std::string)"Menu/Exit"
@@ -47,7 +32,6 @@
 #define DEF_MENU_CHECK_INTERNET_STR (std::string)"Menu/Check internet thread"
 
 //setting menu
-#define DEF_SEM_NUM_OF_MSG 56
 #define DEF_SEM_INIT_STR (std::string)"Sem/Init"
 #define DEF_SEM_EXIT_STR (std::string)"Sem/Exit"
 #define DEF_SEM_WORKER_THREAD_STR (std::string)"Sem/Worker thread"

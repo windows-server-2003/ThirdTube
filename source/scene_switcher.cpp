@@ -10,7 +10,6 @@
 bool menu_thread_run = false;
 bool menu_check_exit_request = false;
 bool menu_update_available = false;
-std::string menu_msg[DEF_MENU_NUM_OF_MSG];
 Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread,webpage_loader_thread;
 C2D_Image menu_app_icon[4];
 
@@ -47,7 +46,7 @@ void Menu_init(void)
 	Util_log_save(DEF_MENU_INIT_STR, "APT_SetAppCpuTimeLimit()...", APT_SetAppCpuTimeLimit(30));
 	
 	APT_CheckNew3DS(&is_new_3ds);
-
+	
 	Sem_init();
 	Sem_suspend();
 	VideoPlayer_init();

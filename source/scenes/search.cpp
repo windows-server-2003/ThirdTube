@@ -19,7 +19,6 @@
 
 
 namespace Search {
-	std::string string_resource[DEF_SEARCH_NUM_OF_MSG];
 	bool thread_suspend = false;
 	bool already_init = false;
 	bool exiting = false;
@@ -133,9 +132,6 @@ void Search_init(void)
 	results_scroller.reset();
 	reset_search_result();
 	
-	// result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SEARCH_NUM_OF_MSG);
-	// Util_log_save(DEF_SAPP0_INIT_STR, "Util_load_msg()..." + result.string + result.error_description, result.code);
-
 	Search_resume("");
 	already_init = true;
 }
@@ -195,19 +191,15 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 		// draw load-more margin
 		if (search_result.error != "" || search_result.has_continue()) {
 			std::string draw_str = "";
-			if (is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE)) draw_str = "Loading...";
+			if (is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE)) draw_str = LOCALIZED(LOADING);
 			else if (result.error != "") draw_str = result.error;
 			
 			int y = RESULT_Y_LOW + result.result_num * RESULTS_VERTICAL_INTERVAL + RESULTS_MARGIN - results_scroller.get_offset();
-			if (y < RESULT_Y_HIGH) {
-				int width = Draw_get_width(draw_str, 0.5, 0.5);
-				Draw(draw_str, (320 - width) / 2, y, 0.5, 0.5, color);
-			}
+			if (y < RESULT_Y_HIGH) Draw_x_centered(draw_str, 0, 320, y, 0.5, 0.5, color);
 		}
 	} else {
-		std::string draw_str = is_webpage_loading_requested(LoadRequestType::SEARCH) ? "Loading..." : (search_done ? "No Results" : "");
-		int width = Draw_get_width(draw_str, 0.5, 0.5);
-		Draw(draw_str, (320.0f - width) / 2, RESULT_Y_LOW, 0.5, 0.5, color);
+		std::string draw_str = is_webpage_loading_requested(LoadRequestType::SEARCH) ? LOCALIZED(LOADING) : (search_done ? LOCALIZED(NO_RESULTS) : "");
+		Draw_x_centered(draw_str, 0, 320, RESULT_Y_LOW, 0.5, 0.5, color);
 	}
 	results_scroller.draw_slider_bar();
 }
@@ -218,8 +210,8 @@ static void search() {
 		swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 32);
 		swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY | SWKBD_PREDICTIVE_INPUT);
 		swkbdSetValidation(&keyboard, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
-		swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, "Cancel", false);
-		swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, "OK", true);
+		swkbdSetButton(&keyboard, SWKBD_BUTTON_LEFT, LOCALIZED(CANCEL).c_str(), false);
+		swkbdSetButton(&keyboard, SWKBD_BUTTON_RIGHT, LOCALIZED(OK).c_str(), true);
 		swkbdSetInitialText(&keyboard, cur_search_word.c_str());
 		char search_word[129];
 		add_cpu_limit(40);
@@ -317,7 +309,7 @@ Intent Search_draw(void)
 		// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
 		
 		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_LIGHT_GRAY, SEARCH_BOX_MARGIN, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 2, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2);
-		if (cur_search_word == "") Draw("Tap here or press A to search", SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEF_DRAW_GRAY);
+		if (cur_search_word == "") Draw(LOCALIZED(SEARCH_HINT), SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEF_DRAW_GRAY);
 		else Draw(cur_search_word, SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEF_DRAW_BLACK);
 		
 		if (video_playing_bar_show) video_draw_playing_bar();

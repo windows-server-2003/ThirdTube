@@ -26,6 +26,7 @@
 #include "system/util/network_io.hpp"
 #include "system/util/thumbnail_loader.hpp"
 #include "system/util/webpage_loader.hpp"
+#include "system/util/string_resource.hpp"
 #include "system/util/encoder.hpp"
 #include "system/util/mic.hpp"
 #include "system/util/muxer.hpp"

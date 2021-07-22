@@ -77,7 +77,6 @@ namespace VideoPlayer {
 	std::string vid_change_waiting = "";
 	std::string vid_video_format = "n/a";
 	std::string vid_audio_format = "n/a";
-	std::string vid_msg[DEF_SAPP0_NUM_OF_MSG];
 	Image_data vid_image[8];
 	int icon_thumbnail_handle = -1;
 	C2D_Image vid_banner[2];
@@ -108,8 +107,6 @@ namespace VideoPlayer {
 	std::vector<std::string> title_lines;
 	float title_font_size;
 	std::vector<std::string> description_lines;
-	
-	const std::string tab_strings[TAB_NUM] = {"Info", "Suggestions", "Comments", "Advanced"};
 	
 	NetworkDecoder network_decoder;
 	Handle network_decoder_critical_lock; // locked when seeking or deiniting
@@ -480,7 +477,7 @@ static void decode_thread(void* arg)
 			*/
 			
 			// video page parsing sometimes randomly fails, so try several times
-			network_waiting_status = "Reading stream";
+			network_waiting_status = "Readint Stream";
 			if (VIDEO_AUDIO_SEPERATE) {
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_stream = new NetworkStream(cur_video_info.video_stream_url, cur_video_info.video_stream_len);
@@ -569,7 +566,7 @@ static void decode_thread(void* arg)
 						
 						if (network_decoder.need_reinit) {
 							Util_log_save("decoder", "reinit needed, performing...");
-							network_waiting_status = "Seek : Reiniting";
+							network_waiting_status = "Seeking(Reiniting)";
 							network_decoder.deinit();
 							if (cur_audio_stream) result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
 							else result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
@@ -960,10 +957,7 @@ void VideoPlayer_init(void)
 	vid_height = 0;
 	vid_video_format = "n/a";
 	vid_audio_format = "n/a";
-
-	result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SAPP0_NUM_OF_MSG);
-	Util_log_save(DEF_SAPP0_INIT_STR, "Util_load_msg()..." + result.string + result.error_description, result.code);
-
+	
 	VideoPlayer_resume("");
 	vid_already_init = true;
 	Util_log_save(DEF_SAPP0_INIT_STR, "Initialized.");
@@ -1035,11 +1029,7 @@ static void draw_video_content(Hid_info key, int color) {
 			y_offset += SMALL_MARGIN;
 			Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
 			y_offset += SMALL_MARGIN;
-		} else {
-			std::string draw_str = "Loading...";
-			int width = Draw_get_width(draw_str, 0.5, 0.5);
-			Draw(draw_str, (320.0f - width) / 2, 0, 0.5, 0.5, color);
-		}
+		} else Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, color);
 	} else if (selected_tab == TAB_SUGGESTIONS) {
 		if (cur_video_info.suggestions.size()) {
 			int suggestion_num = cur_video_info.suggestions.size();
@@ -1066,18 +1056,11 @@ static void draw_video_content(Hid_info key, int color) {
 			}
 			y_offset += cur_video_info.suggestions.size() * SUGGESTIONS_VERTICAL_INTERVAL;
 			if (cur_video_info.has_more_suggestions() || cur_video_info.error != "") {
-				std::string draw_str = cur_video_info.error != "" ? cur_video_info.error : "Loading...";
-				if (y_offset < 240) {
-					int width = Draw_get_width(draw_str, 0.5, 0.5);
-					Draw(draw_str, (float) (320 - width) / 2, y_offset, 0.5, 0.5, color);
-				}
+				std::string draw_str = cur_video_info.error != "" ? cur_video_info.error : LOCALIZED(LOADING);
+				if (y_offset < 240) Draw_x_centered(draw_str, 0, 320, y_offset, 0.5, 0.5, color);
 				y_offset += SUGGESTION_LOAD_MORE_MARGIN;
 			}
-		} else {
-			std::string draw_string = "Empty";
-			int width = Draw_get_width(draw_string, 0.5, 0.5);
-			Draw(draw_string, (320.0 - width) / 2, 0, 0.5, 0.5, color);
-		}
+		} else Draw_x_centered(LOCALIZED(EMPTY), 0, 320, 0, 0.5, 0.5, color);
 	} else if (selected_tab == TAB_COMMENTS) {
 		y_offset += SMALL_MARGIN;
 		for (int i = 0; i < (int) cur_video_info.comments.size(); i++) {
@@ -1099,14 +1082,11 @@ static void draw_video_content(Hid_info key, int color) {
 		}
 		if (cur_video_info.has_more_comments() || cur_video_info.comments_disabled || !cur_video_info.comments.size() || cur_video_info.error != "") {
 			std::string draw_string;
-			if (cur_video_info.comments_disabled) draw_string = "Comments are disabled";
+			if (cur_video_info.comments_disabled) draw_string = LOCALIZED(COMMENTS_DISABLED);
 			else if (cur_video_info.error != "") draw_string = cur_video_info.error;
-			else if (cur_video_info.has_more_comments()) draw_string = "Loading...";
-			else draw_string = "No comments";
-			if (y_offset < CONTENT_Y_HIGH) {
-				int width = Draw_get_width(draw_string, 0.5, 0.5);
-				Draw(draw_string, (320.0 - width) / 2, y_offset, 0.5, 0.5, color);
-			}
+			else if (cur_video_info.has_more_comments()) draw_string = LOCALIZED(LOADING);
+			else draw_string = LOCALIZED(NO_COMMENTS);
+			if (y_offset < CONTENT_Y_HIGH) Draw_x_centered(draw_string, 0, 320, y_offset, 0.5, 0.5, color);
 			y_offset += COMMENT_LOAD_MORE_MARGIN;
 		}
 	} else if (selected_tab == TAB_ADVANCED) {
@@ -1116,18 +1096,18 @@ static void draw_video_content(Hid_info key, int color) {
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, y_offset, 0.5, 0.5, color);
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
-		Draw(std::string("HW Decoder : ") + (network_decoder.hw_decoder_enabled ? "Enabled" : "Disabled"), 0, y_offset, 0.5, 0.5, color);
+		Draw(LOCALIZED(HW_DECODER) + " : " + LOCALIZED_ENABLED_STATUS(network_decoder.hw_decoder_enabled), 0, y_offset, 0.5, 0.5, color);
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		
 		{
 			const char *message = get_network_waiting_status();
-			Draw("Waiting Status : " + std::string(message ? message : ""), 0, y_offset, 0.5, 0.5, color);
+			Draw(LOCALIZED(WAITING_STATUS) + " : " + std::string(message ? message : ""), 0, y_offset, 0.5, 0.5, color);
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		}
 		{
 			u32 cpu_limit;
 			APT_GetAppCpuTimeLimit(&cpu_limit);
-			Draw("CPU Limit : " + std::to_string(cpu_limit) + "%", 0, y_offset, 0.5, 0.5, color);
+			Draw(LOCALIZED(CPU_LIMIT) + " : " + std::to_string(cpu_limit) + "%", 0, y_offset, 0.5, 0.5, color);
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		}
 		//controls
@@ -1139,14 +1119,13 @@ static void draw_video_content(Hid_info key, int color) {
 		y_offset += SMALL_MARGIN;
 		{
 			Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 15, y_offset, 135, DEFAULT_FONT_VERTICAL_INTERVAL);
-			int width = Draw_get_width(vid_msg[vid_linear_filter], 0.4, 0.4);
-			Draw(vid_msg[vid_linear_filter], (15.0 + 15.0 + 135.0) / 2 - width / 2, y_offset, 0.4, 0.4, color);
+			Draw_x_centered(LOCALIZED(VIDEO_FILTER), 15, 15 + 135, y_offset, 0.4, 0.4, color);
 		}
 		{
 			u32 button_color = is_webpage_loading_requested(LoadRequestType::VIDEO) ? DEF_DRAW_LIGHT_GRAY : DEF_DRAW_WEAK_AQUA;
 			Draw_texture(var_square_image[0], button_color, 170, y_offset, 135, DEFAULT_FONT_VERTICAL_INTERVAL);
-			int width = Draw_get_width("Reload", 0.4, 0.4);
-			Draw("Reload", (170.0 + 170.0 + 135.0) / 2 - width / 2, y_offset, 0.4, 0.4, color);
+			int width = Draw_get_width(LOCALIZED(RELOAD), 0.4, 0.4);
+			Draw(LOCALIZED(RELOAD), (170.0 + 170.0 + 135.0) / 2 - width / 2, y_offset, 0.4, 0.4, color);
 		}
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		y_offset += SMALL_MARGIN;
@@ -1315,11 +1294,16 @@ Intent VideoPlayer_draw(void)
 		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, selected_tab * 320 / TAB_NUM, CONTENT_Y_HIGH, 320 / TAB_NUM + 1, TAB_SELECTOR_SELECTED_LINE_HEIGHT);
 		for (int i = 0; i < TAB_NUM; i++) {
 			float font_size = 0.4;
-			float center = (1 + 2 * i) * 320 / (2 * TAB_NUM);
-			float width = Draw_get_width(tab_strings[i], font_size, font_size);
+			float x_l = i * 320 / TAB_NUM;
+			float x_r = (i + 1) * 320 / TAB_NUM;
 			float y = CONTENT_Y_HIGH + 3;
 			if (i == selected_tab) y += 1;
-			Draw(tab_strings[i], center - width / 2, y, font_size, font_size, DEF_DRAW_BLACK);
+			std::string tab_string;
+			if (i == TAB_GENERAL) tab_string = LOCALIZED(GENERAL);
+			else if (i == TAB_SUGGESTIONS) tab_string = LOCALIZED(SUGGESTIONS);
+			else if (i == TAB_COMMENTS) tab_string = LOCALIZED(COMMENTS);
+			else if (i == TAB_ADVANCED) tab_string = LOCALIZED(ADVANCED);
+			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEF_DRAW_BLACK);
 		}
 		
 		// playing bar

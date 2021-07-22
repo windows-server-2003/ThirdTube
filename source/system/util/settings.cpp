@@ -1,35 +1,11 @@
 #include "headers.hpp"
 
-static std::map<std::string, std::string> parse_settings(std::string data) {
-	int head = 0;
-	int n = data.size();
-	std::map<std::string, std::string> res;
-	while (head < n) {
-		while (head < n && data[head] != '<') head++;
-		head++;
-		if (head >= n) break;
-		std::string key;
-		while (head < n && data[head] != '>') key.push_back(data[head++]);
-		head++;
-		if (head >= n) break;
-		
-		std::string closing_pattern = "</" + key + ">";
-		auto closing_pos = data.find(closing_pattern, head);
-		if (closing_pos == std::string::npos) break;
-		std::string value = data.substr(head, closing_pos - head);
-		head = closing_pos + closing_pattern.size();
-		
-		res[key] = value;
-	}
-	return res;
-}
-
 void load_settings() {
 	char buf[0x1001] = { 0 };
 	u32 read_size;
 	Result_with_string result = Util_file_load_from_file("settings.txt", DEF_MAIN_DIR, (u8 *) buf, 0x1000, &read_size);
 	Util_log_save(DEF_SEM_INIT_STR , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
-	auto settings = parse_settings(buf);
+	auto settings = parse_xml_like_text(buf);
 	
 	for (auto i : settings) Util_log_save("settings/load", i.first + ":" + i.second);
 	

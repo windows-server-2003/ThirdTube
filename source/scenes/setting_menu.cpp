@@ -19,6 +19,7 @@ namespace Settings {
 	
 	volatile bool save_settings_request = false;
 	volatile bool change_brightness_request = false;
+	volatile bool string_resource_reload_request = false;
 	
 	int last_touch_x = -1;
 	int last_touch_y = -1;
@@ -40,6 +41,9 @@ static void settings_misc_thread_func(void *arg) {
 		} else if (change_brightness_request) {
 			change_brightness_request = false;
 			Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
+		} else if (string_resource_reload_request) {
+			string_resource_reload_request = false;
+			load_string_resources(var_lang);
 		} else usleep(50000);
 	}
 	
@@ -72,6 +76,7 @@ void Sem_init(void)
 	Result_with_string result;
 	
 	load_settings();
+	load_string_resources(var_lang);
 	
 	settings_misc_thread = threadCreate(settings_misc_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	
@@ -100,35 +105,35 @@ void Sem_exit(void)
 void draw_settings_menu() {
 	int y_offset = -scroller.get_offset();
 	
-	Draw("Settings", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
+	Draw(LOCALIZED(SETTINGS), SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
 	y_offset += MIDDLE_FONT_INTERVAL;
 	y_offset += SMALL_MARGIN;
 	Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_BLACK, 320 - SMALL_MARGIN, y_offset, DEF_DRAW_BLACK, 1);
 	y_offset += SMALL_MARGIN;
 	{ // UI language
-		Draw("UI Language", SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw(LOCALIZED(UI_LANGUAGE), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += DEFAULT_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN;
 		int selected_x_l = var_lang == "en" ? 40 : 180;
 		int selected_x_r = var_lang == "en" ? 140 : 280;
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, selected_x_l, y_offset, selected_x_r - selected_x_l, 20);
-		Draw_x_centered("ja", 40, 140, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
-		Draw_x_centered("en", 180, 280, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw_x_centered(LOCALIZED(LANG_EN), 40, 140, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw_x_centered(LOCALIZED(LANG_JA), 180, 280, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += 20;
 	}
 	{ // Content language
-		Draw("Content Language", SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw(LOCALIZED(CONTENT_LANGUAGE), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += DEFAULT_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN;
 		int selected_x_l = var_lang_content == "en" ? 40 : 180;
 		int selected_x_r = var_lang_content == "en" ? 140 : 280;
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, selected_x_l, y_offset, selected_x_r - selected_x_l, 20);
-		Draw_x_centered("ja", 40, 140, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
-		Draw_x_centered("en", 180, 280, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw_x_centered(LOCALIZED(LANG_EN), 40, 140, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw_x_centered(LOCALIZED(LANG_JA), 180, 280, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += 20;
 	}
 	{ // LCD Brightness
-		Draw("LCD Brightness", SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw(LOCALIZED(LCD_BRIGHTNESS), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += DEFAULT_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN * 3;
 		float bar_x_l = 40;
@@ -141,7 +146,7 @@ void draw_settings_menu() {
 		y_offset += SMALL_MARGIN * 3;
 	}
 	{ // Time to turn off the LCD
-		Draw("Time to turn off the LCD : " + std::to_string(var_time_to_turn_off_lcd) + " s", SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw(LOCALIZED(TIME_TO_TURN_OFF_LCD) + " : " + std::to_string(var_time_to_turn_off_lcd) + " " + LOCALIZED(SECONDS), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += DEFAULT_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN * 3;
 		float bar_x_l = 40;
@@ -154,14 +159,14 @@ void draw_settings_menu() {
 		y_offset += SMALL_MARGIN * 3;
 	}
 	{ // Eco mode
-		Draw("Eco mode", SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw(LOCALIZED(ECO_MODE), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += DEFAULT_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN;
 		int selected_x_l = !var_eco_mode ? 40 : 180;
 		int selected_x_r = !var_eco_mode ? 140 : 280;
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, selected_x_l, y_offset, selected_x_r - selected_x_l, 20);
-		Draw_x_centered("Off", 40, 140, y_offset + 3, 0.5, 0.5, DEF_DRAW_BLACK);
-		Draw_x_centered("On", 180, 280, y_offset + 3, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw_x_centered(LOCALIZED(OFF), 40, 140, y_offset + 3, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw_x_centered(LOCALIZED(ON), 180, 280, y_offset + 3, 0.5, 0.5, DEF_DRAW_BLACK);
 		y_offset += 20;
 	}
 }
@@ -247,7 +252,10 @@ Intent Sem_draw(void)
 				auto prev_value = var_lang;
 				if (key.touch_x >= 40 && key.touch_x < 140) var_lang = "en";
 				if (key.touch_x >= 180 && key.touch_x < 280) var_lang = "ja";
-				if (var_lang != prev_value) save_settings_request = true;
+				if (var_lang != prev_value) {
+					save_settings_request = true;
+					string_resource_reload_request = true;
+				}
 			}
 			y_offset += 20;
 			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN;
@@ -259,12 +267,12 @@ Intent Sem_draw(void)
 			}
 			y_offset += 20;
 			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 3;
-			if (key.touch_y >= y_offset - 5 && key.touch_y <= y_offset + 3 + 5 && key.touch_x >= 40 - 5 && key.touch_y <= 280 + 5) {
+			if (key.touch_y >= y_offset - 5 && key.touch_y <= y_offset + 3 + 5 && key.touch_x >= 40 - 5 && key.touch_x <= 280 + 5) {
 				bar_holding = 0;
 			}
 			y_offset += SMALL_MARGIN * 3;
 			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 3;
-			if (key.touch_y >= y_offset - 5 && key.touch_y <= y_offset + 3 + 5 && key.touch_x >= 40 - 5 && key.touch_y <= 280 + 5) {
+			if (key.touch_y >= y_offset - 5 && key.touch_y <= y_offset + 3 + 5 && key.touch_x >= 40 - 5 && key.touch_x <= 280 + 5) {
 				bar_holding = 1;
 			}
 			y_offset += SMALL_MARGIN * 3;

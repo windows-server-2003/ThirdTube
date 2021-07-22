@@ -90,10 +90,10 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 		prev_scene = current_scene;
 	}
 	contents.clear();
-	if (current_scene != SceneType::SEARCH) contents.push_back({"Search", Content::Type::SEARCH});
-	contents.push_back({"Exit the app", Content::Type::EXIT});
-	contents.push_back({"Settings", Content::Type::SETTINGS});
-	if (current_scene != SceneType::ABOUT) contents.push_back({"About", Content::Type::ABOUT});
+	if (current_scene != SceneType::SEARCH) contents.push_back({LOCALIZED(GOTO_SEARCH), Content::Type::SEARCH});
+	contents.push_back({LOCALIZED(EXIT_APP), Content::Type::EXIT});
+	contents.push_back({LOCALIZED(SETTINGS), Content::Type::SETTINGS});
+	if (current_scene != SceneType::ABOUT) contents.push_back({LOCALIZED(ABOUT), Content::Type::ABOUT});
 	
 	if (menu_status == CONFIRMING_CLOSE) {
 		holding_touch = false;
@@ -118,7 +118,7 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 					intent->next_scene = SceneType::SEARCH;
 					intent->arg = "";
 				} else if (contents[id].type == Content::Type::EXIT) {
-					dialog = Dialog(0, 320, 0, 240, "Are you sure you want to exit?", {"Cancel", "Exit the app"});
+					dialog = Dialog(0, 320, 0, 240, LOCALIZED(EXIT_CONFIRM), {LOCALIZED(CANCEL), LOCALIZED(EXIT_APP)});
 					menu_status = CONFIRMING_CLOSE;
 				} else if (contents[id].type == Content::Type::ABOUT) {
 					intent->next_scene = SceneType::ABOUT;
