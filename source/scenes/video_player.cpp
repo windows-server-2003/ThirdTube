@@ -25,6 +25,7 @@
 #define DEFAULT_FONT_VERTICAL_INTERVAL 13
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 30
+#define MAX_RETRY_CNT 5
 
 #define TAB_NUM 4
 #define TAB_GENERAL 0
@@ -494,20 +495,22 @@ static void decode_thread(void* arg)
 				stream_downloader.add_stream(cur_video_stream);
 				result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
 			}
-			if(result.code != 0) vid_play_request = false;
-			/*
-			deinit_streams();
-			network_decoder.deinit(); 
-			svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-			free_video_info();
-			svcReleaseMutex(small_resource_lock);*/
-			
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
+			if(result.code != 0) {
+				if (video_retry_left > 0) {
+					video_retry_left--;
+					Util_log_save("dec", "failed, retrying. retry cnt left:" + std::to_string(video_retry_left));
+					send_change_video_request(vid_url);
+				} else {
+					Util_err_set_error_message(result.string, result.error_description, DEF_SAPP0_DECODE_THREAD_STR, result.code);
+					Util_err_set_error_show_flag(true);
+					var_need_reflesh = true;
+				}
+				vid_play_request = false;
+			}
 			network_waiting_status = NULL;
 			
 			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
-			if(result.code != 0)
-				vid_play_request = false;
 			
 			if (vid_play_request) {
 				{
@@ -543,13 +546,6 @@ static void decode_thread(void* arg)
 				}
 			}
 			
-			if(result.code != 0)
-			{
-				Util_err_set_error_message(result.string, result.error_description, DEF_SAPP0_DECODE_THREAD_STR, result.code);
-				Util_err_set_error_show_flag(true);
-				var_need_reflesh = true;
-			}
-
 			osTickCounterUpdate(&counter1);
 			while (vid_play_request)
 			{
@@ -852,8 +848,10 @@ static void convert_thread(void* arg)
 void VideoPlayer_resume(std::string arg)
 {
 	if (arg != "") {
-		if (arg != vid_url) send_change_video_request(arg);
-		else if (!vid_play_request) vid_play_request = true;
+		if (arg != vid_url) {
+			send_change_video_request(arg);
+			video_retry_left = MAX_RETRY_CNT;
+		} else if (!vid_play_request) vid_play_request = true;
 	}
 	for (auto i : scroller) i.on_resume();
 	overlay_menu_on_resume();
@@ -1231,9 +1229,9 @@ Intent VideoPlayer_draw(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, vid_play_request ? DEF_DRAW_BLACK : back_color);
+		Draw_screen_ready(0, network_decoder.ready ? DEF_DRAW_BLACK : back_color);
 
-		if(vid_play_request)
+		if(network_decoder.ready)
 		{
 			//video
 			Draw_texture(vid_image[image_num * 4 + 0].c2d, vid_x, vid_y, vid_tex_width[image_num * 4 + 0] * vid_zoom, vid_tex_height[image_num * 4 + 0] * vid_zoom);
@@ -1511,6 +1509,7 @@ Intent VideoPlayer_draw(void)
 				if (released_x >= 170 && released_x < 305 && released_y >= y_offset && released_y < y_offset + DEFAULT_FONT_VERTICAL_INTERVAL) {
 					if (!is_webpage_loading_requested(LoadRequestType::VIDEO)) {
 						send_change_video_request(vid_url);
+						video_retry_left = MAX_RETRY_CNT;
 					}
 				}
 			}
@@ -1555,8 +1554,10 @@ Intent VideoPlayer_draw(void)
 		else if(key.h_touch || key.p_touch)
 			var_need_reflesh = true;
 		
-		if (vid_change_waiting != "" && !is_webpage_loading_requested(LoadRequestType::VIDEO))
+		if (vid_change_waiting != "" && !is_webpage_loading_requested(LoadRequestType::VIDEO)) {
 			send_change_video_request_wo_lock(vid_change_waiting);
+			video_retry_left = MAX_RETRY_CNT;
+		}
 		
 		svcReleaseMutex(small_resource_lock);
 		/* ****************************** LOCK END ******************************  */
