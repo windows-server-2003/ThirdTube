@@ -479,7 +479,7 @@ static void decode_thread(void* arg)
 			*/
 			
 			// video page parsing sometimes randomly fails, so try several times
-			network_waiting_status = "Readint Stream";
+			network_waiting_status = "Reading Stream";
 			if (VIDEO_AUDIO_SEPERATE) {
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_stream = new NetworkStream(cur_video_info.video_stream_url, cur_video_info.video_stream_len);
