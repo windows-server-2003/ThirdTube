@@ -6,50 +6,50 @@
 // NetworkStream implementation
 // --------------------------------
 
-NetworkStream::NetworkStream(std::string url, size_t len) : url(url), len(len) {
+NetworkStream::NetworkStream(std::string url, u64 len) : url(url), len(len) {
 	block_num = (len + BLOCK_SIZE - 1) / BLOCK_SIZE;
 	svcCreateMutex(&downloaded_data_lock, false);
 }
-bool NetworkStream::is_data_available(size_t start, size_t size) {
+bool NetworkStream::is_data_available(u64 start, u64 size) {
 	if (start + size > len) return false;
-	size_t end = start + size - 1;
-	size_t start_block = start / BLOCK_SIZE;
-	size_t end_block = end / BLOCK_SIZE;
+	u64 end = start + size - 1;
+	u64 start_block = start / BLOCK_SIZE;
+	u64 end_block = end / BLOCK_SIZE;
 	
 	bool res = true;
 	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
-	for (size_t block = start_block; block <= end_block; block++) if (!downloaded_data.count(block)) {
+	for (u64 block = start_block; block <= end_block; block++) if (!downloaded_data.count(block)) {
 		res = false;
 		break;
 	}
 	svcReleaseMutex(downloaded_data_lock);
 	return res;
 }
-std::vector<u8> NetworkStream::get_data(size_t start, size_t size) {
+std::vector<u8> NetworkStream::get_data(u64 start, u64 size) {
 	if (!size) return {};
-	size_t end = start + size - 1;
-	size_t start_block = start / BLOCK_SIZE;
-	size_t end_block = end / BLOCK_SIZE;
+	u64 end = start + size - 1;
+	u64 start_block = start / BLOCK_SIZE;
+	u64 end_block = end / BLOCK_SIZE;
 	std::vector<u8> res;
 	
 	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
 	auto itr = downloaded_data.find(start_block);
 	assert(itr != downloaded_data.end());
-	for (size_t block = start_block; block <= end_block; block++) {
+	for (u64 block = start_block; block <= end_block; block++) {
 		assert(itr->first == block);
-		size_t cur_l = std::max(start, block * BLOCK_SIZE) - block * BLOCK_SIZE;
-		size_t cur_r = std::min(end + 1, (block + 1) * BLOCK_SIZE) - block * BLOCK_SIZE;
+		u64 cur_l = std::max(start, block * BLOCK_SIZE) - block * BLOCK_SIZE;
+		u64 cur_r = std::min(end + 1, (block + 1) * BLOCK_SIZE) - block * BLOCK_SIZE;
 		res.insert(res.end(), itr->second.begin() + cur_l, itr->second.begin() + cur_r);
 		itr++;
 	}
 	svcReleaseMutex(downloaded_data_lock);
 	return res;
 }
-void NetworkStream::set_data(size_t block, const std::vector<u8> &data) {
+void NetworkStream::set_data(u64 block, const std::vector<u8> &data) {
 	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
 	downloaded_data[block] = data;
 	if (downloaded_data.size() > MAX_CACHE_BLOCKS) { // ensure it doesn't cache too much and run out of memory
-		size_t read_head_block = read_head / BLOCK_SIZE;
+		u64 read_head_block = read_head / BLOCK_SIZE;
 		if (downloaded_data.begin()->first < read_head_block) {
 			Util_log_save("net/dl", "free " + std::to_string(downloaded_data.begin()->first));
 			downloaded_data.erase(downloaded_data.begin());
@@ -66,16 +66,16 @@ double NetworkStream::get_download_percentage() {
 	svcReleaseMutex(downloaded_data_lock);
 	return res;
 }
-std::vector<double> NetworkStream::get_download_percentage_list(size_t res_len) {
+std::vector<double> NetworkStream::get_download_percentage_list(u64 res_len) {
 	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
 	std::vector<double> res(res_len);
 	auto itr = downloaded_data.begin();
-	for (size_t i = 0; i < res_len; i++) {
-		size_t l = (u64) len * i / res_len;
-		size_t r = std::min<u32>(len, (u64) len * (i + 1) / res_len);
+	for (u64 i = 0; i < res_len; i++) {
+		u64 l = (u64) len * i / res_len;
+		u64 r = std::min<u32>(len, (u64) len * (i + 1) / res_len);
 		while (itr != downloaded_data.end()) {
-			size_t il = itr->first * BLOCK_SIZE;
-			size_t ir = std::min((itr->first + 1) * BLOCK_SIZE, len);
+			u64 il = itr->first * BLOCK_SIZE;
+			u64 ir = std::min((itr->first + 1) * BLOCK_SIZE, len);
 			if (ir <= l) itr++;
 			else if (il >= r) break;
 			else {
@@ -113,7 +113,7 @@ void NetworkStreamDownloader::downloader_thread() {
 		size_t cur_stream_index = (size_t) -1; // the index of the stream on which we will perform a download in this loop
 		svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
 		// back up 'read_head's as those can be changed from another thread
-		std::vector<size_t> read_heads(streams.size());
+		std::vector<u64> read_heads(streams.size());
 		for (size_t i = 0; i < streams.size(); i++) if (streams[i]) read_heads[i] = streams[i]->read_head;
 		
 		
@@ -129,8 +129,8 @@ void NetworkStreamDownloader::downloader_thread() {
 				continue;
 			}
 			
-			size_t read_head_block = read_heads[i] / BLOCK_SIZE;
-			size_t first_not_downloaded_block = read_head_block;
+			u64 read_head_block = read_heads[i] / BLOCK_SIZE;
+			u64 first_not_downloaded_block = read_head_block;
 			while (first_not_downloaded_block < streams[i]->block_num && streams[i]->downloaded_data.count(first_not_downloaded_block)) {
 				first_not_downloaded_block++;
 				if (first_not_downloaded_block == read_head_block + MAX_FORWARD_READ_BLOCKS) break;
@@ -156,7 +156,7 @@ void NetworkStreamDownloader::downloader_thread() {
 		NetworkStream *cur_stream = streams[cur_stream_index];
 		svcReleaseMutex(streams_lock);
 		
-		size_t block_reading = read_heads[cur_stream_index] / BLOCK_SIZE;
+		u64 block_reading = read_heads[cur_stream_index] / BLOCK_SIZE;
 		while (block_reading < cur_stream->block_num && cur_stream->downloaded_data.count(block_reading)) block_reading++;
 		if (block_reading == cur_stream->block_num) { // something unexpected happened
 			Util_log_save(LOG_THREAD_STR, "unexpected error (trying to read beyond the end of the stream)");
@@ -165,9 +165,9 @@ void NetworkStreamDownloader::downloader_thread() {
 		}
 		Util_log_save("net/dl", "dl next : " + std::to_string(cur_stream_index) + " " + std::to_string(block_reading));
 		
-		size_t start = block_reading * BLOCK_SIZE;
-		size_t end = std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len);
-		size_t expected_len = end - start;
+		u64 start = block_reading * BLOCK_SIZE;
+		u64 end = std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len);
+		u64 expected_len = end - start;
 		auto network_result = access_http_get(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}});
 		
 		if (network_result.first == "") {

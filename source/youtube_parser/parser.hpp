@@ -49,11 +49,11 @@ struct YouTubeVideoDetail {
 	std::string description;
 	YouTubeChannelSuccinct author;
 	std::string audio_stream_url;
-	size_t audio_stream_len;
+	uint64_t audio_stream_len;
 	std::string video_stream_url;
-	size_t video_stream_len;
+	uint64_t video_stream_len;
 	std::string both_stream_url;
-	size_t both_stream_len;
+	uint64_t both_stream_len;
 	
 	std::vector<YouTubeVideoSuccinct> suggestions;
 	struct Comment {

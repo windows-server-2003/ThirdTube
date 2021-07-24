@@ -43,7 +43,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	if (stream->read_head >= stream->len) return AVERROR_EOF;
 	// network_waiting_status = cacher->waiting_status;
 	bool cpu_limited = false;
-	while (!stream->is_data_available(stream->read_head, std::min(buf_size, stream->len - stream->read_head))) {
+	while (!stream->is_data_available(stream->read_head, std::min<u64>(buf_size, stream->len - stream->read_head))) {
 		if (decoder->is_locked) {
 			decoder->need_reinit = true;
 			goto fail;
@@ -63,7 +63,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	decoder->network_waiting_status = NULL;
 	
 	{
-		auto tmp = stream->get_data(stream->read_head, std::min(buf_size, stream->len - stream->read_head));
+		auto tmp = stream->get_data(stream->read_head, std::min<u64>(buf_size, stream->len - stream->read_head));
 		size_t read_size = tmp.size();
 		stream->read_head += read_size;
 		memcpy(buf, &tmp[0], read_size);
@@ -87,7 +87,7 @@ static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // si
 	
 	if (whence == AVSEEK_SIZE) return stream->len;
 	
-	size_t new_pos = 0;
+	u64 new_pos = 0;
 	if (whence == SEEK_SET) new_pos = offset;
 	else if (whence == SEEK_CUR) new_pos = stream->read_head + offset;
 	else if (whence == SEEK_END) new_pos = stream->len + offset;

@@ -4,36 +4,36 @@
 
 // one instance per one url (once constructed, the url is not changeable)
 struct NetworkStream {
-	static constexpr size_t BLOCK_SIZE = 0x20000; // 128 KiB
-	static constexpr size_t MAX_CACHE_BLOCKS = 100;
+	static constexpr u64 BLOCK_SIZE = 0x20000; // 128 KiB
+	static constexpr u64 MAX_CACHE_BLOCKS = 100;
 	
-	size_t block_num = 0;
+	u64 block_num = 0;
 	std::string url;
 	Handle downloaded_data_lock; // std::map needs locking when searching and inserting at the same time
-	std::map<size_t, std::vector<u8> > downloaded_data;
+	std::map<u64, std::vector<u8> > downloaded_data;
 	
 	
 	// anything above here is not supposed to be used from outside network_io.cpp and network_io.hpp
-	size_t len = 0;
+	u64 len = 0;
 	volatile bool suspend_request = false;
 	volatile bool quit_request = false;
 	volatile bool error = false;
-	volatile size_t read_head = 0;
+	volatile u64 read_head = 0;
 	
-	NetworkStream (std::string url, size_t len);
+	NetworkStream (std::string url, u64 len);
 	
 	double get_download_percentage();
-	std::vector<double> get_download_percentage_list(size_t res_len);
+	std::vector<double> get_download_percentage_list(u64 res_len);
 	
 	// check if the data of the current stream of range [start, start + size) is already downloaded and available
-	bool is_data_available(size_t start, size_t size);
+	bool is_data_available(u64 start, u64 size);
 	
 	// this function must only be called when is_data_available(start, size) returns true
 	// returns the data of the stream of range [start, start + size)
-	std::vector<u8> get_data(size_t start, size_t size);
+	std::vector<u8> get_data(u64 start, u64 size);
 	
 	// this function is supposed to be called from NetworkStreamDownloader::*
-	void set_data(size_t block, const std::vector<u8> &data);
+	void set_data(u64 block, const std::vector<u8> &data);
 };
 
 
@@ -41,8 +41,8 @@ struct NetworkStream {
 // it owns NetworkStream instances, and the one with the least margin (as in proportion to the length of the entire stream) is the target of next downloading
 class NetworkStreamDownloader {
 private :
-	static constexpr size_t BLOCK_SIZE = NetworkStream::BLOCK_SIZE;
-	static constexpr size_t MAX_FORWARD_READ_BLOCKS = 50;
+	static constexpr u64 BLOCK_SIZE = NetworkStream::BLOCK_SIZE;
+	static constexpr u64 MAX_FORWARD_READ_BLOCKS = 50;
 	Handle streams_lock;
 	std::vector<NetworkStream *> streams;
 	
