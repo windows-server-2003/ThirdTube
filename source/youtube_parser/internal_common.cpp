@@ -138,60 +138,69 @@ namespace youtube_parser {
 		return "";
 	}
 
-
-	// html can contain unnecessary garbage at the end of the actual json data
+	
+	std::string remove_garbage(const std::string &str, size_t start) {
+		while (start < str.size() && str[start] == ' ') start++;
+		if (start >= str.size()) {
+			debug("remove_garbage : empty");
+			return "";
+		}
+		if (str[start] == '\'') {
+			std::string res_str;
+			size_t pos = start + 1;
+			for (; pos < str.size(); pos++) {
+				if (str[pos] == '\\') {
+					if (pos + 1 == str.size()) break;
+					if (str[pos + 1] == 'x') {
+						if (pos + 3 >= str.size()) break;
+						size_t err;
+						int char_code = stoi(str.substr(pos + 2, 2), &err, 16);
+						if (err != 2) {
+							debug("remove_garbage : failed to parse " + str.substr(pos + 2, 2) + " as hex");
+							return "";
+						}
+						res_str.push_back(char_code);
+						pos += 3;
+					} else {
+						res_str.push_back(str[pos + 1]);
+						pos++;
+					}
+				} else if (str[pos] == '\'') break;
+				else res_str.push_back(str[pos]);
+			}
+			return res_str;
+		} else if (str[start] == '(' || str[start] == '{' || str[start] == '[') {
+			size_t pos = start + 1;
+			int level = 1;
+			bool in_string = false;
+			for (; pos < str.size(); pos++) {
+				if (str[pos] == '"') in_string = !in_string;
+				else if (in_string) {
+					if (str[pos] == '\"') pos++;
+				} else if (str[pos] == '{' || str[pos] == '[' || str[pos] == '(') level++;
+				else if (str[pos] == '}' || str[pos] == ']' || str[pos] == ')') level--;
+				if (level == 0) break;
+			}
+			if (level != 0) {
+				debug("remove_garbage : the first parenthesis is never closed");
+				return "";
+			}
+			return str.substr(start, pos - start + 1);
+		} else {
+			debug("remove_garbage : (, {, [, or ' expected");
+			return "";
+		}
+	}
+	// `html` can contain unnecessary garbage at the end of the actual json data
 	Json to_json(const std::string &html, size_t start) {
 		auto error_json = [&] (std::string error) {
 			return Json::object{{{"Error", error}}};
 		};
-		while (start < html.size() && html[start] == ' ') start++;
-		if (start >= html.size()) return error_json("empty suffix after 'ytInitialData'");
-		if (html[start] == '\'') {
-			std::string json_str;
-			size_t pos = start + 1;
-			for (; pos < html.size(); pos++) {
-				if (html[pos] == '\\') {
-					if (pos + 1 == html.size()) break;
-					if (html[pos + 1] == 'x') {
-						if (pos + 3 >= html.size()) break;
-						size_t err;
-						int char_code = stoi(html.substr(pos + 2, 2), &err, 16);
-						if (err != 2) return error_json("failed to parse " + html.substr(pos + 2, 2) + " as hex");
-						json_str.push_back(char_code);
-						pos += 3;
-					} else {
-						json_str.push_back(html[pos + 1]);
-						pos++;
-					}
-				} else if (html[pos] == '\'') break;
-				else json_str.push_back(html[pos]);
-			}
-			
-			std::string error;
-			auto res = Json::parse(json_str, error);
-			if (error != "") return error_json(error);
-			return res;
-		} else if (html[start] == '{') {
-			size_t pos = start + 1;
-			int level = 1;
-			bool in_string = false;
-			for (; pos < html.size(); pos++) {
-				if (html[pos] == '"') in_string = !in_string;
-				else if (in_string) {
-					if (html[pos] == '\"') pos++;
-				} else if (html[pos] == '{' || html[pos] == '[' || html[pos] == '(') level++;
-				else if (html[pos] == '}' || html[pos] == ']' || html[pos] == ')') level--;
-				if (level == 0) break;
-			}
-			if (level != 0) return error_json("the first '{' is never closed");
-			
-			std::string error;
-			auto res = Json::parse(html.substr(start, pos - start + 1), error);
-			if (error != "") return error_json(error);
-			return res;
-		} else {
-			return error_json("{ or ' expected");
-		}
+		auto content = remove_garbage(html, start);
+		std::string error;
+		auto res = Json::parse(content, error);
+		if (error != "") return error_json(error);
+		return res;
 	}
 
 	Json get_succeeding_json_regexes(const std::string &html, std::vector<const char *> patterns) {

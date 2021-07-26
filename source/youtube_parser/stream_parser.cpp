@@ -2,6 +2,7 @@
 #include "internal_common.hpp"
 #include "parser.hpp"
 #include "cipher.hpp"
+#include "n_param.hpp"
 
 static Json get_initial_data(const std::string &html) {
 	auto res = get_succeeding_json_regexes(html, {
@@ -31,7 +32,8 @@ static Json get_ytplayer_config(const std::string &html) {
 	return Json::object{{{"Error", "failed to get ytplayer config"}}};
 }
 
-static std::map<std::string, yt_cipher_transform_procedure> transform_proc_cache;
+static std::map<std::string, yt_cipher_transform_procedure> cipher_transform_proc_cache;
+static std::map<std::string, yt_nparam_transform_procedure> nparam_transform_proc_cache;
 static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	Json player_response = initial_player_response(html);
 	Json player_config = get_ytplayer_config(html);
@@ -41,42 +43,50 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	for (auto i : player_response["streamingData"]["formats"].array_items()) formats.push_back(i);
 	for (auto i : player_response["streamingData"]["adaptiveFormats"].array_items()) formats.push_back(i);
 	
-	// for obfuscated signatures
+	// for obfuscated signatures & n parameter modification
 	std::string js_url;
+	// get base js url
+	if (player_config["assets"]["js"] != Json()) js_url = player_config["assets"]["js"] != Json();
+	else {
+		std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
+		std::smatch match_res;
+		if (std::regex_search(html, match_res, pattern)) js_url = match_res[1].str();
+		else {
+			debug("could not find base js url");
+			return false;
+		}
+	}
+	js_url = "https://www.youtube.com" + js_url;
+	if (!cipher_transform_proc_cache.count(js_url) || !nparam_transform_proc_cache.count(js_url)) {
+		std::string js_content = http_get(js_url);
+		if (!js_content.size()) {
+			debug("base js download failed");
+			return false;
+		}
+		cipher_transform_proc_cache[js_url] = yt_cipher_get_transform_plan(js_content);
+		nparam_transform_proc_cache[js_url] = yt_nparam_get_transform_plan(js_content);
+	}
+	
 	for (auto &i : formats) { // handle decipher
 		if (i["url"] != Json()) continue;
-		// annoying
-		// get the url of base js
-		if (!js_url.size()) {
-			// get base js url
-			if (player_config["assets"]["js"] != Json()) js_url = player_config["assets"]["js"] != Json();
-			else {
-				std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
-				std::smatch match_res;
-				if (std::regex_search(html, match_res, pattern)) js_url = match_res[1].str();
-				else {
-					debug("could not find base js url");
-					return false;
-				}
-			}
-			js_url = "https://www.youtube.com" + js_url;
-		}
-		// get transform procedure
-		yt_cipher_transform_procedure transform_procedure;
-		if (!transform_proc_cache.count(js_url)) {
-			std::string js_content = http_get(js_url);
-			if (!js_content.size()) {
-				debug("base js download failed");
-				return false;
-			}
-			transform_proc_cache[js_url] = transform_procedure = yt_get_transform_plan(js_content);
-			if (!transform_procedure.size()) return false; // failed to get transform plan
-			// for (auto i : transform_procedure) debug(std::to_string(i.first) + " " + std::to_string(i.second));
-		} else transform_procedure = transform_proc_cache[js_url];
 		
+		auto transform_procedure = cipher_transform_proc_cache[js_url];
 		auto cipher_params = parse_parameters(i["cipher"] != Json() ? i["cipher"].string_value() : i["signatureCipher"].string_value());
 		auto tmp = i.object_items();
 		tmp["url"] = Json(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + yt_deobfuscate_signature(cipher_params["s"], transform_procedure));
+		i = Json(tmp);
+	}
+	for (auto &i : formats) { // modify the `n` parameter
+		std::string url = i["url"].string_value();
+		std::smatch match_result;
+		if (std::regex_search(url, match_result, std::regex(std::string("[\?&]n=([^&]+)")))) {
+			std::string next_n = yt_modify_nparam(match_result[1].str(), nparam_transform_proc_cache[js_url]);
+			url = std::string(url.cbegin(), match_result[1].first) + next_n + std::string(match_result[1].second, url.cend());
+		} else debug("failed to detect `n` parameter");
+		if (url.find("ratebypass") == std::string::npos) url += "&ratebypass=yes";
+		
+		auto tmp = i.object_items();
+		tmp["url"] = url;
 		i = Json(tmp);
 	}
 	
@@ -175,6 +185,7 @@ static void extract_item(Json content, YouTubeVideoDetail &res) {
 
 static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 	Json initial_data = get_initial_data(html);
+	// debug(initial_data.dump());
 	
 	{
 		auto contents = initial_data["contents"]["singleColumnWatchNextResults"]["results"]["results"]["contents"];
@@ -214,6 +225,11 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 				for (auto k : j["itemSectionRenderer"]["contents"].array_items()) if (k["continuationItemRenderer"] != Json()) {
 					res.comment_continue_token = k["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 					res.comment_continue_type = 1;
+				}
+			}
+			for (auto j : i["engagementPanelSectionListRenderer"]["content"]["structuredDescriptionContentRenderer"]["items"].array_items()) {
+				if (j["expandableVideoDescriptionBodyRenderer"] != Json()) {
+					res.description = get_text_from_object(j["expandableVideoDescriptionBodyRenderer"]["descriptionBodyText"]);
 				}
 			}
 		}
@@ -399,39 +415,32 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 }
 
 #ifdef _WIN32
+#include <windows.h>
 int main() {
 	std::string url;
 	std::cin >> url;
 	
 	auto result = youtube_parse_video_page(url);
-	std::cerr << result.comments.size() << " " << result.has_more_comments() << std::endl;
-	result = youtube_video_page_load_more_comments(result);
-	std::cerr << result.comments.size() << " " << result.has_more_comments() << std::endl;
-	/*
-	result = youtube_video_page_load_more_comments(result);
-	for (auto i : result.comments) {
-		std::cout << i.content << std::endl;
-	}
-	std::cout << result.error << std::endl;*/
+	// std::cerr << result.description << std::endl;
+	system(("wget --no-check-certificate -O tmp.mp4 \"" + result.both_stream_url + "\"").c_str());
 	
 	/*
+	const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
+	std::vector<int> res;
+	std::vector<bool> ratebypass_exists;
 	for (int i = 0; i < 50; i++) {
 		std::cout << i << std::endl;
 		auto result = youtube_parse_video_page(url);
-		for (int j = 0; j < 5; j++) {
-			std::cerr << "  " << j << std::endl;
-			auto new_result = youtube_video_page_load_more_comments(result);
-			for (int k = result.comments.size(); k < (int) new_result.comments.size(); k++) {
-				std::cout << "    " << new_result.comments[k].author.name << std::endl;
-			}
-			if (new_result.comments.size() <= result.comments.size() || !result.has_more_comments()) {
-				std::cout << "FAILED" << std::endl;
-				return 0;
-			}
-			result = new_result;
-		}
-	}*/
-	
+		ratebypass_exists.push_back(result.both_stream_url.find("ratebypass") != std::string::npos);
+		std::cerr << "! " << result.both_stream_url << std::endl;
+		time_t r0 = time(NULL);
+		system(("wget --no-check-certificate -O tmp.mp4 \"" + result.both_stream_url + "\"").c_str());
+		time_t r1 = time(NULL);
+		res.push_back(r1 - r0);
+		Sleep(5000);
+	}
+	for (int i = 0; i < (int) res.size(); i++) std::cerr << i << " " << ratebypass_exists[i] << " " << res[i] << std::endl;
+	*/
 	return 0;
 }
 #endif

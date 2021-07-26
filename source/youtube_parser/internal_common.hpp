@@ -40,6 +40,9 @@ namespace youtube_parser {
 
 	std::string get_text_from_object(Json json);
 
+	// str[0] must be '(', '[', '{', or '\''
+	// returns the prefix of str until the corresponding parenthesis or quote of str[0]
+	std::string remove_garbage(const std::string &str, size_t start);
 	// html can contain unnecessary garbage at the end of the actual json data
 	Json to_json(const std::string &html, size_t start);
 

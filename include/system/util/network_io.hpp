@@ -64,6 +64,7 @@ void network_downloader_thread(void *arg);
 
 // it's just useful
 std::pair<std::string, httpcContext> access_http_get(std::string url, std::map<std::string, std::string> request_headers);
+std::pair<std::string, httpcContext> access_http_get_modify_on_redirect(std::string &url, std::map<std::string, std::string> request_headers);
 std::pair<std::string, httpcContext> access_http_post(std::string url, std::vector<u8> content, std::map<std::string, std::string> request_headers);
 
 

@@ -168,7 +168,7 @@ void NetworkStreamDownloader::downloader_thread() {
 		u64 start = block_reading * BLOCK_SIZE;
 		u64 end = std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len);
 		u64 expected_len = end - start;
-		auto network_result = access_http_get(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}});
+		auto network_result = access_http_get_modify_on_redirect(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}});
 		
 		if (network_result.first == "") {
 			auto context = network_result.second;
@@ -215,7 +215,7 @@ void network_downloader_thread(void *downloader_) {
 
 // return.first : error message, an empty string if the operation suceeded without an error
 // return.second : the acquired http context, should neither be used nor closed if return.first isn't empty
-std::pair<std::string, httpcContext> access_http_get(std::string url, std::map<std::string, std::string> request_headers) {
+std::pair<std::string, httpcContext> access_http_get_modify_on_redirect(std::string &url, std::map<std::string, std::string> request_headers) {
 	httpcContext context;
 	
 	u32 statuscode = 0;
@@ -259,6 +259,10 @@ std::pair<std::string, httpcContext> access_http_get(std::string url, std::map<s
 		return {"the website returned " + std::to_string(statuscode), context};
 	}
 	return {"", context};
+}
+
+std::pair<std::string, httpcContext> access_http_get(std::string url, std::map<std::string, std::string> request_headers) {
+	return access_http_get_modify_on_redirect(url, request_headers);
 }
 
 // return.first : error message, an empty string if the operation suceeded without an error

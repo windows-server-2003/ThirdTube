@@ -53,7 +53,7 @@ static std::string get_initial_function_name_precise(const std::string &js) {
 			2. swap(b) : std::swap(a[0], a[b % a.size()])
 		second : the argument 'b' (if first == 0, this should be ignored)
 */
-yt_cipher_transform_procedure yt_get_transform_plan(const std::string &js) {
+yt_cipher_transform_procedure yt_cipher_get_transform_plan(const std::string &js) {
 	// get initial function name
 	std::string initial_func_content;
 	{
