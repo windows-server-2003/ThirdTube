@@ -66,7 +66,9 @@ namespace VideoPlayer {
 	double vid_recent_total_time = 0;
 	int vid_total_frames = 0;
 	int vid_width = 0;
+	int vid_width_org = 0;
 	int vid_height = 0;
+	int vid_height_org = 0;
 	int vid_tex_width[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	int vid_tex_height[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	int vid_lr_count = 0;
@@ -522,8 +524,8 @@ static void decode_thread(void* arg)
 				Util_speaker_init(0, ch, vid_sample_rate);
 				{
 					auto tmp = network_decoder.get_video_info();
-					vid_width = tmp.width;
-					vid_height = tmp.height;
+					vid_width = vid_width_org = tmp.width;
+					vid_height = vid_height_org = tmp.height;
 					vid_framerate = tmp.framerate;
 					vid_video_format = tmp.format_name;
 					vid_duration = tmp.duration;
@@ -787,25 +789,25 @@ static void convert_thread(void* arg)
 					osTickCounterUpdate(&counter0);
 					osTickCounterUpdate(&counter1);
 					
-					result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width, vid_height, 1024, 1024, GPU_RGB565);
+					result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width, vid_height_org, 1024, 1024, GPU_RGB565);
 					if(result.code != 0)
 						Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 
 					if(vid_width > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width, vid_height, 1024, 0, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width, vid_height_org, 1024, 0, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 					if(vid_height > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width, vid_height, 0, 1024, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width, vid_height_org, 0, 1024, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 					if(vid_width > 1024 && vid_height > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width, vid_height, 1024, 1024, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width, vid_height_org, 1024, 1024, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
