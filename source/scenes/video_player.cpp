@@ -7,8 +7,6 @@
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 
-#define REQUEST_HW_DECODER true
-#define VIDEO_AUDIO_SEPERATE false
 #define NEW_3DS_CPU_LIMIT 50
 #define OLD_3DS_CPU_LIMIT 80
 
@@ -480,20 +478,20 @@ static void decode_thread(void* arg)
 			
 			// video page parsing sometimes randomly fails, so try several times
 			network_waiting_status = "Reading Stream";
-			if (VIDEO_AUDIO_SEPERATE) {
+			if (cur_video_info.both_stream_len > 1000 * 1000 * 300) { // itag 18 (both_stream) takes too much time when loading if the video is long
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_stream = new NetworkStream(cur_video_info.video_stream_url, cur_video_info.video_stream_len);
 				cur_audio_stream = new NetworkStream(cur_video_info.audio_stream_url, cur_video_info.audio_stream_len);
 				svcReleaseMutex(small_resource_lock);
 				stream_downloader.add_stream(cur_video_stream);
 				stream_downloader.add_stream(cur_audio_stream);
-				result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
+				result = network_decoder.init(cur_video_stream, cur_audio_stream, false);
 			} else {
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_stream = new NetworkStream(cur_video_info.both_stream_url, cur_video_info.both_stream_len);
 				svcReleaseMutex(small_resource_lock);
 				stream_downloader.add_stream(cur_video_stream);
-				result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
+				result = network_decoder.init(cur_video_stream, true);
 			}
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
 			if(result.code != 0) {
@@ -565,8 +563,8 @@ static void decode_thread(void* arg)
 							Util_log_save("decoder", "reinit needed, performing...");
 							network_waiting_status = "Seeking(Reiniting)";
 							network_decoder.deinit();
-							if (cur_audio_stream) result = network_decoder.init(cur_video_stream, cur_audio_stream, REQUEST_HW_DECODER);
-							else result = network_decoder.init(cur_video_stream, REQUEST_HW_DECODER);
+							if (cur_audio_stream) result = network_decoder.init(cur_video_stream, cur_audio_stream, false);
+							else result = network_decoder.init(cur_video_stream, true);
 							network_waiting_status = "Seeking";
 							if (result.code != 0) {
 								if (network_decoder.need_reinit) continue; // someone locked while reinit, another seek request is made

@@ -115,7 +115,7 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	}
 	// video
 	{
-		std::vector<int> recommended_itags = {134, 134, 160, 133};
+		std::vector<int> recommended_itags = {133, 160, 134};
 		u8 found = recommended_itags.size();
 		for (auto i : video_formats) {
 			int cur_itag = i["itag"].int_value();

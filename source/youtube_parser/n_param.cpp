@@ -16,11 +16,9 @@
 #define debug(s) Util_log_save("yt-parser", (s));
 #endif
 
+/* Mostly ported from pytube */
 
-// a bit costly, so it's called only when the simpler detection failed
-// refer to https://github.com/pytube/pytube/blob/48ea5205b92e8e090866589be67780ce8e29a922/pytube/cipher.py#L104
 static std::string get_initial_function_name_precise(const std::string &js) {
-	// confusing but they are raw string literals : R"(ACTUAL_STRING)"
 	std::vector<std::string> function_patterns = {
 		R"(a\.C&&\(b=a\.get\("n"\)\)&&\(b=([^(]+)\(b\),a\.set\("n",b\)\)}};)"
 	};
