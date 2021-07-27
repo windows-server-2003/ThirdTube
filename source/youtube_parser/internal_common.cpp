@@ -176,7 +176,7 @@ namespace youtube_parser {
 			for (; pos < str.size(); pos++) {
 				if (str[pos] == '"') in_string = !in_string;
 				else if (in_string) {
-					if (str[pos] == '\"') pos++;
+					if (str[pos] == '\\') pos++;
 				} else if (str[pos] == '{' || str[pos] == '[' || str[pos] == '(') level++;
 				else if (str[pos] == '}' || str[pos] == ']' || str[pos] == ')') level--;
 				if (level == 0) break;
