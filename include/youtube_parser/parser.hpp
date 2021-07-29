@@ -1,5 +1,6 @@
 #pragma once
-
+#include <vector>
+#include <string>
 
 struct YouTubeChannelSuccinct {
 	std::string name;

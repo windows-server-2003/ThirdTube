@@ -170,6 +170,16 @@ std::vector<CArrayContent> get_carray(const std::string &func_content) {
 				char *end;
 				cur_element.integer = strtoll(content.c_str(), &end, 10);
 				if (end != &content[0] + content.size()) {
+					if (*end == 'e' || *end == 'E') {
+						char *new_end;
+						int64_t power = strtoll(end + 1, &new_end, 10);
+						if (power >= 0 && power <= 20) {
+							for (int i = 0; i < power; i++) cur_element.integer *= 10;
+							end = new_end;
+						}
+					}
+				}
+				if (end != &content[0] + content.size()) {
 					debug("failed to parse integer : " + content);
 					return {};
 				}
@@ -246,6 +256,7 @@ yt_nparam_transform_procedure yt_nparam_get_transform_plan(const std::string &js
 	}
 	auto c = get_carray(func_content);
 	auto ops = get_ops(func_content);
+	if (!c.size() || !ops.size()) return {};
 	
 	return {c, ops};
 }
@@ -267,8 +278,7 @@ template<typename T> static void op_swap(std::vector<T> &list, int64_t arg) {
 	std::swap(list[0], list[arg]);
 }
 template<typename T> static void op_splice(std::vector<T> &list, int64_t arg, int64_t delete_count = -1) {
-	arg = std::min(arg, (int64_t) list.size());
-	if (arg < 0) arg = std::max<int64_t>(0, (int64_t) list.size() - arg);
+	arg = normalize(list.size(), arg);
 	
 	if (delete_count == -1 || delete_count > (int64_t) list.size() - arg)
 		delete_count = list.size() - arg;

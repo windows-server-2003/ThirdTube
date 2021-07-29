@@ -92,6 +92,9 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	
 	std::vector<Json> audio_formats, video_formats;
 	for (auto i : formats) {
+		// std::cerr << i["itag"].int_value() << " : " << (i["contentLength"].string_value().size() ? "Yes" : "No") << std::endl;
+		if (i["contentLength"].string_value() == "") continue;
+		
 		auto mime_type = i["mimeType"].string_value();
 		if (mime_type.substr(0, 5) == "video") {
 			// H.264 is virtually the only playable video codec
@@ -413,35 +416,3 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 	}
 	return new_result;
 }
-
-#ifdef _WIN32
-#include <windows.h>
-int main() {
-	std::string url;
-	std::cin >> url;
-	
-	auto result = youtube_parse_video_page(url);
-	// std::cerr << result.description << std::endl;
-	system(("wget --no-check-certificate -O tmp.mp4 \"" + result.both_stream_url + "\"").c_str());
-	
-	/*
-	const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
-	std::vector<int> res;
-	std::vector<bool> ratebypass_exists;
-	for (int i = 0; i < 50; i++) {
-		std::cout << i << std::endl;
-		auto result = youtube_parse_video_page(url);
-		ratebypass_exists.push_back(result.both_stream_url.find("ratebypass") != std::string::npos);
-		std::cerr << "! " << result.both_stream_url << std::endl;
-		time_t r0 = time(NULL);
-		system(("wget --no-check-certificate -O tmp.mp4 \"" + result.both_stream_url + "\"").c_str());
-		time_t r1 = time(NULL);
-		res.push_back(r1 - r0);
-		Sleep(5000);
-	}
-	for (int i = 0; i < (int) res.size(); i++) std::cerr << i << " " << ratebypass_exists[i] << " " << res[i] << std::endl;
-	*/
-	return 0;
-}
-#endif
-
