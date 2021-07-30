@@ -33,8 +33,10 @@ namespace youtube_parser {
 	std::string http_get(const std::string &url, std::map<std::string, std::string> header = {});
 	std::string http_post_json(const std::string &url, const std::string &json);
 	
+	bool starts_with(const std::string &str, const std::string &pattern, size_t offset = 0);
+	
 	std::string url_decode(std::string input);
-
+	
 	// parse something like 'abc=def&ghi=jkl&lmn=opq'
 	std::map<std::string, std::string> parse_parameters(std::string input);
 

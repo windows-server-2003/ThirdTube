@@ -93,7 +93,11 @@ namespace youtube_parser {
 		return res;
 	}
 #endif
-
+	
+	bool starts_with(const std::string &str, const std::string &pattern, size_t offset) {
+		return str.substr(offset, pattern.size()) == pattern;
+	}
+	
 	std::string url_decode(std::string input) {
 		std::string res;
 		for (size_t i = 0; i < input.size(); i++) {
@@ -104,7 +108,7 @@ namespace youtube_parser {
 		}
 		return res;
 	}
-
+	
 	// parse something like 'abc=def&ghi=jkl&lmn=opq'
 	std::map<std::string, std::string> parse_parameters(std::string input) {
 		size_t start = 0;

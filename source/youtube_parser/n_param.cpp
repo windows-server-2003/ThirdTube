@@ -32,6 +32,88 @@ static std::string get_initial_function_name_precise(const std::string &js) {
 	return "";
 }
 
+std::vector<char> get_h_cipher(const std::string &content) {
+	std::vector<std::string> known_sigs = {
+		"for(var f=64,h=[];++f-h.length-32;){switch(f){",
+		"for(var f=64,h=[];++f-h.length-32;)switch(f){"
+	};
+	std::string::size_type start = std::string::npos;
+	for (auto sig : known_sigs) {
+		start = content.find(sig);
+		if (start != std::string::npos) {
+			start += sig.size();
+			break;
+		}
+	}
+	if (start == std::string::npos) {
+		debug("unknown cipher function");
+		debug(content);
+		return {};
+	}
+	
+	std::vector<std::pair<std::string, int> > instructions;
+	while (start < content.size()) {
+		size_t end_pos = std::min({
+			std::find(content.begin() + start, content.end(), ';') - content.begin(),
+			std::find(content.begin() + start, content.end(), ':') - content.begin(),
+			std::find(content.begin() + start, content.end(), '}') - content.begin()
+		});
+		std::string type;
+		std::string arg;
+		const std::vector<std::pair<std::string, std::string> > sentences {
+			{"f+=", "add"},
+			{"f-=", "sub"},
+			{"f=", "assign"},
+			{"continue", "continue"},
+			{"break", "break"},
+			{"default", "default"},
+			{"case ", "case"},
+			{"h.push(String.fromCharCode(f))", "push"}
+		};
+		for (auto &i : sentences) {
+			if (starts_with(content, i.first, start)) {
+				type = i.second;
+				arg = content.substr(start + i.first.size(), end_pos - (start + i.first.size()));
+				break;
+			}
+		}
+		if (type == "") {
+			debug("unknown sentence in for-switch");
+			return {};
+		}
+		
+		instructions.push_back({type, arg != "" ? stoll(arg) : -1});
+		start = end_pos + 1;
+		if (end_pos >= content.size() || content[end_pos] == '}') break;
+	}
+	if (start < content.size() && starts_with(content, "h.push(String.fromCharCode(f))", start))
+		instructions.push_back({"push_all", -1});
+	
+	std::vector<char> h;
+	int f = 64;
+	while (++f - h.size() - 32) {
+		bool continue_flag = false;
+		bool case_matched = false;
+		for (auto i : instructions) {
+			if (i.first == "default" || (i.first == "case" && f == i.second)) case_matched = true;
+			else if (case_matched) {
+				if (i.first == "add") f += i.second;
+				if (i.first == "sub") f -= i.second;
+				if (i.first == "assign") f = i.second;
+				if (i.first == "continue") {
+					continue_flag = true;
+					break;
+				}
+				if (i.first == "break") break;
+				if (i.first == "push") h.push_back((char) f);
+			}
+		}
+		if (continue_flag) continue;
+		if (instructions.size() && instructions.back().first == "push_all") h.push_back((char) f);
+	}
+	return h;
+}
+
 using FunctionType = NParamFunctionType;
 using CArrayContent = NParamCArrayContent;
 
@@ -84,65 +166,8 @@ std::vector<CArrayContent> get_carray(const std::string &func_content) {
 					break;
 				}
 			}
-			if (cur_element.function == FunctionType::CIPHER) { // simulate to get `h` here
-				std::string known_sig = "for(var f=64,h=[];++f-h.length-32;){switch(f){";
-				auto start = content.find(known_sig);
-				if (start == std::string::npos) {
-					debug("unknown cipher function");
-					return {};
-				}
-				start += known_sig.size();
-				std::vector<std::pair<std::string, int> > instructions;
-				while (start < content.size() && content[start] != '}') {
-					size_t end_pos;
-					std::string type;
-					std::string arg;
-					if (content.substr(start, 4) == "case") {
-						type = "case";
-						end_pos = std::find(content.begin() + start, content.end(), ':') - content.begin();
-						arg = content.substr(start + 5, end_pos - (start + 5));
-					} else {
-						end_pos = std::find(content.begin() + start, content.end(), ';') - content.begin();
-						if (content.substr(start, 3) == "f+=") {
-							type = "add";
-							arg = content.substr(start + 3, end_pos - (start + 3));
-						} else if (content.substr(start, 3) == "f-=") {
-							type = "sub";
-							arg = content.substr(start + 3, end_pos - (start + 3));
-						} else if (content.substr(start, 2) == "f=") {
-							type = "assign";
-							arg = content.substr(start + 2, end_pos - (start + 2));
-						} else if (content.substr(start, 8) == "continue") {
-							type = "continue";
-						} else if (content.substr(start, 5) == "break") {
-							type = "break";
-						}
-					}
-					instructions.push_back({type, arg != "" ? stoll(arg) : -1});
-					end_pos = std::min<size_t>(end_pos, std::find(content.begin() + start, content.end(), '}') - content.begin());
-					start = end_pos + 1;
-				}
-				std::vector<char> h;
-				int f = 64;
-				while (++f - h.size() - 32) {
-					bool continue_flag = false;
-					bool case_matched = false;
-					for (auto i : instructions) {
-						if (i.first == "case" && f == i.second) case_matched = true;
-						else if (case_matched) {
-							if (i.first == "add") f += i.second;
-							if (i.first == "sub") f -= i.second;
-							if (i.first == "assign") f = i.second;
-							if (i.first == "continue") {
-								continue_flag = true;
-								break;
-							}
-							if (i.first == "break") break;
-						}
-					}
-					if (continue_flag) continue;
-					h.push_back((char) f);
-				}
+			if (cur_element.function == FunctionType::CIPHER) { // simulate the for-switch to get `h` here
+				auto h = get_h_cipher(content);
 				cur_element.function_internal_arg = std::string(h.begin(), h.end());
 			}
 			if (!matched) {
