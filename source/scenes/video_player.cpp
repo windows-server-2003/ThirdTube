@@ -480,14 +480,15 @@ static void decode_thread(void* arg)
 			
 			// video page parsing sometimes randomly fails, so try several times
 			network_waiting_status = "Reading Stream";
-			if (cur_video_info.both_stream_len > 1000 * 1000 * 300) { // itag 18 (both_stream) takes too much time when loading if the video is long
+			if (cur_video_info.both_stream_len > 1000 * 1000 * 300 ||
+				cur_video_info.duration_ms > 60 * 60 * 1000) { // itag 18 (both_stream) of a long video takes too much time and sometimes leads to a crash 
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_stream = new NetworkStream(cur_video_info.video_stream_url, cur_video_info.video_stream_len);
 				cur_audio_stream = new NetworkStream(cur_video_info.audio_stream_url, cur_video_info.audio_stream_len);
 				svcReleaseMutex(small_resource_lock);
 				stream_downloader.add_stream(cur_video_stream);
 				stream_downloader.add_stream(cur_audio_stream);
-				result = network_decoder.init(cur_video_stream, cur_audio_stream, false);
+				result = network_decoder.init(cur_video_stream, cur_audio_stream, true);
 			} else {
 				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 				cur_video_stream = new NetworkStream(cur_video_info.both_stream_url, cur_video_info.both_stream_len);
@@ -565,7 +566,7 @@ static void decode_thread(void* arg)
 							Util_log_save("decoder", "reinit needed, performing...");
 							network_waiting_status = "Seeking(Reiniting)";
 							network_decoder.deinit();
-							if (cur_audio_stream) result = network_decoder.init(cur_video_stream, cur_audio_stream, false);
+							if (cur_audio_stream) result = network_decoder.init(cur_video_stream, cur_audio_stream, true);
 							else result = network_decoder.init(cur_video_stream, true);
 							network_waiting_status = "Seeking";
 							if (result.code != 0) {

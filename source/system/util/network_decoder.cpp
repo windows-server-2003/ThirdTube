@@ -40,6 +40,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	NetworkStream *stream = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->second;
 	size_t buf_size = buf_size_;
 	
+	// Util_log_save("dec", "read " + std::to_string(stream->read_head) + " " + std::to_string(buf_size_) + " " + std::to_string(stream->len));
 	if (stream->read_head >= stream->len) return AVERROR_EOF;
 	// network_waiting_status = cacher->waiting_status;
 	bool cpu_limited = false;
@@ -85,12 +86,17 @@ static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // si
 	
 	(void) decoder;
 	
-	if (whence == AVSEEK_SIZE) return stream->len;
+	if (whence == AVSEEK_SIZE) {
+		// Util_log_save("dec", "inquire size : " + std::to_string(stream->len));
+		return stream->len;
+	}
 	
 	u64 new_pos = 0;
 	if (whence == SEEK_SET) new_pos = offset;
 	else if (whence == SEEK_CUR) new_pos = stream->read_head + offset;
 	else if (whence == SEEK_END) new_pos = stream->len + offset;
+	
+	// Util_log_save("dec", "seek " + std::to_string(new_pos) + " " + std::to_string(stream->len));
 	
 	if (new_pos > stream->len) return -1;
 	

@@ -93,7 +93,12 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	std::vector<Json> audio_formats, video_formats;
 	for (auto i : formats) {
 		// std::cerr << i["itag"].int_value() << " : " << (i["contentLength"].string_value().size() ? "Yes" : "No") << std::endl;
+		if (i["itag"].int_value() == 133) {
+			// std::cerr << i["url"].string_value() << std::endl;
+		}
 		if (i["contentLength"].string_value() == "") continue;
+		if (i["approxDurationMs"].string_value() != "")
+			res.duration_ms = stoll(i["approxDurationMs"].string_value());
 		
 		auto mime_type = i["mimeType"].string_value();
 		if (mime_type.substr(0, 5) == "video") {
@@ -118,7 +123,7 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	}
 	// video
 	{
-		std::vector<int> recommended_itags = {133, 160, 134};
+		std::vector<int> recommended_itags = {134, 133, 160};
 		u8 found = recommended_itags.size();
 		for (auto i : video_formats) {
 			int cur_itag = i["itag"].int_value();

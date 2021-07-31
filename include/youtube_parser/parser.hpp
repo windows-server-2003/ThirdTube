@@ -55,6 +55,7 @@ struct YouTubeVideoDetail {
 	uint64_t video_stream_len;
 	std::string both_stream_url;
 	uint64_t both_stream_len;
+	int duration_ms;
 	
 	std::vector<YouTubeVideoSuccinct> suggestions;
 	struct Comment {
