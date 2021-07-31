@@ -38,18 +38,19 @@ int Util_log_save(std::string type, std::string text)
 
 int Util_log_save(std::string type, std::string text, int result)
 {
+	const int LOG_MAX_LEN = 100;
 	int return_log_num = 0;
-	char app_log_cache[2048];
-	memset(app_log_cache, 0x0, 2048);
+	char app_log_cache[LOG_MAX_LEN + 1];
+	memset(app_log_cache, 0x0, LOG_MAX_LEN + 1);
 
 	osTickCounterUpdate(&log_up_time_stopwatch);
 	log_up_time_ms += osTickCounterRead(&log_up_time_stopwatch);
 	log_spend_time[log_current_log_num] = log_up_time_ms;
 
 	if (result == 1234567890)
-		snprintf(app_log_cache, 2048, "[%.5f][%s] %s", log_up_time_ms / 1000, type.c_str(), text.c_str());
+		snprintf(app_log_cache, LOG_MAX_LEN + 1, "[%.5f][%s] %s", log_up_time_ms / 1000, type.c_str(), text.c_str());
 	else
-		snprintf(app_log_cache, 2048, "[%.5f][%s] %s 0x%x", log_up_time_ms / 1000, type.c_str(), text.c_str(), result);
+		snprintf(app_log_cache, LOG_MAX_LEN + 1, "[%.5f][%s] %s 0x%x", log_up_time_ms / 1000, type.c_str(), text.c_str(), result);
 
 	log_logs[log_current_log_num] = app_log_cache;
 	log_current_log_num++;
