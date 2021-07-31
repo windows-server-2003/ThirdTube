@@ -79,6 +79,10 @@ by Sean Barrett under MIT License and Public Domain
 * Core 2 Extreme  
   For [Video player for 3DS](https://github.com/Core-2-Extreme/Video_player_for_3DS) which this app is based on.  
   Needless to say, the video playback functionality is essential for this app, and it would not have been possible to develop this software without him spending his time optimizing the code sometimes even with assembly and looking into HW decoding on the new 3DS.
+* dixy52-beep  
+  For in-app textures
+* [PokéTube](https://github.com/Poketubepoggu)  
+  For the icon and the banner
 * The contributors of [youtube-dl](https://github.com/ytdl-org/youtube-dl)  
   As a reference about YouTube webpage parsing. It was especially helpful for the deobfuscation of ciphered signatures.  
 * The contributors of [pytube](https://github.com/pytube/pytube)  
