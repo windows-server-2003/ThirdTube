@@ -215,7 +215,7 @@ static void search() {
 		swkbdSetInitialText(&keyboard, cur_search_word.c_str());
 		char search_word[129];
 		add_cpu_limit(40);
-		auto button_pressed = swkbdInputText(&keyboard, search_word, 32);
+		auto button_pressed = swkbdInputText(&keyboard, search_word, 64);
 		remove_cpu_limit(40);
 		if (button_pressed == SWKBD_BUTTON_RIGHT) send_search_request(search_word);
 	}
@@ -381,6 +381,9 @@ Intent Search_draw(void)
 		if (key.p_b) intent.next_scene = SceneType::BACK;
 	}
 
+	if(Util_log_query_log_show_flag())
+		Util_log_main(key);
+	
 	if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	
 	return intent;

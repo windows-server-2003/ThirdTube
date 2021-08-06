@@ -90,10 +90,11 @@ namespace VideoPlayer {
 	int selected_tab = 0;
 
 	Thread stream_downloader_thread;
-	Handle streams_lock;
-	NetworkStream *cur_video_stream = NULL;
-	NetworkStream *cur_audio_stream = NULL;
 	NetworkStreamDownloader stream_downloader;
+	
+	Thread livestream_initer_thread;
+	NetworkMultipleDecoder network_decoder;
+	Handle network_decoder_critical_lock; // locked when seeking or deiniting
 	
 	Handle small_resource_lock; // locking basically all std::vector, std::string, etc
 	YouTubeVideoDetail cur_video_info;
@@ -109,9 +110,6 @@ namespace VideoPlayer {
 	std::vector<std::string> title_lines;
 	float title_font_size;
 	std::vector<std::string> description_lines;
-	
-	NetworkDecoder network_decoder;
-	Handle network_decoder_critical_lock; // locked when seeking or deiniting
 };
 using namespace VideoPlayer;
 
@@ -146,20 +144,12 @@ static void reset_video_info() { // free_video_info() but also clears metadata
 static const char * volatile network_waiting_status = NULL;
 const char *get_network_waiting_status() {
 	if (network_waiting_status) return network_waiting_status;
-	return network_decoder.network_waiting_status;
+	return network_decoder.get_network_waiting_status();
 }
 
 bool VideoPlayer_query_init_flag(void)
 {
 	return vid_already_init;
-}
-
-static void deinit_streams() {
-	svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
-	if (cur_video_stream) cur_video_stream->quit_request = true;
-	if (cur_audio_stream) cur_audio_stream->quit_request = true;
-	cur_video_stream = cur_audio_stream = NULL;
-	svcReleaseMutex(streams_lock);
 }
 
 static void on_load_video_complete() { // called while `small_resource_lock` is locked
@@ -169,8 +159,10 @@ static void on_load_video_complete() { // called while `small_resource_lock` is 
 		for (int i = 0; i < TAB_NUM; i++) scroller[i].reset();
 		var_need_reflesh = true;
 		
-		vid_change_video_request = true;
-		network_decoder.is_locked = true;
+		if (cur_video_info.is_playable()) {
+			vid_change_video_request = true;
+			if (network_decoder.ready) network_decoder.interrupt = true;
+		}
 	}
 }
 static void on_load_more_suggestions_complete() { // called while `small_resource_lock` is locked
@@ -278,11 +270,10 @@ static void send_change_video_request(std::string url) {
 static void send_seek_request(double pos) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	vid_seek_pos = pos;
-	vid_seek_pos = std::max(0.0, std::min((double) vid_seek_pos, (vid_duration - 2) * 1000));
 	vid_current_pos = pos / 1000;
 	vid_seek_request = true;
 	if (network_decoder.ready) // avoid locking while initing
-		network_decoder.is_locked = true;
+		network_decoder.interrupt = true;
 	svcReleaseMutex(small_resource_lock);
 }
 
@@ -300,6 +291,7 @@ bool video_is_playing() {
 
 namespace Bar {
 	bool bar_grabbed = false;
+	double last_grab_timestamp = 0;
 	int last_touch_x = -1;
 	int last_touch_y = -1;
 	float bar_x_l, bar_x_r;
@@ -337,11 +329,12 @@ namespace Bar {
 		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - 12, 240 - 6, 8, 3);
 		Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 320 - 7, 240 - 8, 3, 5);
 		
-		double vid_progress = vid_current_pos / vid_duration;
-		if (bar_grabbed) vid_progress = std::max(0.0f, std::min(1.0f, (last_touch_x - bar_x_l) / (bar_x_r - bar_x_l)));
-		else if (vid_seek_request) vid_progress = vid_current_pos / vid_duration;
+		double bar_timestamp = vid_current_pos;
+		if (bar_grabbed) bar_timestamp = last_grab_timestamp;
+		else if (vid_seek_request) bar_timestamp = vid_current_pos;
+		double vid_progress = network_decoder.get_bar_pos_from_timestamp(bar_timestamp);
 		
-		std::string time_str0 = Util_convert_seconds_to_time(vid_progress * vid_duration);
+		std::string time_str0 = Util_convert_seconds_to_time(bar_timestamp);
 		std::string time_str1 = "/ " + Util_convert_seconds_to_time(vid_duration);
 		float time_str0_w = Draw_get_width(time_str0, SMALL_FONT_SIZE, SMALL_FONT_SIZE);
 		float time_str1_w = Draw_get_width(time_str1, SMALL_FONT_SIZE, SMALL_FONT_SIZE);
@@ -367,11 +360,10 @@ namespace Bar {
 			y_center - 2 - GRAB_TOLERANCE <= key.touch_y && key.touch_y <= y_center + 2 + GRAB_TOLERANCE) {
 			bar_grabbed = true;
 		}
+		if (bar_grabbed)
+			last_grab_timestamp = network_decoder.get_timestamp_from_bar_pos(((key.touch_x != -1 ? key.touch_x : last_touch_x) - bar_x_l) / (bar_x_r - bar_x_l));
 		if (bar_grabbed && key.touch_x == -1) {
-			if (network_decoder.ready) {
-				double pos = std::min(1.0f, std::max(0.0f, (last_touch_x - bar_x_l) / (bar_x_r - bar_x_l))) * vid_duration * 1000;
-				send_seek_request(pos);
-			}
+			if (network_decoder.ready) send_seek_request(last_grab_timestamp * 1000);
 			bar_grabbed = false;
 		}
 		if (key.p_touch && key.touch_x >= 320 - MAXIMIZE_ICON_WIDTH && key.touch_y >= 240 - VIDEO_PLAYING_BAR_HEIGHT && vid_thread_suspend) {
@@ -393,7 +385,7 @@ namespace Bar {
 					vid_pausing = true;
 					Util_speaker_pause(0);
 				}
-			} else {
+			} else if (cur_video_info.is_playable()) {
 				network_waiting_status = NULL;
 				vid_play_request = true;
 			}
@@ -480,22 +472,19 @@ static void decode_thread(void* arg)
 			
 			// video page parsing sometimes randomly fails, so try several times
 			network_waiting_status = "Reading Stream";
-			if (cur_video_info.both_stream_len > 1000 * 1000 * 300 ||
-				cur_video_info.duration_ms > 60 * 60 * 1000) { // itag 18 (both_stream) of a long video takes too much time and sometimes leads to a crash 
-				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-				cur_video_stream = new NetworkStream(cur_video_info.video_stream_url, cur_video_info.video_stream_len);
-				cur_audio_stream = new NetworkStream(cur_video_info.audio_stream_url, cur_video_info.audio_stream_len);
-				svcReleaseMutex(small_resource_lock);
-				stream_downloader.add_stream(cur_video_stream);
-				stream_downloader.add_stream(cur_audio_stream);
-				result = network_decoder.init(cur_video_stream, cur_audio_stream, true);
+			// itag 18 (both_stream) of a long video takes too much time and sometimes leads to a crash 
+			if (cur_video_info.duration_ms <= 60 * 60 * 1000 && cur_video_info.both_stream_url != "") {
+				result = network_decoder.init(cur_video_info.both_stream_url, stream_downloader,
+					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
+			} else if (cur_video_info.video_stream_url != "" && cur_video_info.audio_stream_url != "") { 
+				result = network_decoder.init(cur_video_info.video_stream_url, cur_video_info.audio_stream_url, stream_downloader,
+					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
 			} else {
-				svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-				cur_video_stream = new NetworkStream(cur_video_info.both_stream_url, cur_video_info.both_stream_len);
-				svcReleaseMutex(small_resource_lock);
-				stream_downloader.add_stream(cur_video_stream);
-				result = network_decoder.init(cur_video_stream, true);
+				result.code = -1;
+				result.string = "YouTube parser error";
+				result.error_description = "No valid stream url extracted";
 			}
+			
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
 			if(result.code != 0) {
 				if (video_retry_left > 0) {
@@ -559,39 +548,27 @@ static void decode_thread(void* arg)
 						svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 						double seek_pos_bak = vid_seek_pos;
 						vid_seek_request = false;
-						network_decoder.is_locked = false;
+						network_decoder.interrupt = false;
 						svcReleaseMutex(small_resource_lock);
 						
-						if (network_decoder.need_reinit) {
-							Util_log_save("decoder", "reinit needed, performing...");
-							network_waiting_status = "Seeking(Reiniting)";
-							network_decoder.deinit();
-							if (cur_audio_stream) result = network_decoder.init(cur_video_stream, cur_audio_stream, true);
-							else result = network_decoder.init(cur_video_stream, true);
-							network_waiting_status = "Seeking";
-							if (result.code != 0) {
-								if (network_decoder.need_reinit) continue; // someone locked while reinit, another seek request is made
-								Util_log_save("decoder", "reinit failed without lock (unknown reason)");
-								vid_play_request = false;
-								break;
-							}
-						}
-						
 						result = network_decoder.seek(seek_pos_bak * 1000);
-						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
-						if (network_decoder.is_locked) continue; // if seek failed because of the lock, we can ignore it
-						if (result.code != 0) vid_play_request = false;
-						if (vid_seek_request) {
-							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "ANOTHER SEEK WHILE SEEKING");
+						// if seek failed because of the lock, it's probably another seek request or other requests (change video etc...), so we can ignore it
+						if (network_decoder.interrupt) {
+							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "seek interrupted");
+							continue; 
 						}
+						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
+						if (result.code != 0) vid_play_request = false;
+						break;
 					}
 					svcReleaseMutex(network_decoder_critical_lock);
 					network_waiting_status = NULL;
 				}
 				if (vid_change_video_request || !vid_play_request) break;
+				vid_duration = network_decoder.get_duration();
 				
-				std::string type = network_decoder.next_decode_type();
-				if (type == "audio") {
+				auto type = network_decoder.next_decode_type();
+				if (type == NetworkMultipleDecoder::DecodeType::AUDIO) {
 					osTickCounterUpdate(&counter0);
 					result = network_decoder.decode_audio(&audio_size, &audio, &pos);
 					osTickCounterUpdate(&counter0);
@@ -617,14 +594,13 @@ static void decode_thread(void* arg)
 
 					free(audio);
 					audio = NULL;
-				} else if (type == "video") {
+				} else if (type == NetworkMultipleDecoder::DecodeType::VIDEO) {
 					osTickCounterUpdate(&counter0);
 					result = network_decoder.decode_video(&w, &h, &key, &pos);
 					osTickCounterUpdate(&counter0);
 					
 					// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoded a video packet at " + std::to_string(pos));
 					while (result.code == DEF_ERR_NEED_MORE_OUTPUT && vid_play_request && !vid_seek_request && !vid_change_video_request) {
-						// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "video queue full");
 						usleep(10000);
 						osTickCounterUpdate(&counter0);
 						result = network_decoder.decode_video(&w, &h, &key, &pos);
@@ -651,14 +627,14 @@ static void decode_thread(void* arg)
 						if (result.code != 0)
 							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
 					}
-				} else if (type == "EOF") break;
+				} else if (type == NetworkMultipleDecoder::DecodeType::EoF) break;
+				else if (type == NetworkMultipleDecoder::DecodeType::INTERRUPTED) continue;
 				else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "unknown type of packet");
 			}
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
 			
 			network_waiting_status = NULL;
 			
-			deinit_streams();
 			while (Util_speaker_is_playing(0) && vid_play_request) usleep(10000);
 			Util_speaker_exit(0);
 			
@@ -668,7 +644,9 @@ static void decode_thread(void* arg)
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "speaker exited, waiting for convert thread");
 			// make sure the convert thread stops before closing network_decoder
 			svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "speaker exited, deinit...");
 			network_decoder.deinit();
+			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "speaker exited, deinit finish");
 			svcReleaseMutex(network_decoder_critical_lock);
 			
 			var_need_reflesh = true;
@@ -682,7 +660,7 @@ static void decode_thread(void* arg)
 		while (vid_thread_suspend && !vid_play_request && !vid_change_video_request)
 			usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
 	}
-
+	
 	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Thread exit.");
 	threadExit(0);
 }
@@ -698,31 +676,34 @@ static void convert_thread(void* arg)
 	osTickCounterStart(&counter0);
 
 	while (vid_thread_run)
-	{	
+	{
 		if (vid_play_request && !vid_seek_request && !vid_change_video_request)
 		{
 			svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max());
 			while(vid_play_request && !vid_seek_request && !vid_change_video_request)
 			{
-				bool video_need_free = false;
 				double pts;
 				do {
 					osTickCounterUpdate(&counter1);
 					osTickCounterUpdate(&counter0);
+					// Util_log_save("conv", "r8");
 					result = network_decoder.get_decoded_video_frame(vid_width, vid_height, network_decoder.hw_decoder_enabled ? &video : &yuv_video, &pts);
+					// Util_log_save("conv", "r9");
 					osTickCounterUpdate(&counter0);
 					if (result.code != DEF_ERR_NEED_MORE_INPUT) break;
 					if (vid_pausing || vid_pausing_seek) usleep(10000);
 					else usleep(3000);
 				} while (vid_play_request && !vid_seek_request && !vid_change_video_request);
 				
-				if (vid_seek_request || vid_change_video_request) break;
+				
+				if (!vid_play_request || vid_seek_request || vid_change_video_request) break;
 				if (result.code != 0) { // this is an unexpected error
 					Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "failure getting decoded result" + result.string + result.error_description, result.code);
 					vid_play_request = false;
 					break;
 				}
 				
+				bool video_need_free = false;
 				vid_copy_time[0] = osTickCounterRead(&counter0);
 				
 				osTickCounterUpdate(&counter0);
@@ -774,18 +755,31 @@ static void convert_thread(void* arg)
 					osTickCounterUpdate(&counter1);
 					cur_convert_time = osTickCounterRead(&counter1);
 					
+					// Util_log_save("conv", "r2");
 					// sync with sound
 					double cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
+					double sleep_sum = 0;
+					int sleep_cnt = 0;
+					// Util_log_save("conv", "r2 : " + std::to_string(pts) + " " + std::to_string(cur_sound_pos));
 					// Util_log_save("conv", "pos : " + std::to_string(pts) + " / " + std::to_string(cur_sound_pos));
 					if (cur_sound_pos < 0) { // sound is not playing, probably because the video is lagging behind, so draw immediately
 						
 					} else {
 						while (pts - cur_sound_pos > 0.003 && vid_play_request && !vid_seek_request && !vid_change_video_request) {
+							if ((int) ((pts - cur_sound_pos - 0.0015) * 1000) >= 50)
+								Util_log_save("conv", "sleep " + std::to_string((int) ((pts - cur_sound_pos - 0.0015) * 1000)) + " ms");
+							sleep_sum += (pts - cur_sound_pos - 0.0015) * 1000;
+							sleep_cnt++;
+							
 							usleep((pts - cur_sound_pos - 0.0015) * 1000000);
 							cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
 							if (cur_sound_pos < 0) break;
 						}
 					}
+					// Util_log_save("conv", "r3");
+					/*
+					if (sleep_sum >= 50 || sleep_cnt >= 15)
+					Util_log_save("conv", "r3 : " + std::to_string(pts) + " " + std::to_string(cur_sound_pos) + " " + std::to_string(sleep_sum) + " " + std::to_string(sleep_cnt));*/
 					
 					osTickCounterUpdate(&counter0);
 					osTickCounterUpdate(&counter1);
@@ -852,7 +846,7 @@ void VideoPlayer_resume(std::string arg)
 		if (arg != vid_url) {
 			send_change_video_request(arg);
 			video_retry_left = MAX_RETRY_CNT;
-		} else if (!vid_play_request) vid_play_request = true;
+		} else if (!vid_play_request && cur_video_info.is_playable()) vid_play_request = true;
 	}
 	for (auto i : scroller) i.on_resume();
 	overlay_menu_on_resume();
@@ -877,7 +871,6 @@ void VideoPlayer_init(void)
 	
 	svcCreateMutex(&network_decoder_critical_lock, false);
 	svcCreateMutex(&small_resource_lock, false);
-	svcCreateMutex(&streams_lock, false);
 	
 	for (int i = 0; i < TAB_NUM; i++) scroller[i] = VerticalScroller(0, 320, 0, CONTENT_Y_HIGH);
 	tab_selector_scroller = VerticalScroller(0, 320, CONTENT_Y_HIGH, CONTENT_Y_HIGH + TAB_SELECTOR_HEIGHT);
@@ -897,6 +890,33 @@ void VideoPlayer_init(void)
 	}
 	stream_downloader = NetworkStreamDownloader();
 	stream_downloader_thread = threadCreate(network_downloader_thread, &stream_downloader, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+	livestream_initer_thread = threadCreate(livestream_initer_thread_func, &network_decoder, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
+
+	/*
+	add_cpu_limit(25);
+	for (int i = 100; i < 120; i++) {
+		NetworkStream *stream0 = new NetworkStream("https://r2---sn-ogueln7k.googlevideo.com/videoplayback?expire=1628243182&ei=jrAMYaznF6eL1d8Pgc-4-A4&ip=221.240.44.218&id=9gEuOzFKTt4.1&itag=134&aitags=133%2C134%2C135%2C136%2C137%2C160&source=yt_live_broadcast&requiressl=yes&mh=7y&mm=44%2C29&mn=sn-ogueln7k%2Csn-oguesnz6&ms=lva%2Crdu&mv=m&mvi=2&pl=16&initcwndbps=1841250&vprv=1&live=1&hang=1&noclen=1&mime=video%2Fmp4&ns=7YYWlOV7L86Uc8EHIVOGpRoG&gir=yes&mt=1628220986&fvip=2&keepalive=yes&fexp=24001373%2C24007246&c=MWEB&n=d1fLqBuQlw7UXA&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Clive%2Chang%2Cnoclen%2Cmime%2Cns%2Cgir&sig=AOq0QJ8wRQIhAMSzW6dgmKMMoJZxWNWq-mC0s4nJW0ycrzgefubpf19bAiAQ58yRXQO_S1uVQNOWUm1l1cC_h0zDGUPH0WIm_mKbJA%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgKbF0jRdXFoFrsKlLbfk08fCteud5Pflzl_rdk68Uc2sCIA5Zo625JwLXVQZ1ixI9CQVHuzIvlI2RK9T0U-30IC4V&ratebypass=yes&sq=" + std::to_string(i), true);
+		NetworkStream *stream1 = new NetworkStream("https://r2---sn-ogueln7k.googlevideo.com/videoplayback?expire=1628243182&ei=jrAMYaznF6eL1d8Pgc-4-A4&ip=221.240.44.218&id=9gEuOzFKTt4.1&itag=140&source=yt_live_broadcast&requiressl=yes&mh=7y&mm=44%2C29&mn=sn-ogueln7k%2Csn-oguesnz6&ms=lva%2Crdu&mv=m&mvi=2&pl=16&initcwndbps=1841250&vprv=1&live=1&hang=1&noclen=1&mime=audio%2Fmp4&ns=7YYWlOV7L86Uc8EHIVOGpRoG&gir=yes&mt=1628220986&fvip=2&keepalive=yes&fexp=24001373%2C24007246&c=MWEB&n=d1fLqBuQlw7UXA&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Clive%2Chang%2Cnoclen%2Cmime%2Cns%2Cgir&sig=AOq0QJ8wRQIhAO9QK6ZWrt6wCG8rvv10YGn5sjbQdHW4EFrn11wcMlwHAiBKglnuc9FVgZKyzatEFHc6_BDnx-fMW2TtJdrBrgx1Gg%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgKbF0jRdXFoFrsKlLbfk08fCteud5Pflzl_rdk68Uc2sCIA5Zo625JwLXVQZ1ixI9CQVHuzIvlI2RK9T0U-30IC4V&ratebypass=yes&sq=" + std::to_string(i), true);
+		stream_downloader.add_stream(stream0);
+		stream_downloader.add_stream(stream1);
+		Util_log_save("test", "r0");
+		int x = 0;
+		while (!stream0->ready && !stream0->error) {
+			// for (int j = 0; j < 50; j++) x ^= i * j;
+			// usleep(4);
+			usleep(3000);
+		}
+		Util_log_save("test", "r1");
+		while (!stream1->ready && !stream0->error) {
+			// for (int j = 0; j < 50; j++) x ^= i * j;
+			// usleep(4);
+			usleep(3000);
+		}
+		Util_log_save("test", "r2" + std::to_string(x));
+		stream0->quit_request = true;
+		stream1->quit_request = true;
+	}
+	remove_cpu_limit(25);*/
 
 	vid_total_time = 0;
 	vid_total_frames = 0;
@@ -973,15 +993,18 @@ void VideoPlayer_exit(void)
 	vid_thread_suspend = false;
 	vid_thread_run = false;
 	vid_play_request = false;
-
-	deinit_streams();
+	
 	stream_downloader.request_thread_exit();
+	network_decoder.interrupt = true;
+	network_decoder.request_thread_exit();
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
 	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(stream_downloader_thread, time_out));
+	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(livestream_initer_thread, time_out));
 	threadFree(vid_decode_thread);
 	threadFree(vid_convert_thread);
 	threadFree(stream_downloader_thread);
+	threadFree(livestream_initer_thread);
 	stream_downloader.delete_all();
 	
 	bool new_3ds;
@@ -1014,13 +1037,22 @@ static void draw_video_content(Hid_info key, int color) {
 			Draw(cur_video_info.author.name, ICON_SIZE + SMALL_MARGIN * 2, y_offset + 15 * (int) title_lines.size(), 0.5, 0.5, DEF_DRAW_DARK_GRAY);
 			y_offset += ICON_SIZE + SMALL_MARGIN;
 			
+			if (cur_video_info.is_upcoming) {
+				y_offset += SMALL_MARGIN;
+				Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
+				y_offset += SMALL_MARGIN;
+				
+				Draw(cur_video_info.playability_reason, SMALL_MARGIN, y_offset - 1, 0.5, 0.5, color);
+				y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+			}
+			
+			y_offset += SMALL_MARGIN;
 			Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
 			y_offset += SMALL_MARGIN;
 			
 			int description_line_num = description_lines.size();
-			int description_displayed_l = std::min(description_line_num, std::max(0, (scroller[selected_tab].get_offset() - (ICON_SIZE + SMALL_MARGIN * 3)) / DEFAULT_FONT_VERTICAL_INTERVAL));
-			int description_displayed_r = std::min(description_line_num, std::max(0,
-				(scroller[selected_tab].get_offset() - (ICON_SIZE + SMALL_MARGIN * 3) + CONTENT_Y_HIGH - 1) / DEFAULT_FONT_VERTICAL_INTERVAL + 1));
+			int description_displayed_l = std::min(description_line_num, std::max(0, -y_offset / DEFAULT_FONT_VERTICAL_INTERVAL));
+			int description_displayed_r = std::min(description_line_num, std::max(0, (-y_offset + CONTENT_Y_HIGH - 1) / DEFAULT_FONT_VERTICAL_INTERVAL + 1));
 			for (int i = description_displayed_l; i < description_displayed_r; i++) {
 				Draw(description_lines[i], SMALL_MARGIN, y_offset + i * DEFAULT_FONT_VERTICAL_INTERVAL, 0.5, 0.5, color);
 			}
@@ -1110,6 +1142,10 @@ static void draw_video_content(Hid_info key, int color) {
 			Draw(LOCALIZED(CPU_LIMIT) + " : " + std::to_string(cpu_limit) + "%", 0, y_offset, 0.5, 0.5, color);
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		}
+		if (cur_video_info.is_livestream && network_decoder.ready) {
+			Draw(LOCALIZED(FORWARD_BUFFER) + " : " + std::to_string(network_decoder.get_forward_buffer()) + " s", 0, y_offset, 0.5, 0.5, color);
+			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+		}
 		//controls
 		/*
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, y_offset, 145, 10);
@@ -1131,42 +1167,31 @@ static void draw_video_content(Hid_info key, int color) {
 		y_offset += SMALL_MARGIN;
 		
 		// stream download progress
-		svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
-		if (cur_video_stream) {
+		{
 			int sample = 50;
-			auto percentage_list = cur_video_stream->get_download_percentage_list(sample);
-			int bar_len = 310;
-			for (int i = 0; i < sample; i++) {
-				int a = 0xFF;
-				int r = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-				int g = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-				int b = 0xA0 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-				int xl = 5 + bar_len * i / sample;
-				int xr = 5 + bar_len * (i + 1) / sample;
-				Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl, y_offset, xr - xl, 3);
+			auto progress_bars = network_decoder.get_buffering_progress_bars(sample);
+			for (size_t i = 0; i < 2; i++) {
+				if (i < progress_bars.size() && progress_bars[i].second.size()) {
+					auto &cur_bar = progress_bars[i].second;
+					auto cur_pos = progress_bars[i].first;
+					
+					int sample = 50;
+					int bar_len = 310;
+					for (int i = 0; i < sample; i++) {
+						int a = 0xFF;
+						int r = 0x00 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
+						int g = 0x00 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
+						int b = 0xA0 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
+						int xl = 5 + bar_len * i / sample;
+						int xr = 5 + bar_len * (i + 1) / sample;
+						Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl, y_offset, xr - xl, 3);
+					}
+					float head_x = 5 + bar_len * cur_pos;
+					Draw_texture(var_square_image[0], DEF_DRAW_RED, head_x - 1, y_offset, 3, 3);
+				}
+				y_offset += SMALL_MARGIN;
 			}
-			float head_x = 5 + bar_len * ((float) cur_video_stream->read_head / cur_video_stream->len);
-			Draw_texture(var_square_image[0], DEF_DRAW_RED, head_x - 1, y_offset, 3, 3);
 		}
-		y_offset += SMALL_MARGIN;
-		if (cur_audio_stream) {
-			int sample = 50;
-			auto percentage_list = cur_audio_stream->get_download_percentage_list(sample);
-			int bar_len = 310;
-			for (int i = 0; i < sample; i++) {
-				int a = 0xFF;
-				int r = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-				int g = 0x00 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-				int b = 0xC0 * percentage_list[i] / 100 + 0x80 * (1 - percentage_list[i] / 100);
-				int xl = 5 + bar_len * i / sample;
-				int xr = 5 + bar_len * (i + 1) / sample;
-				Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl, y_offset, xr - xl, 3);
-			}
-			float head_x = 5 + bar_len * ((float) cur_audio_stream->read_head / cur_audio_stream->len);
-			Draw_texture(var_square_image[0], DEF_DRAW_RED, head_x - 1, y_offset, 3, 3);
-		}
-		y_offset += SMALL_MARGIN;
-		svcReleaseMutex(streams_lock);
 		
 		y_offset += SMALL_MARGIN;
 		Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_BLACK, 320 - SMALL_MARGIN - 1, y_offset, DEF_DRAW_BLACK, 1);
@@ -1413,7 +1438,8 @@ Intent VideoPlayer_draw(void)
 		int content_height = 0;
 		if (selected_tab == TAB_GENERAL) {
 			if (cur_video_info.title.size()) {
-				content_height += SMALL_MARGIN + ICON_SIZE + SMALL_MARGIN + SMALL_MARGIN;
+				content_height += SMALL_MARGIN + ICON_SIZE + SMALL_MARGIN + SMALL_MARGIN + SMALL_MARGIN;
+				if (cur_video_info.is_upcoming) content_height += 2 * SMALL_MARGIN + DEFAULT_FONT_VERTICAL_INTERVAL;
 				content_height += description_lines.size() * DEFAULT_FONT_VERTICAL_INTERVAL;
 				content_height += SMALL_MARGIN * 2;
 			}
@@ -1426,8 +1452,9 @@ Intent VideoPlayer_draw(void)
 			if (cur_video_info.has_more_comments() || cur_video_info.error != "") content_height += COMMENT_LOAD_MORE_MARGIN;
 		} else if (selected_tab == TAB_ADVANCED) {
 			content_height += DEFAULT_FONT_VERTICAL_INTERVAL * 6;
-			content_height += SMALL_MARGIN + DEFAULT_FONT_VERTICAL_INTERVAL; // texture filter button
-			content_height += SMALL_MARGIN * 5;
+			if (cur_video_info.is_livestream && network_decoder.ready) content_height += DEFAULT_FONT_VERTICAL_INTERVAL;
+			content_height += SMALL_MARGIN + DEFAULT_FONT_VERTICAL_INTERVAL + SMALL_MARGIN; // texture filter button
+			content_height += SMALL_MARGIN * 4;
 			content_height += 160;
 		}
 		auto released_point = scroller[selected_tab].update(key, content_height);
@@ -1496,6 +1523,7 @@ Intent VideoPlayer_draw(void)
 		} else if (selected_tab == TAB_ADVANCED) {
 			int y_offset = 0;
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL * 6;
+			if (cur_video_info.is_livestream && network_decoder.ready) y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 			y_offset += SMALL_MARGIN;
 			if (released_x != -1) {
 				// filter button
@@ -1529,7 +1557,7 @@ Intent VideoPlayer_draw(void)
 					if (!vid_pausing_seek) Util_speaker_pause(0);
 					vid_pausing = true;
 				}
-			} else {
+			} else if (cur_video_info.is_playable()) {
 				network_waiting_status = NULL;
 				vid_play_request = true;
 			}
@@ -1670,6 +1698,7 @@ Intent VideoPlayer_draw(void)
 		*/
 		
 		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
+		if (key.h_x && key.p_y || key.h_y && key.p_x) var_debug_mode = !var_debug_mode;
 	}
 
 	if(Util_log_query_log_show_flag())

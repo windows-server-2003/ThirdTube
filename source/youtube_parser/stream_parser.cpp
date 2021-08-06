@@ -38,6 +38,12 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	Json player_response = initial_player_response(html);
 	Json player_config = get_ytplayer_config(html);
 	
+	res.playability_status = player_response["playabilityStatus"]["status"].string_value();
+	res.playability_reason = player_response["playabilityStatus"]["reason"].string_value();
+	res.is_upcoming = player_response["videoDetails"]["isUpcoming"].bool_value();
+	res.livestream_type = player_response["videoDetails"]["isLiveContent"].bool_value() ?
+		YouTubeVideoDetail::LivestreamType::LIVESTREAM : YouTubeVideoDetail::LivestreamType::PREMIERE;
+	
 	// extract stream formats
 	std::vector<Json> formats;
 	for (auto i : player_response["streamingData"]["formats"].array_items()) formats.push_back(i);
@@ -90,13 +96,19 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 		i = Json(tmp);
 	}
 	
+	res.stream_fragment_len = -1;
+	res.is_livestream = false;
 	std::vector<Json> audio_formats, video_formats;
 	for (auto i : formats) {
 		// std::cerr << i["itag"].int_value() << " : " << (i["contentLength"].string_value().size() ? "Yes" : "No") << std::endl;
-		if (i["itag"].int_value() == 133) {
-			// std::cerr << i["url"].string_value() << std::endl;
+		// if (i["contentLength"].string_value() == "") continue;
+		if (i["targetDurationSec"] != Json()) {
+			int new_stream_fragment_len = i["targetDurationSec"].int_value();
+			if (res.stream_fragment_len != -1 && res.stream_fragment_len != new_stream_fragment_len)
+				debug("[unexp] diff targetDurationSec for diff streams");
+			res.stream_fragment_len = new_stream_fragment_len;
+			res.is_livestream = true;
 		}
-		if (i["contentLength"].string_value() == "") continue;
 		if (i["approxDurationMs"].string_value() != "")
 			res.duration_ms = stoll(i["approxDurationMs"].string_value());
 		
@@ -117,7 +129,6 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 			if (max_bitrate < cur_bitrate) {
 				max_bitrate = cur_bitrate;
 				res.audio_stream_url = i["url"].string_value();
-				res.audio_stream_len = stoll(i["contentLength"].string_value());
 			}
 		}
 	}
@@ -130,17 +141,14 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 			for (size_t j = 0; j < recommended_itags.size(); j++) if (cur_itag == recommended_itags[j] && found > j) {
 				found = j;
 				res.video_stream_url = i["url"].string_value();
-				res.video_stream_len = stoll(i["contentLength"].string_value());
 			}
 		}
 		if (found == recommended_itags.size() && video_formats.size()) { // recommended resolution not found, pick random one
 			res.video_stream_url = video_formats[0]["url"].string_value();
-			res.video_stream_len = stoll(video_formats[0]["contentLength"].string_value());
 		}
 		// search for itag 18
 		for (auto i : video_formats) if (i["itag"].int_value() == 18) {
 			res.both_stream_url = i["url"].string_value();
-			res.both_stream_len = stoll(i["contentLength"].string_value());
 		}
 	}
 	return true;
@@ -193,7 +201,6 @@ static void extract_item(Json content, YouTubeVideoDetail &res) {
 
 static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 	Json initial_data = get_initial_data(html);
-	// debug(initial_data.dump());
 	
 	{
 		auto contents = initial_data["contents"]["singleColumnWatchNextResults"]["results"]["results"]["contents"];

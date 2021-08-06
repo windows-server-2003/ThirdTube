@@ -6,11 +6,11 @@
 // NetworkStream implementation
 // --------------------------------
 
-NetworkStream::NetworkStream(std::string url, u64 len) : url(url), len(len) {
-	block_num = (len + BLOCK_SIZE - 1) / BLOCK_SIZE;
+NetworkStream::NetworkStream(std::string url, bool whole_download) : url(url), whole_download(whole_download) {
 	svcCreateMutex(&downloaded_data_lock, false);
 }
 bool NetworkStream::is_data_available(u64 start, u64 size) {
+	if (!ready) return false;
 	if (start + size > len) return false;
 	u64 end = start + size - 1;
 	u64 start_block = start / BLOCK_SIZE;
@@ -26,6 +26,7 @@ bool NetworkStream::is_data_available(u64 start, u64 size) {
 	return res;
 }
 std::vector<u8> NetworkStream::get_data(u64 start, u64 size) {
+	if (!ready) return {};
 	if (!size) return {};
 	u64 end = start + size - 1;
 	u64 start_block = start / BLOCK_SIZE;
@@ -66,13 +67,13 @@ double NetworkStream::get_download_percentage() {
 	svcReleaseMutex(downloaded_data_lock);
 	return res;
 }
-std::vector<double> NetworkStream::get_download_percentage_list(u64 res_len) {
+std::vector<double> NetworkStream::get_buffering_progress_bar(int res_len) {
 	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
 	std::vector<double> res(res_len);
 	auto itr = downloaded_data.begin();
 	for (u64 i = 0; i < res_len; i++) {
 		u64 l = (u64) len * i / res_len;
-		u64 r = std::min<u32>(len, (u64) len * (i + 1) / res_len);
+		u64 r = std::min<u64>(len, (u64) len * (i + 1) / res_len);
 		while (itr != downloaded_data.end()) {
 			u64 il = itr->first * BLOCK_SIZE;
 			u64 ir = std::min((itr->first + 1) * BLOCK_SIZE, len);
@@ -99,11 +100,20 @@ std::vector<double> NetworkStream::get_download_percentage_list(u64 res_len) {
 NetworkStreamDownloader::NetworkStreamDownloader() {
 	svcCreateMutex(&streams_lock, false);
 }
-size_t NetworkStreamDownloader::add_stream(NetworkStream *stream) {
+void NetworkStreamDownloader::add_stream(NetworkStream *stream) {
 	svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
-	streams.push_back(stream);
+	size_t index = (size_t) -1;
+	for (size_t i = 0; i < streams.size(); i++) if (!streams[i]) {
+		streams[i] = stream;
+		index = i;
+		break;
+	}
+	if (index == (size_t) -1) {
+		index = streams.size();
+		streams.push_back(stream);
+	}
 	svcReleaseMutex(streams_lock);
-	return streams.size() - 1;
+	Util_log_save("net/dl", "added index : " + std::to_string(index));
 }
 
 
@@ -128,6 +138,11 @@ void NetworkStreamDownloader::downloader_thread() {
 				streams[i] = NULL;
 				continue;
 			}
+			if (!streams[i]->ready) {
+				cur_stream_index = i;
+				break;
+			}
+			if (streams[i]->whole_download) continue; // its entire content should already be downloaded
 			
 			u64 read_head_block = read_heads[i] / BLOCK_SIZE;
 			u64 first_not_downloaded_block = read_head_block;
@@ -150,42 +165,134 @@ void NetworkStreamDownloader::downloader_thread() {
 		
 		if (cur_stream_index == (size_t) -1) {
 			svcReleaseMutex(streams_lock);
-			usleep(50000);
+			usleep(20000);
 			continue;
 		}
 		NetworkStream *cur_stream = streams[cur_stream_index];
 		svcReleaseMutex(streams_lock);
 		
-		u64 block_reading = read_heads[cur_stream_index] / BLOCK_SIZE;
-		while (block_reading < cur_stream->block_num && cur_stream->downloaded_data.count(block_reading)) block_reading++;
-		if (block_reading == cur_stream->block_num) { // something unexpected happened
-			Util_log_save(LOG_THREAD_STR, "unexpected error (trying to read beyond the end of the stream)");
-			cur_stream->error = true;
-			continue;
-		}
-		Util_log_save("net/dl", "dl next : " + std::to_string(cur_stream_index) + " " + std::to_string(block_reading));
-		
-		u64 start = block_reading * BLOCK_SIZE;
-		u64 end = std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len);
-		u64 expected_len = end - start;
-		auto network_result = access_http_get_modify_on_redirect(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}});
-		
-		if (network_result.first == "") {
-			auto context = network_result.second;
-			std::vector<u8> data(expected_len);
-			u32 len_read;
-			httpcDownloadData(&context, &data[0], expected_len, &len_read);
-			if (len_read != expected_len) {
-				Util_log_save(LOG_THREAD_STR, "size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(len_read));
-				cur_stream->error = true;
+		// whole download
+		if (cur_stream->whole_download) {
+			Util_log_save("dl", "access");
+			auto network_result = access_http_get_modify_on_redirect(cur_stream->url, {{"User-Agent", USER_AGENT}});
+			if (network_result.first == "") {
+				auto context = network_result.second;
+				u32 status_code;
+				httpcGetResponseStatusCode(&context, &status_code);
+				if (status_code == HTTP_STATUS_CODE_NO_CONTENT) {
+					// probably, the livestream has ended
+					cur_stream->livestream_eof = true;
+					cur_stream->error = true;
+				} else {
+					{ // acquire necessary headers
+						char buffer[0x1000];
+						{
+							httpcGetResponseHeader(&context, "x-head-seqnum", buffer, sizeof(buffer));
+							char *end;
+							cur_stream->seq_head = strtoll(buffer, &end, 10);
+							if (*end) {
+								Util_log_save("net/dl", "failed to acquire x-head-seqnum");
+								cur_stream->seq_head = -1;
+								cur_stream->error = true;
+							}
+						}
+						{
+							httpcGetResponseHeader(&context, "x-sequence-num", buffer, sizeof(buffer));
+							char *end;
+							cur_stream->seq_id = strtoll(buffer, &end, 10);
+							if (*end) {
+								Util_log_save("net/dl", "failed to acquire x-sequence-num");
+								cur_stream->seq_id = -1;
+								cur_stream->error = true;
+							}
+						}
+					}
+					if (!cur_stream->error) {
+						constexpr int BUFFER_SIZE = 0x80000; // 512 KiB
+						std::vector<u8> buffer(BUFFER_SIZE);
+						std::vector<u8> data;
+					Util_log_save("dl", "dl");
+						while (1) {
+							u32 len_read;
+							Result ret = httpcDownloadData(&context, &buffer[0], BUFFER_SIZE, &len_read);
+							data.insert(data.end(), buffer.begin(), buffer.begin() + len_read);
+							if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
+						}
+					Util_log_save("dl", "finish");
+						
+						cur_stream->len = data.size();
+						cur_stream->block_num = (data.size() + BLOCK_SIZE - 1) / BLOCK_SIZE;
+						for (size_t i = 0; i < data.size(); i += BLOCK_SIZE) {
+							size_t left = i;
+							size_t right = std::min<size_t>(i + BLOCK_SIZE, data.size());
+							cur_stream->set_data(i / BLOCK_SIZE, std::vector<u8>(data.begin() + left, data.begin() + right));
+						}
+						cur_stream->ready = true;
+					}
+				}
 				httpcCloseContext(&context);
-				continue;
+			} else {
+				Util_log_save("net/dl", "failed accessing : " + network_result.first);
+				cur_stream->error = true;
+				// I should consider a better way...
+				if (network_result.first.find("404") != std::string::npos) // sometimes when trying to read beyond the end of the livestream
+					cur_stream->livestream_eof = true;
+				if (network_result.first.find("403") != std::string::npos) // when trying to read an ended livestream without archive
+					cur_stream->livestream_private = true;
 			}
-			cur_stream->set_data(block_reading, data);
-			httpcCloseContext(&context);
 		} else {
-			Util_log_save("net/dl", "access failed : " + network_result.first);
-			cur_stream->error = true;
+			u64 block_reading = read_heads[cur_stream_index] / BLOCK_SIZE;
+			if (cur_stream->ready) {
+				while (block_reading < cur_stream->block_num && cur_stream->downloaded_data.count(block_reading)) block_reading++;
+				if (block_reading == cur_stream->block_num) { // something unexpected happened
+					Util_log_save(LOG_THREAD_STR, "unexpected error (trying to read beyond the end of the stream)");
+					cur_stream->error = true;
+					continue;
+				}
+			}
+			Util_log_save("net/dl", "dl next : " + std::to_string(cur_stream_index) + " " + std::to_string(block_reading));
+			
+			u64 start = block_reading * BLOCK_SIZE;
+			u64 end = cur_stream->ready ? std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len) : (block_reading + 1) * BLOCK_SIZE;
+			u64 expected_len = end - start;
+			auto network_result = access_http_get_modify_on_redirect(cur_stream->url, {
+				{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)},
+				{"User-Agent", USER_AGENT}
+			});
+			
+			if (network_result.first == "") {
+				auto context = network_result.second;
+				if (!cur_stream->ready) {
+					char buffer[0x100] = { 0 };
+					httpcGetResponseHeader(&context, "Content-Range", buffer, sizeof(buffer));
+					char *slash = strchr(buffer, '/');
+					bool ok = false;
+					if (slash) {
+						char *end;
+						cur_stream->len = strtoll(slash + 1, &end, 10);
+						if (!*end) {
+							ok = true;
+							cur_stream->block_num = (cur_stream->len + BLOCK_SIZE - 1) / BLOCK_SIZE;
+						} else Util_log_save(LOG_THREAD_STR, "failed to parse Content-Range : " + std::string(slash + 1));
+					} else Util_log_save(LOG_THREAD_STR, "no slash in Content-Range response header");
+					if (!ok) cur_stream->error = true;
+				}
+				std::vector<u8> data(expected_len);
+				u32 len_read;
+				httpcDownloadData(&context, &data[0], expected_len, &len_read);
+				if (cur_stream->ready && len_read != expected_len) {
+					Util_log_save(LOG_THREAD_STR, "size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(len_read));
+					cur_stream->error = true;
+					httpcCloseContext(&context);
+					continue;
+				}
+				cur_stream->set_data(block_reading, data);
+				cur_stream->ready = true;
+				httpcCloseContext(&context);
+			} else {
+				Util_log_save("net/dl", "access failed : " + network_result.first);
+				cur_stream->error = true;
+			}
 		}
 	}
 	Util_log_save(LOG_THREAD_STR, "Exit, deiniting...");

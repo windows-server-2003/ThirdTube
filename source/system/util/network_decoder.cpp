@@ -5,32 +5,18 @@
 
 extern "C" void memcpy_asm(u8*, u8*, int);
 
-void NetworkDecoder::deinit() {
-	ready = false;
-	
+void NetworkDecoderFFmpegData::deinit(bool deinit_stream) {
 	for (int type = 0; type < 2; type++) {
 		delete opaque[type];
 		opaque[type] = NULL;
 		avcodec_free_context(&decoder_context[type]);
 		if (io_context[type]) av_freep(&io_context[type]->buffer);
 		av_freep(&io_context[type]);
-		for (auto i : packet_buffer[type]) av_packet_free(&i);
-		packet_buffer[type].clear();
 		avformat_close_input(&format_context[type]);
-	}
-	if (hw_decoder_enabled) {
-		if (mvd_inited) {
-			mvdstdExit();
-			mvd_inited = false;
+		if (deinit_stream) {
+			network_stream[type]->quit_request = true;
+			network_stream[type] = NULL;
 		}
-		for (auto i : video_mvd_tmp_frames.deinit()) free(i);
-		linearFree(mvd_frame);
-		mvd_frame = NULL;
-		buffered_pts_list.clear();
-	} else {
-		for (auto i : video_tmp_frames.deinit()) av_frame_free(&i);
-		free(sw_video_output_tmp);
-		sw_video_output_tmp = NULL;
 	}
 	swr_free(&swr_context);
 }
@@ -41,27 +27,34 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	size_t buf_size = buf_size_;
 	
 	// Util_log_save("dec", "read " + std::to_string(stream->read_head) + " " + std::to_string(buf_size_) + " " + std::to_string(stream->len));
-	if (stream->read_head >= stream->len) return AVERROR_EOF;
-	// network_waiting_status = cacher->waiting_status;
 	bool cpu_limited = false;
-	while (!stream->is_data_available(stream->read_head, std::min<u64>(buf_size, stream->len - stream->read_head))) {
-		if (decoder->is_locked) {
+	while (!stream->ready || !stream->is_data_available(stream->read_head, std::min<u64>(buf_size, stream->len - stream->read_head))) {
+		if (stream->ready && stream->read_head >= stream->len) {
+			Util_log_save("dec", "read beyond eof : " + std::to_string(stream->read_head) + " " + std::to_string(stream->len));
+			goto fail; // beyond the eof
+		}
+		if (!stream->disable_interrupt && decoder->interrupt) {
+			Util_log_save("dec", "read interrupt");
 			decoder->need_reinit = true;
 			goto fail;
 		}
-		decoder->network_waiting_status = "Reading stream";
+		stream->network_waiting_status = "Reading stream";
 		if (!cpu_limited) {
 			cpu_limited = true;
 			add_cpu_limit(25);
 		}
 		usleep(20000);
-		if (stream->error || stream->quit_request) goto fail;
+		if (stream->error || stream->quit_request) {
+			Util_log_save("dec", "read dead stream : " + std::string(stream->error ? "error" : "quitted"));
+			usleep(100000);
+			goto fail;
+		}
 	}
 	if (cpu_limited) {
 		cpu_limited = false;
 		remove_cpu_limit(25);
 	}
-	decoder->network_waiting_status = NULL;
+	stream->network_waiting_status = NULL;
 	
 	{
 		auto tmp = stream->get_data(stream->read_head, std::min<u64>(buf_size, stream->len - stream->read_head));
@@ -77,7 +70,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 		cpu_limited = false;
 		remove_cpu_limit(25);
 	}
-	decoder->network_waiting_status = NULL;
+	stream->network_waiting_status = NULL;
 	return AVERROR_EOF;
 }
 static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // size or AVERROR_EOF
@@ -85,6 +78,16 @@ static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // si
 	NetworkStream *stream = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->second;
 	
 	(void) decoder;
+	
+	while (!stream->ready) {
+		stream->network_waiting_status = "Reading stream (init, seek)";
+		usleep(20000);
+		if (stream->error || stream->quit_request) {
+			stream->network_waiting_status = NULL;
+			return -1;
+		}
+	}
+	stream->network_waiting_status = NULL;
 	
 	if (whence == AVSEEK_SIZE) {
 		// Util_log_save("dec", "inquire size : " + std::to_string(stream->len));
@@ -105,15 +108,15 @@ static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // si
 	return stream->read_head;
 }
 
-#define NETWORK_BUFFER_SIZE 0x8000
-Result_with_string NetworkDecoder::init_(int type, AVMediaType expected_codec_type) {
+#define NETWORK_BUFFER_SIZE 0x10000
+Result_with_string NetworkDecoderFFmpegData::init_(int type, AVMediaType expected_codec_type, NetworkDecoder *parent_decoder) {
 	Result_with_string result;
 	int ffmpeg_result;
 	
 	if (video_audio_seperate || type == BOTH) {
 		network_stream[type]->read_head = 0;
 		
-		opaque[type] = new std::pair<NetworkDecoder *, NetworkStream *>(this, network_stream[type]);
+		opaque[type] = new std::pair<NetworkDecoder *, NetworkStream *>(parent_decoder, network_stream[type]);
 		unsigned char *buffer = (unsigned char *) av_malloc(NETWORK_BUFFER_SIZE);
 		if (!buffer) {
 			result.error_description = "network buffer allocation failed";
@@ -193,6 +196,26 @@ Result_with_string NetworkDecoder::init_(int type, AVMediaType expected_codec_ty
 		result.error_description = "avcodec_open2() failed " + std::to_string(ffmpeg_result);
 		goto fail;
 	}
+	
+	if (type == AUDIO) {
+		swr_context = swr_alloc();
+		if (!swr_context) {
+			result.error_description = "swr_alloc() failed ";
+			goto fail;
+		}
+		if (!swr_alloc_set_opts(swr_context, av_get_default_channel_layout(decoder_context[AUDIO]->channels), AV_SAMPLE_FMT_S16, decoder_context[AUDIO]->sample_rate,
+			av_get_default_channel_layout(decoder_context[AUDIO]->channels), decoder_context[AUDIO]->sample_fmt, decoder_context[AUDIO]->sample_rate, 0, NULL))
+		{
+			result.error_description = "swr_alloc_set_opts() failed ";
+			goto fail;
+		}
+
+		ffmpeg_result = swr_init(swr_context);
+		if (ffmpeg_result != 0) {
+			result.error_description = "swr_init() failed " + std::to_string(ffmpeg_result);
+			goto fail;
+		}
+	}
 	return result;
 	
 	fail:
@@ -201,14 +224,73 @@ Result_with_string NetworkDecoder::init_(int type, AVMediaType expected_codec_ty
 	return result;
 }
 
-Result_with_string NetworkDecoder::init_video_decoder(bool &is_mvd) {
+Result_with_string NetworkDecoderFFmpegData::init(NetworkStream *video_stream, NetworkStream *audio_stream, NetworkDecoder *parent_decoder) {
+	Result_with_string result;
+	
+	video_audio_seperate = video_stream != audio_stream;
+	network_stream[VIDEO] = video_stream;
+	network_stream[AUDIO] = audio_stream;
+	this->parent_decoder = parent_decoder;
+	
+	result = init_(VIDEO, AVMEDIA_TYPE_VIDEO, parent_decoder);
+	if (result.code != 0) {
+		result.error_description = "[video] " + result.error_description;
+		return result;
+	}
+	
+	result = init_(AUDIO, AVMEDIA_TYPE_AUDIO, parent_decoder);
+	if (result.code != 0) {
+		result.error_description = "[audio] " + result.error_description;
+		return result;
+	}
+	
+	return result;
+}
+Result_with_string NetworkDecoderFFmpegData::init(NetworkStream *both_stream, NetworkDecoder *parent_decoder) {
+	return init(both_stream, both_stream, parent_decoder);
+}
+Result_with_string NetworkDecoderFFmpegData::reinit() {
+	deinit(false);
+	return init(network_stream[VIDEO], network_stream[AUDIO], parent_decoder);
+}
+double NetworkDecoderFFmpegData::get_duration() {
+	return (double) format_context[video_audio_seperate ? AUDIO : BOTH]->duration / AV_TIME_BASE;
+}
+
+
+
+void NetworkDecoder::deinit() {
+	ready = false;
+	
+	for (int type = 0; type < 2; type++) {
+		for (auto i : packet_buffer[type]) av_packet_free(&i);
+		packet_buffer[type].clear();
+	}
+	// for HW decoder
+	for (auto i : video_mvd_tmp_frames.deinit()) free(i);
+	linearFree(mvd_frame);
+	mvd_frame = NULL;
+	buffered_pts_list.clear();
+	// for SW decoder
+	for (auto i : video_tmp_frames.deinit()) av_frame_free(&i);
+	free(sw_video_output_tmp);
+	sw_video_output_tmp = NULL;
+	
+	// ffmpeg data should not be freed, but to prevent accesses to them, we set NULLs here
+	for (int type = 0; type < 2; type++) {
+		network_stream[type] = NULL;
+		opaque[type] = NULL;
+		format_context[type] = NULL;
+		io_context[type] = NULL;
+		decoder_context[type] = NULL;
+		codec[type] = NULL;
+	}
+	swr_context = NULL;
+}
+
+Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
 	Result_with_string result;
 	int width, height;
-	
-	if (is_mvd && codec[VIDEO]->long_name != std::string("H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10")) {
-		Util_log_save("decoder", "not H.264, disabling hw decoder");
-		is_mvd = false;
-	}
 	
 	// init output buffer
 	width = decoder_context[VIDEO]->width;
@@ -255,108 +337,53 @@ Result_with_string NetworkDecoder::init_video_decoder(bool &is_mvd) {
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
 }
-Result_with_string NetworkDecoder::init_audio_decoder() {
-	int ffmpeg_result;
+
+Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	Result_with_string result;
 	
-	swr_context = swr_alloc();
-	if (!swr_context) {
-		result.error_description = "swr_alloc() failed ";
-		goto fail;
-	}
-	if (!swr_alloc_set_opts(swr_context, av_get_default_channel_layout(decoder_context[AUDIO]->channels), AV_SAMPLE_FMT_S16, decoder_context[AUDIO]->sample_rate,
-		av_get_default_channel_layout(decoder_context[AUDIO]->channels), decoder_context[AUDIO]->sample_fmt, decoder_context[AUDIO]->sample_rate, 0, NULL))
-	{
-		result.error_description = "swr_alloc_set_opts() failed ";
-		goto fail;
-	}
-
-	ffmpeg_result = swr_init(swr_context);
-	if (ffmpeg_result != 0) {
-		result.error_description = "swr_init() failed " + std::to_string(ffmpeg_result);
-		goto fail;
-	}
-	
-	return result;
-	fail:
-	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
-	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
-	return result;
-}
-
-Result_with_string NetworkDecoder::init(NetworkStream *video_stream, NetworkStream *audio_stream, bool request_hw_decoder) {
-	Result_with_string result;
-	
-	video_audio_seperate = video_stream != audio_stream;
-	need_reinit = false;
-	is_locked = false;
-	this->network_stream[VIDEO] = video_stream;
-	this->network_stream[AUDIO] = audio_stream;
-	
-	if (request_hw_decoder) {
-		if (!mvd_inited) {
-			Util_log_save("dec/init", "free linear space : " + std::to_string(linearSpaceFree() / 1000) + " KB");
-			Result mvd_result = -1;
-			for (int mb = 15; mb >= 5; mb--) {
-				mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, 1000000 * mb, NULL);
-				if (mvd_result == 0) {
-					Util_log_save("dec/init", "mvdstdInit ok at " + std::to_string(mb) + " MB");
-					break;
-				}
-			}
-			if (mvd_result != 0) Util_log_save("dec/init", "mvdstdInit returned " + std::to_string(mvd_result) + " with a minimum size of work buffer");
-			else mvd_inited = true;
-		}
-		mvd_first = true;
-	}
 	hw_decoder_enabled = request_hw_decoder;
-	
-	result = init_(VIDEO, AVMEDIA_TYPE_VIDEO);
-	if (result.code != 0) {
-		result.error_description = "[video] " + result.error_description;
-		return result;
-	}
-	result = init_(AUDIO, AVMEDIA_TYPE_AUDIO);
-	if (result.code != 0) {
-		result.error_description = "[audio] " + result.error_description;
-		return result;
-	}
-	
-	if (video_audio_seperate) {
-		for (int type = 0; type < 2; type++) {
-			auto result = read_packet(type);
-			if (result.code != 0) {
-				result.error_description = (type == VIDEO ? "[video] " : "[audio] ") + result.error_description;
-				return result;
-			}
-		}
-	} else {
-		while (!packet_buffer[VIDEO].size() || !packet_buffer[AUDIO].size()) {
-			auto result = read_packet(BOTH);
-			if (result.code != 0) return result;
-		}
-	}
-	
+	interrupt = false;
 	
 	svcCreateMutex(&buffered_pts_list_lock, false);
 	
-	result = init_video_decoder(request_hw_decoder);
+	result = init_output_buffer(request_hw_decoder);
 	if (result.code != 0) {
-		result.error_description = "[video] " + result.error_description;
-		return result;
-	}
-	hw_decoder_enabled = request_hw_decoder;
-	result = init_audio_decoder();
-	if (result.code != 0) {
-		result.error_description = "[audio] " + result.error_description;
+		result.error_description = "[out buf] " + result.error_description;
 		return result;
 	}
 	
+	mvd_first = true;
 	ready = true;
 	return result;
 }
-Result_with_string NetworkDecoder::init(NetworkStream *both_stream, bool request_hw_decoder) {
-	return init(both_stream, both_stream, request_hw_decoder);
+Result_with_string NetworkDecoder::change_ffmpeg_data(const NetworkDecoderFFmpegData &data, double timestamp_offset) {
+	Result_with_string result;
+	
+	interrupt = false;
+	
+	video_audio_seperate = data.video_audio_seperate;
+	for (int type = 0; type < 2; type++) {
+		network_stream[type] = data.network_stream[type];
+		opaque[type] = data.opaque[type];
+		format_context[type] = data.format_context[type];
+		io_context[type] = data.io_context[type];
+		stream_index[type] = data.stream_index[type];
+		decoder_context[type] = data.decoder_context[type];
+		codec[type] = data.codec[type];
+	}
+	swr_context = data.swr_context;
+	this->timestamp_offset = timestamp_offset;
+	
+	return result;
+}
+void NetworkDecoder::clear_buffer() {
+	for (int type = 0; type < 2; type++) {
+		for (auto i : packet_buffer[type]) av_packet_free(&i);
+		packet_buffer[type].clear();
+	}
+	video_mvd_tmp_frames.clear();
+	video_tmp_frames.clear();
+	buffered_pts_list.clear();
 }
 
 NetworkDecoder::VideoFormatInfo NetworkDecoder::get_video_info() {
@@ -375,6 +402,22 @@ NetworkDecoder::AudioFormatInfo NetworkDecoder::get_audio_info() {
 	res.ch = decoder_context[AUDIO]->channels;
 	res.format_name = codec[AUDIO]->long_name;
 	res.duration = (double) format_context[video_audio_seperate ? AUDIO : BOTH]->duration / AV_TIME_BASE;
+	return res;
+}
+std::vector<std::pair<double, std::vector<double> > > NetworkDecoder::get_buffering_progress_bars(int bar_len) {
+	std::vector<std::pair<double, std::vector<double> > > res;
+	if (video_audio_seperate) {
+		if (network_stream[VIDEO] && !network_stream[VIDEO]->quit_request)
+			res.push_back({(double) network_stream[VIDEO]->read_head / network_stream[VIDEO]->len, network_stream[VIDEO]->get_buffering_progress_bar(bar_len)});
+		else res.push_back({0, {}});
+		if (network_stream[AUDIO] && !network_stream[AUDIO]->quit_request)
+			res.push_back({(double) network_stream[AUDIO]->read_head / network_stream[AUDIO]->len, network_stream[AUDIO]->get_buffering_progress_bar(bar_len)});
+		else res.push_back({0, {}});
+	} else {
+		if (network_stream[BOTH] && !network_stream[BOTH]->quit_request)
+			res.push_back({(double) network_stream[BOTH]->read_head / network_stream[BOTH]->len, network_stream[BOTH]->get_buffering_progress_bar(bar_len)});
+		else res.push_back({0, {}});
+	}
 	return res;
 }
 Result_with_string NetworkDecoder::read_packet(int type) {
@@ -406,13 +449,22 @@ Result_with_string NetworkDecoder::read_packet(int type) {
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
 }
-std::string NetworkDecoder::next_decode_type() {
-	if (!packet_buffer[VIDEO].size() && !packet_buffer[AUDIO].size()) return "EOF";
-	if (!packet_buffer[AUDIO].size()) return "video";
-	if (!packet_buffer[VIDEO].size()) return "audio";
+NetworkDecoder::DecodeType NetworkDecoder::next_decode_type() {
+	if (video_audio_seperate) {
+		for (int type = 0; type < 2; type++) if (!packet_buffer[type].size())
+			read_packet(type);
+	} else {
+		while (!packet_buffer[VIDEO].size() || !packet_buffer[AUDIO].size()) {
+			Result_with_string result = read_packet(BOTH);
+			if (result.code != 0) break;
+		}
+	}
+	if (!packet_buffer[VIDEO].size() && !packet_buffer[AUDIO].size()) return DecodeType::EoF;
+	if (!packet_buffer[AUDIO].size()) return DecodeType::VIDEO;
+	if (!packet_buffer[VIDEO].size()) return DecodeType::AUDIO;
 	double video_dts = packet_buffer[VIDEO][0]->dts * av_q2d(get_stream(VIDEO)->time_base);
 	double audio_dts = packet_buffer[AUDIO][0]->dts * av_q2d(get_stream(AUDIO)->time_base);
-	return video_dts <= audio_dts ? "video" : "audio";
+	return video_dts <= audio_dts ? DecodeType::VIDEO : DecodeType::AUDIO;
 }
 static std::string debug_str = "";
 Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
@@ -533,7 +585,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		else cur_pos = packet_read->dts * time_base;
 		
 		svcWaitSynchronization(buffered_pts_list_lock, std::numeric_limits<s64>::max());
-		buffered_pts_list.insert(cur_pos);
+		buffered_pts_list.insert(cur_pos + timestamp_offset);
 		svcReleaseMutex(buffered_pts_list_lock);
 	}
 	if (result.code == MVD_STATUS_FRAMEREADY) {
@@ -571,8 +623,10 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 		double time_base = av_q2d(get_stream(VIDEO)->time_base);
 		if (packet_read->pts != AV_NOPTS_VALUE) *cur_pos = packet_read->pts * time_base;
 		else *cur_pos = packet_read->dts * time_base;
+		*cur_pos += timestamp_offset;
 		
-		return mvd_decode(width, height);
+		auto tmp = mvd_decode(width, height);
+		return tmp;
 	}
 	
 	if (video_tmp_frames.full()) {
@@ -595,6 +649,7 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 			double time_base = av_q2d(get_stream(VIDEO)->time_base);
 			if (cur_frame->pts != AV_NOPTS_VALUE) *cur_pos = cur_frame->pts * time_base;
 			else *cur_pos = cur_frame->pkt_dts * time_base;
+			*cur_pos += timestamp_offset;
 			video_tmp_frames.push();
 		} else {
 			result.error_description = "avcodec_receive_frame() failed " + std::to_string(ffmpeg_result);
@@ -633,6 +688,7 @@ Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cu
 	double time_base = av_q2d(get_stream(AUDIO)->time_base);
 	if (packet_read->pts != AV_NOPTS_VALUE) *cur_pos = packet_read->pts * time_base;
 	else *cur_pos = packet_read->dts * time_base;
+	*cur_pos += timestamp_offset;
 	
 	AVFrame *cur_frame = av_frame_alloc();
 	if (!cur_frame) {
@@ -652,7 +708,7 @@ Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cu
 			goto fail;
 		}
 	} else {
-		result.error_description = "avcodec_send_packet() failed " + std::to_string(ffmpeg_result);
+		result.error_description = "avcodec_send_packet() failed " + std::to_string(ffmpeg_result) + " " + std::to_string(AVERROR(EAGAIN));
 		goto fail;
 	}
 
@@ -717,6 +773,7 @@ Result_with_string NetworkDecoder::get_decoded_video_frame(int width, int height
 		double time_base = av_q2d(get_stream(VIDEO)->time_base);
 		if (cur_frame->pts != AV_NOPTS_VALUE) *cur_pos = cur_frame->pts * time_base;
 		else *cur_pos = cur_frame->pkt_dts * time_base;
+		*cur_pos += timestamp_offset;
 		
 		*data = sw_video_output_tmp;
 		
@@ -728,14 +785,7 @@ Result_with_string NetworkDecoder::get_decoded_video_frame(int width, int height
 Result_with_string NetworkDecoder::seek(s64 microseconds) {
 	Result_with_string result;
 	
-	// clear buffer
-	for (int type = 0; type < 2; type++) {
-		for (auto i : packet_buffer[type]) av_packet_free(&i);
-		packet_buffer[type].clear();
-	}
-	if (hw_decoder_enabled) video_mvd_tmp_frames.clear();
-	else video_tmp_frames.clear();
-	buffered_pts_list.clear();
+	clear_buffer();
 	
 	if (video_audio_seperate) {
 		int ffmpeg_result = avformat_seek_file(format_context[VIDEO], -1, microseconds - 1000000, microseconds, microseconds + 1000000, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?

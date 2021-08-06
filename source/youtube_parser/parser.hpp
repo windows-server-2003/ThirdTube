@@ -50,12 +50,19 @@ struct YouTubeVideoDetail {
 	std::string description;
 	YouTubeChannelSuccinct author;
 	std::string audio_stream_url;
-	uint64_t audio_stream_len;
 	std::string video_stream_url;
-	uint64_t video_stream_len;
 	std::string both_stream_url;
-	uint64_t both_stream_len;
 	int duration_ms;
+	bool is_livestream;
+	enum class LivestreamType {
+		PREMIERE,
+		LIVESTREAM,
+	};
+	LivestreamType livestream_type;
+	bool is_upcoming;
+	std::string playability_status;
+	std::string playability_reason;
+	int stream_fragment_len; // used only for livestreams
 	
 	std::vector<YouTubeVideoSuccinct> suggestions;
 	struct Comment {
@@ -74,6 +81,8 @@ struct YouTubeVideoDetail {
 	
 	bool has_more_suggestions() { return continue_key != "" && suggestions_continue_token != ""; }
 	bool has_more_comments() { return comment_continue_type != -1; }
+	bool needs_timestamp_adjusting() { return is_livestream && livestream_type == LivestreamType::PREMIERE; }
+	bool is_playable() { return playability_status == "OK" && (both_stream_url != "" || (audio_stream_url != "" && video_stream_url != "")); }
 };
 // this function does not load comments; call youtube_video_page_load_more_comments() if necessary
 YouTubeVideoDetail youtube_parse_video_page(std::string url);

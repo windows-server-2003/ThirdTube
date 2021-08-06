@@ -1,4 +1,5 @@
 #pragma once
+#include "types.hpp"
 
 void Util_speaker_init(int play_ch, int music_ch, int sample_rate);
 

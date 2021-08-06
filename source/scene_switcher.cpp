@@ -302,15 +302,15 @@ void Menu_get_system_info(void)
 
 int Menu_check_free_ram(void)
 {
-	u8* malloc_check[2000];
+	u8* malloc_check[200];
 	int count;
 
-	for (int i = 0; i < 2000; i++)
+	for (int i = 0; i < 200; i++)
 		malloc_check[i] = NULL;
 
-	for (count = 0; count < 2000; count++)
+	for (count = 0; count < 200; count++)
 	{
-		malloc_check[count] = (u8*)malloc(0x186A0);// 100KB
+		malloc_check[count] = (u8*)malloc(1000000);// 1 MB
 		if (malloc_check[count] == NULL)
 			break;
 	}
@@ -318,7 +318,7 @@ int Menu_check_free_ram(void)
 	for (int i = 0; i <= count; i++)
 		free(malloc_check[i]);
 
-	return count * 100;//return free KB
+	return count * 1000; // return free KB
 }
 
 /*

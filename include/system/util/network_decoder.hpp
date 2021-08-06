@@ -28,7 +28,6 @@ namespace network_decoder_ {
 			num = buffer_init.size() - 1;
 			buffer = buffer_init;
 			head = tail = 0;
-			Util_log_save("que", "init:" + std::to_string(num));
 		}
 		std::vector<T> deinit() {
 			auto res = buffer;
@@ -72,12 +71,17 @@ namespace network_decoder_ {
 	};
 }
 
+class NetworkDecoder;
 
-class NetworkDecoder {
+class NetworkDecoderFFmpegData {
 private :
 	static constexpr int VIDEO = 0;
 	static constexpr int AUDIO = 1;
 	static constexpr int BOTH = 0;
+	
+	Result_with_string init_(int type, AVMediaType expected_codec_type, NetworkDecoder *parent_decoder);
+	AVStream *get_stream(int type) { return format_context[video_audio_seperate ? type : BOTH]->streams[stream_index[type]]; }
+public :
 	bool video_audio_seperate = false;
 	NetworkStream *network_stream[2] = {NULL, NULL};
 	std::pair<NetworkDecoder *, NetworkStream *> *opaque[2] = {NULL, NULL};
@@ -87,32 +91,62 @@ private :
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
 	const AVCodec *codec[2] = {NULL, NULL};
+	NetworkDecoder *parent_decoder = NULL;
+	
+	Result_with_string init(NetworkStream *video_stream, NetworkStream *audio_stream, NetworkDecoder *parent_decoder);
+	Result_with_string init(NetworkStream *both_stream, NetworkDecoder *parent_decoder);
+	void deinit(bool deinit_stream);
+	Result_with_string reinit();
+	double get_duration();
+};
+
+class NetworkDecoder {
+private :
+	static constexpr int VIDEO = 0;
+	static constexpr int AUDIO = 1;
+	static constexpr int BOTH = 0;
+	
+	// ffmpeg data
+	bool video_audio_seperate = false;
+	NetworkStream *network_stream[2] = {NULL, NULL};
+	std::pair<NetworkDecoder *, NetworkStream *> *opaque[2] = {NULL, NULL};
+	AVFormatContext *format_context[2] = {NULL, NULL};
+	AVIOContext *io_context[2] = {NULL, NULL};
+	int stream_index[2] = {0, 0};
+	AVCodecContext *decoder_context[2] = {NULL, NULL};
+	SwrContext *swr_context = NULL;
+	const AVCodec *codec[2] = {NULL, NULL};
+	
 	std::deque<AVPacket *> packet_buffer[2];
 	network_decoder_::output_buffer<AVFrame *> video_tmp_frames;
 	network_decoder_::output_buffer<u8 *> video_mvd_tmp_frames;
-	u8 *mvd_frame = NULL; // internal buffer written directly by GPU
+	u8 *mvd_frame = NULL; // internal buffer written directly by the mvd service
 	u8 *sw_video_output_tmp = NULL;
 	Handle buffered_pts_list_lock; // lock of buffered_pts_list
 	std::multiset<double> buffered_pts_list; // used for HW decoder to determine the pts when outputting a frame
 	bool mvd_first = false;
-	bool mvd_inited = false;
 	
-	Result_with_string init_(int, AVMediaType);
-	Result_with_string init_video_decoder(bool &);
-	Result_with_string init_audio_decoder();
+	Result_with_string init_output_buffer(bool);
 	Result_with_string read_packet(int type);
 	Result_with_string mvd_decode(int *width, int *height);
 	AVStream *get_stream(int type) { return format_context[video_audio_seperate ? type : BOTH]->streams[stream_index[type]]; }
 public :
 	bool hw_decoder_enabled = false;
-	volatile bool is_locked = false;
+	volatile bool interrupt = false;
 	volatile bool need_reinit = false;
 	volatile bool ready = false;
-	const char * volatile network_waiting_status = NULL;
+	double timestamp_offset = 0;
+	const char *get_network_waiting_status() {
+		if (network_stream[VIDEO] && network_stream[VIDEO]->network_waiting_status) return network_stream[VIDEO]->network_waiting_status;
+		if (network_stream[AUDIO] && network_stream[AUDIO]->network_waiting_status) return network_stream[AUDIO]->network_waiting_status;
+		return NULL;
+	}
+	std::vector<std::pair<double, std::vector<double> > > get_buffering_progress_bars(int bar_len);
 	
+	Result_with_string change_ffmpeg_data(const NetworkDecoderFFmpegData &data, double timestamp_offset);
+	Result_with_string init(bool request_hw_decoder); // should be called after the call of change_ffmpeg_data()
 	void deinit();
-	Result_with_string init(NetworkStream *video_stream, NetworkStream *audio_stream, bool request_hw_decoder);
-	Result_with_string init(NetworkStream *both_stream, bool request_hw_decoder);
+	void clear_buffer();
 	
 	struct VideoFormatInfo {
 		int width;
@@ -132,7 +166,13 @@ public :
 	};
 	AudioFormatInfo get_audio_info();
 	
-	std::string next_decode_type();
+	enum class DecodeType {
+		AUDIO,
+		VIDEO,
+		EoF, // EOF is reserved so...
+		INTERRUPTED
+	};
+	DecodeType next_decode_type();
 	
 	
 	// decode the previously read video packet
