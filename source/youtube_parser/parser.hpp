@@ -6,11 +6,15 @@ struct YouTubeChannelSuccinct {
 	std::string name;
 	std::string url;
 	std::string icon_url;
+	std::string subscribers;
+	std::string video_num;
 };
 struct YouTubeVideoSuccinct {
 	std::string url;
 	std::string title;
 	std::string duration_text;
+	std::string publish_date;
+	std::string views_str;
 	std::string author;
 	std::string thumbnail_url;
 };
@@ -63,6 +67,10 @@ struct YouTubeVideoDetail {
 	std::string playability_status;
 	std::string playability_reason;
 	int stream_fragment_len; // used only for livestreams
+	std::string like_count_str;
+	std::string dislike_count_str;
+	std::string publish_date;
+	std::string views_str;
 	
 	std::vector<YouTubeVideoSuccinct> suggestions;
 	struct Comment {

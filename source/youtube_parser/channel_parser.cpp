@@ -60,6 +60,8 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 						cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
 						cur_video.title = get_text_from_object(video_renderer["title"]);
 						cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
+						cur_video.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
+						cur_video.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
 						cur_video.author = channel_name;
 						cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
 						res.videos.push_back(cur_video);
@@ -164,6 +166,8 @@ YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &p
 				cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
 				cur_video.title = get_text_from_object(video_renderer["title"]);
 				cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
+				cur_video.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
+				cur_video.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
 				cur_video.author = new_result.name;
 				cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
 				new_result.videos.push_back(cur_video);
@@ -175,23 +179,3 @@ YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &p
 	if (new_result.continue_token == "") debug("failed to get next continue token");
 	return new_result;
 }
-
-#ifdef _WIN32
-int main() {
-	std::string url;
-	std::cin >> url;
-	auto result = youtube_parse_channel_page(url);
-	
-	for (int i = 0; i < 3; i++) {
-		auto next_result = youtube_channel_page_continue(result);
-		for (int j = result.videos.size(); j < (int) next_result.videos.size(); j++) {
-			debug(next_result.videos[j].title);
-		}
-		
-		result = next_result;
-	}
-	
-	return 0;
-}
-#endif
-

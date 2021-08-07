@@ -19,6 +19,8 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSearchResult::I
 		cur_result.url = "https://m.youtube.com/watch?v=" + video_id;
 		cur_result.title = get_text_from_object(video_renderer["title"]);
 		cur_result.duration_text = get_text_from_object(video_renderer["lengthText"]);
+		cur_result.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
+		cur_result.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
 		cur_result.author = get_text_from_object(video_renderer["shortBylineText"]);
 		cur_result.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
 		/*
@@ -41,6 +43,8 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSearchResult::I
 		YouTubeChannelSuccinct cur_result;
 		cur_result.name = get_text_from_object(channel_renderer["displayName"]);
 		cur_result.url = "https://m.youtube.com/channel/" + channel_renderer["channelId"].string_value();
+		cur_result.subscribers = get_text_from_object(channel_renderer["subscriberCountText"]);
+		cur_result.video_num = get_text_from_object(channel_renderer["videoCountText"]);
 		
 		{
 			constexpr int target_height = 70;
@@ -162,35 +166,3 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 	if (new_result.continue_token == "") debug("failed to get next continue token");
 	return new_result;
 }
-
-#ifdef _WIN32
-int main() {
-	std::string url;
-	std::cin >> url;
-	auto result = youtube_parse_search(url);
-	
-	auto out = [&] (YouTubeSearchResult::Item item) {
-		if (item.type == YouTubeSearchResult::Item::VIDEO) {
-			std::cerr << "video " << item.video.title << " " << item.video.url << std::endl;
-		} else {
-			std::cerr << "channel " << item.channel.name << std::endl;
-		}
-	};
-	
-	for (auto i : result.results) out(i);
-	
-	/*
-	for (int i = 0; i < 3; i++) {
-		std::cerr << std::endl;
-		std::cerr << i << std::endl;
-		auto new_result = youtube_continue_search(result);
-		
-		for (int j = result.results.size(); j < (int) new_result.results.size(); j++) {
-			out(new_result.results[j]);
-		}
-		result = new_result;
-	}*/
-	return 0;
-}
-#endif
-

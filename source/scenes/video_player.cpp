@@ -183,7 +183,7 @@ static bool send_load_request(std::string url) {
 		VideoRequestArg *request = new VideoRequestArg;
 		request->lock = small_resource_lock;
 		request->url = url;
-		request->title_max_width = 320 - ICON_SIZE - SMALL_MARGIN * 3;
+		request->title_max_width = 320 - SMALL_MARGIN * 2;
 		request->description_max_width = 320 - SMALL_MARGIN * 2;
 		request->description_text_size_x = 0.5;
 		request->description_text_size_y = 0.5;
@@ -1029,13 +1029,27 @@ static void draw_video_content(Hid_info key, int color) {
 	int y_offset = -scroller[selected_tab].get_offset();
 	if (selected_tab == TAB_GENERAL) {
 		if (cur_video_info.title.size()) { // only draw if the metadata is loaded
-			y_offset += SMALL_MARGIN;
-			thumbnail_draw(icon_thumbnail_handle, SMALL_MARGIN, y_offset, ICON_SIZE, ICON_SIZE);
 			for (int i = 0; i < (int) title_lines.size(); i++) {
-				Draw(title_lines[i], ICON_SIZE + SMALL_MARGIN * 2, y_offset - 3 + 15 * i, title_font_size, title_font_size, color);
+				Draw(title_lines[i], SMALL_MARGIN, y_offset + 15 * i, title_font_size, title_font_size, color);
 			}
-			Draw(cur_video_info.author.name, ICON_SIZE + SMALL_MARGIN * 2, y_offset + 15 * (int) title_lines.size(), 0.5, 0.5, DEF_DRAW_DARK_GRAY);
-			y_offset += ICON_SIZE + SMALL_MARGIN;
+			y_offset += 15 * title_lines.size() + SMALL_MARGIN;
+			
+			Draw(cur_video_info.views_str, SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+			Draw_right(cur_video_info.publish_date, 320 - SMALL_MARGIN * 2, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+			
+			Draw(LOCALIZED(YOUTUBE_LIKE) + ":" + cur_video_info.like_count_str + " " + LOCALIZED(YOUTUBE_DISLIKE) + ":" + cur_video_info.dislike_count_str,
+				SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
+			
+			y_offset += SMALL_MARGIN;
+			Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
+			y_offset += SMALL_MARGIN;
+			
+			thumbnail_draw(icon_thumbnail_handle, SMALL_MARGIN, y_offset, ICON_SIZE, ICON_SIZE);
+			Draw(cur_video_info.author.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset + ICON_SIZE * 0.1, 0.55, 0.55, DEF_DRAW_BLACK);
+			Draw(cur_video_info.author.subscribers, ICON_SIZE + SMALL_MARGIN * 3, y_offset + ICON_SIZE * 0.1 + DEFAULT_FONT_VERTICAL_INTERVAL + SMALL_MARGIN, 0.45, 0.45, DEF_DRAW_GRAY);
+			y_offset += ICON_SIZE;
 			
 			if (cur_video_info.is_upcoming) {
 				y_offset += SMALL_MARGIN;
@@ -1078,13 +1092,20 @@ static void draw_video_content(Hid_info key, int color) {
 				}
 				
 				auto cur_video = cur_video_info.suggestions[i];
+				int cur_y = y_l;
+				// thumbnail
+				thumbnail_draw(suggestion_thumbnail_handles[i], 0, cur_y, SUGGESTION_THUMBNAIL_WIDTH, SUGGESTION_THUMBNAIL_HEIGHT);
 				// title
 				auto title_lines = suggestion_titles_lines[i];
 				for (size_t line = 0; line < title_lines.size(); line++) {
-					Draw(title_lines[line], SUGGESTION_THUMBNAIL_WIDTH + 3, y_l + (int) line * DEFAULT_FONT_VERTICAL_INTERVAL, 0.5, 0.5, color);
+					Draw(title_lines[line], SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, color);
+					cur_y += DEFAULT_FONT_VERTICAL_INTERVAL;
 				}
-				// thumbnail
-				thumbnail_draw(suggestion_thumbnail_handles[i], 0, y_l, SUGGESTION_THUMBNAIL_WIDTH, SUGGESTION_THUMBNAIL_HEIGHT);
+				cur_y += 2;
+				Draw(cur_video.author, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+				cur_y += DEFAULT_FONT_VERTICAL_INTERVAL;
+				Draw(cur_video.duration_text, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEF_DRAW_GRAY);
+				cur_y += DEFAULT_FONT_VERTICAL_INTERVAL;
 			}
 			y_offset += cur_video_info.suggestions.size() * SUGGESTIONS_VERTICAL_INTERVAL;
 			if (cur_video_info.has_more_suggestions() || cur_video_info.error != "") {
@@ -1437,12 +1458,13 @@ Intent VideoPlayer_draw(void)
 		// main scroller
 		int content_height = 0;
 		if (selected_tab == TAB_GENERAL) {
-			if (cur_video_info.title.size()) {
-				content_height += SMALL_MARGIN + ICON_SIZE + SMALL_MARGIN + SMALL_MARGIN + SMALL_MARGIN;
-				if (cur_video_info.is_upcoming) content_height += 2 * SMALL_MARGIN + DEFAULT_FONT_VERTICAL_INTERVAL;
-				content_height += description_lines.size() * DEFAULT_FONT_VERTICAL_INTERVAL;
-				content_height += SMALL_MARGIN * 2;
-			}
+			content_height += 15 * title_lines.size() + SMALL_MARGIN + DEFAULT_FONT_VERTICAL_INTERVAL * 2;
+			content_height += SMALL_MARGIN * 2;
+			content_height += ICON_SIZE;
+			if (cur_video_info.is_upcoming) content_height += 2 * SMALL_MARGIN + DEFAULT_FONT_VERTICAL_INTERVAL;
+			content_height += SMALL_MARGIN * 2;
+			content_height += description_lines.size() * DEFAULT_FONT_VERTICAL_INTERVAL;
+			content_height += SMALL_MARGIN * 2;
 		} else if (selected_tab == TAB_SUGGESTIONS) {
 			content_height = cur_video_info.suggestions.size() * SUGGESTIONS_VERTICAL_INTERVAL;
 			if (cur_video_info.has_more_suggestions() || cur_video_info.error != "") content_height += SUGGESTION_LOAD_MORE_MARGIN;
@@ -1470,7 +1492,10 @@ Intent VideoPlayer_draw(void)
 					var_need_reflesh = true;
 				}
 				*/
-				if (released_x < ICON_SIZE + SMALL_MARGIN && released_y < ICON_SIZE + SMALL_MARGIN) {
+				int cur_y = 0;
+				cur_y += 15 * title_lines.size() + SMALL_MARGIN + DEFAULT_FONT_VERTICAL_INTERVAL * 2;
+				cur_y += SMALL_MARGIN * 2;
+				if (released_x < ICON_SIZE + SMALL_MARGIN && released_y >= cur_y && released_y < cur_y + ICON_SIZE) {
 					intent.next_scene = SceneType::CHANNEL;
 					intent.arg = cur_video_info.author.url;
 				}

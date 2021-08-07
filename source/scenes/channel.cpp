@@ -209,13 +209,19 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 					}
 					
 					auto cur_video = channel_info.videos[i];
+					int cur_y = y_l;
+					// thumbnail
+					thumbnail_draw(thumbnail_handles[i], 0, cur_y, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 					// title
 					auto title_lines = channel_info.wrapped_titles[i];
 					for (size_t line = 0; line < title_lines.size(); line++) {
-						Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + (int) line * 13, 0.5, 0.5, color);
+						Draw(title_lines[line], THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, color);
+						cur_y += 13;
 					}
-					// thumbnail
-					thumbnail_draw(thumbnail_handles[i], 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+					cur_y += 2;
+					Draw(cur_video.publish_date, THUMBNAIL_WIDTH + 3, cur_y, 0.45, 0.45, DEF_DRAW_GRAY);
+					cur_y += 13;
+					Draw(cur_video.views_str, THUMBNAIL_WIDTH + 3, cur_y, 0.45, 0.45, DEF_DRAW_GRAY);
 				}
 				y_offset += channel_info.video_num * VIDEOS_VERTICAL_INTERVAL;
 				if (channel_info.error != "" || channel_info.has_continue) {

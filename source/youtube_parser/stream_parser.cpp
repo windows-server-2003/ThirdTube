@@ -154,9 +154,19 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	return true;
 }
 
+static void extract_like_dislike_counts(Json buttons, YouTubeVideoDetail &res) {
+	for (auto button : buttons.array_items()) if (button["slimMetadataToggleButtonRenderer"] != Json()) {
+		auto content = get_text_from_object(button["slimMetadataToggleButtonRenderer"]["button"]["toggleButtonRenderer"]["defaultText"]);
+		if (content.size() && !isdigit(content[0])) content = "hidden";
+		if (button["slimMetadataToggleButtonRenderer"]["isLike"].bool_value()) res.like_count_str = content;
+		else if (button["slimMetadataToggleButtonRenderer"]["isDislike"].bool_value()) res.dislike_count_str = content;
+	}
+}
+
 static void extract_owner(Json slimOwnerRenderer, YouTubeVideoDetail &res) {
 	res.author.name = slimOwnerRenderer["channelName"].string_value();
 	res.author.url = slimOwnerRenderer["channelUrl"].string_value();
+	res.author.subscribers = get_text_from_object(slimOwnerRenderer["expandedSubtitle"]);
 	
 	constexpr int target_height = 70;
 	int min_distance = 100000;
@@ -181,6 +191,7 @@ static void extract_item(Json content, YouTubeVideoDetail &res) {
 		cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
 		cur_video.title = get_text_from_object(video_renderer["headline"]);
 		cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
+		cur_video.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
 		cur_video.author = get_text_from_object(video_renderer["shortBylineText"]);
 		cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
 		return cur_video;
@@ -189,6 +200,9 @@ static void extract_item(Json content, YouTubeVideoDetail &res) {
 		Json metadata_renderer = content["slimVideoMetadataRenderer"];
 		res.title = get_text_from_object(metadata_renderer["title"]);
 		res.description = get_text_from_object(metadata_renderer["description"]);
+		res.views_str = get_text_from_object(metadata_renderer["expandedSubtitle"]);
+		res.publish_date = get_text_from_object(metadata_renderer["dateText"]);
+		extract_like_dislike_counts(metadata_renderer["buttons"], res);
 		extract_owner(metadata_renderer["owner"]["slimOwnerRenderer"], res);
 	} else if (content["compactAutoplayRenderer"] != Json()) {
 		for (auto j : content["compactAutoplayRenderer"]["contents"].array_items()) if (j["videoWithContextRenderer"] != Json())
@@ -210,6 +224,7 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 			} else if (content["slimVideoMetadataSectionRenderer"] != Json()) {
 				for (auto i : content["slimVideoMetadataSectionRenderer"]["contents"].array_items()) {
 					if (i["slimVideoInformationRenderer"] != Json()) res.title = get_text_from_object(i["slimVideoInformationRenderer"]["title"]);
+					if (i["slimVideoActionBarRenderer"] != Json()) extract_like_dislike_counts(i["slimVideoActionBarRenderer"]["buttons"], res);
 					if (i["slimOwnerRenderer"] != Json()) extract_owner(i["slimOwnerRenderer"], res);
 					if (i["slimVideoDescriptionRenderer"] != Json()) res.description = get_text_from_object(i["slimVideoDescriptionRenderer"]["description"]);
 				}
@@ -243,8 +258,11 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 				}
 			}
 			for (auto j : i["engagementPanelSectionListRenderer"]["content"]["structuredDescriptionContentRenderer"]["items"].array_items()) {
-				if (j["expandableVideoDescriptionBodyRenderer"] != Json()) {
+				if (j["expandableVideoDescriptionBodyRenderer"] != Json())
 					res.description = get_text_from_object(j["expandableVideoDescriptionBodyRenderer"]["descriptionBodyText"]);
+				if (j["videoDescriptionHeaderRenderer"] != Json()) {
+					res.publish_date = get_text_from_object(j["videoDescriptionHeaderRenderer"]["publishDate"]);
+					res.views_str = get_text_from_object(j["videoDescriptionHeaderRenderer"]["views"]);
 				}
 			}
 		}

@@ -173,19 +173,33 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 			
 			if (result.results[i].type == YouTubeSearchResult::Item::VIDEO) {
 				auto cur_video = result.results[i].video;
+				int cur_y = y_l;
+				// thumbnail
+				thumbnail_draw(thumbnail_handles[i], 0, cur_y, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 				// title
 				auto title_lines = result.wrapped_titles[i];
 				for (size_t line = 0; line < title_lines.size(); line++) {
-					Draw(title_lines[line], THUMBNAIL_WIDTH + 3, y_l + line * 13, 0.5, 0.5, color);
+					Draw(title_lines[line], THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, color);
+					cur_y += 13;
 				}
-				// thumbnail
-				thumbnail_draw(thumbnail_handles[i], 0, y_l, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+				cur_y += 2;
+				Draw(cur_video.views_str, THUMBNAIL_WIDTH + 3, cur_y, 0.45, 0.45, DEF_DRAW_GRAY);
+				cur_y += 12;
+				Draw(cur_video.publish_date, THUMBNAIL_WIDTH + 3, cur_y, 0.45, 0.45, DEF_DRAW_GRAY);
+				cur_y += 12;
 			} else if (result.results[i].type == YouTubeSearchResult::Item::CHANNEL) {
 				auto cur_channel = result.results[i].channel;
 				Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 0, y_l, THUMBNAIL_WIDTH, y_r - y_l);
-				Draw(cur_channel.name, THUMBNAIL_WIDTH + 3, y_l, 0.5, 0.5, color);
+				int cur_y = y_l;
 				// icon
-				thumbnail_draw(thumbnail_handles[i], (THUMBNAIL_WIDTH - THUMBNAIL_HEIGHT) / 2, y_l, THUMBNAIL_HEIGHT, THUMBNAIL_HEIGHT);
+				thumbnail_draw(thumbnail_handles[i], (THUMBNAIL_WIDTH - THUMBNAIL_HEIGHT) / 2, cur_y, THUMBNAIL_HEIGHT, THUMBNAIL_HEIGHT);
+				// name, subscribers video_num
+				Draw(cur_channel.name, THUMBNAIL_WIDTH + 3, cur_y, 0.6, 0.6, color);
+				cur_y += 17;
+				Draw(cur_channel.subscribers, THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+				cur_y += 13;
+				Draw(cur_channel.video_num, THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+				cur_y += 13;
 			}
 		}
 		// draw load-more margin

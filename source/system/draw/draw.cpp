@@ -572,6 +572,9 @@ void Draw_xy_centered(std::string text, float x0, float x1, float y0, float y1, 
 	float y = y0 + (y1 - y0 - Draw_get_height(text, text_size_x, text_size_y)) / 2;
 	Draw(text, x, y, text_size_x, text_size_y, abgr8888);
 }
+void Draw_right(std::string text, float x1, float y, float text_size_x, float text_size_y, int abgr8888) {
+	Draw(text, x1 - Draw_get_width(text, text_size_x, text_size_y), y, text_size_x, text_size_y, abgr8888);
+}
 
 Result_with_string Draw_load_texture(std::string file_name, int sheet_map_num, C2D_Image return_image[], int start_num, int num_of_array)
 {
@@ -673,9 +676,13 @@ void Draw_texture(C2D_Image image, int abgr8888, float x, float y, float x_size,
 
 void Draw_line(float x_0, float y_0, int abgr8888_0, float x_1, float y_1, int abgr8888_1, float width)
 {
-	C2D_DrawRectangle(0, 0, 0, 0, 0, 0x0, 0x0, 0x0, 0x0);
-	//magic C2D_DrawLine() won't work without calling C2D_DrawRectangle()
-	C2D_DrawLine(x_0, y_0, abgr8888_0, x_1, y_1, abgr8888_1, width, 0);
+	if (y_1 - y_0 < 0.01 && abgr8888_0 == abgr8888_1) { // workaround to prevent the line from disappearing sometimes
+		Draw_texture(var_square_image[0], abgr8888_0, x_0, y_0, x_1 - x_0 + 1, y_1 - y_0 + 1);
+	} else {
+		C2D_DrawRectangle(0, 0, 0, 0, 0, 0x0, 0x0, 0x0, 0x0);
+		//magic C2D_DrawLine() won't work without calling C2D_DrawRectangle()
+		C2D_DrawLine(x_0, y_0, abgr8888_0, x_1, y_1, abgr8888_1, width, 0);
+	}
 }
 
 void Draw_debug_info(void)
