@@ -6,6 +6,7 @@
 #include "scenes/video_player.hpp"
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
+#include "ui/colors.hpp"
 
 #define NEW_3DS_CPU_LIMIT 50
 #define OLD_3DS_CPU_LIMIT 80

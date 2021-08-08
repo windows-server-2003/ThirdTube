@@ -5,6 +5,7 @@
 #include "scenes/channel.hpp"
 #include "scenes/about.hpp"
 #include "scenes/setting_menu.hpp"
+#include "ui/colors.hpp"
 // add here
 
 bool menu_thread_run = false;

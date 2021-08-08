@@ -7,6 +7,7 @@
 #include "youtube_parser/parser.hpp"
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
+#include "ui/colors.hpp"
 
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96

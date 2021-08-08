@@ -1,4 +1,5 @@
 ﻿#include "headers.hpp"
+#include "ui/colors.hpp"
 
 void (*expl_callback)(std::string, std::string);
 void (*expl_cancel_callback)(void);

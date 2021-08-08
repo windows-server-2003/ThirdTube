@@ -1,4 +1,5 @@
 #include "ui/dialog.hpp"
+#include "ui/colors.hpp"
 #include "variables.hpp"
 #include "headers.hpp"
 

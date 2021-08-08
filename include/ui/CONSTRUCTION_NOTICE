@@ -1,0 +1,6 @@
+Currently, a refactor in UI code is in progress.
+I'm switching to android-like View classes for rendering.
+However, only the settings menu currently uses them; the rest of the scenes still use the following, legacy files.
+
+ - dialog.hpp
+ - scroller.hpp

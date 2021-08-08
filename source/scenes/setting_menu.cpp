@@ -1,15 +1,13 @@
 ﻿#include "headers.hpp"
+#include <functional>
 
 #include "system/util/settings.hpp"
 #include "scenes/setting_menu.hpp"
 #include "scenes/video_player.hpp"
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
+#include "ui/ui.hpp"
 #include "youtube_parser/parser.hpp"
-
-#define SMALL_MARGIN 3
-#define DEFAULT_FONT_INTERVAL 13
-#define MIDDLE_FONT_INTERVAL 18
 
 namespace Settings {
 	bool thread_suspend = false;
@@ -22,16 +20,10 @@ namespace Settings {
 	volatile bool change_brightness_request = false;
 	volatile bool string_resource_reload_request = false;
 	
-	int last_touch_x = -1;
-	int last_touch_y = -1;
-	
-	int bar_holding = -1; // 0 : LCD brightness, 1 : time to turn off LCD
-	
 	Thread settings_misc_thread;
-	
-	VerticalScroller scroller;
 };
 using namespace Settings;
+
 
 
 static void settings_misc_thread_func(void *arg) {
@@ -52,6 +44,7 @@ static void settings_misc_thread_func(void *arg) {
 	threadExit(0);
 }
 
+ScrollView *main_view;
 
 bool Sem_query_init_flag(void) {
 	return already_init;
@@ -59,9 +52,8 @@ bool Sem_query_init_flag(void) {
 
 void Sem_resume(std::string arg)
 {
-	scroller.on_resume();
 	overlay_menu_on_resume();
-	bar_holding = -1;
+	main_view->on_resume();
 	thread_suspend = false;
 	var_need_reflesh = true;
 }
@@ -80,6 +72,80 @@ void Sem_init(void)
 	load_string_resources(var_lang);
 	
 	settings_misc_thread = threadCreate(settings_misc_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+	
+	main_view = (new ScrollView(0, MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2, 320, 240 - MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2))
+		->set_views({
+			// 'Settings'
+			(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
+				->set_text(LOCALIZED(SETTINGS))
+				->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL),
+			// ---------------------
+			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
+			
+			// UI language
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(LANG_EN); },
+					(std::function<std::string ()>) []() { return LOCALIZED(LANG_JA); }
+				}, var_lang == "ja" ? 1 : 0)
+				->set_title([](const SelectorView &) { return LOCALIZED(UI_LANGUAGE); })
+				->set_on_change([](const SelectorView &view) {
+					auto next_lang = std::vector<std::string>{"en", "ja"}[view.selected_button];
+					if (var_lang != next_lang) {
+						var_lang = next_lang;
+						save_settings_request = true;
+						string_resource_reload_request = true;
+					}
+				}),
+			// Content language
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(LANG_EN); },
+					(std::function<std::string ()>) []() { return LOCALIZED(LANG_JA); }
+				}, var_lang_content == "ja" ? 1 : 0)
+				->set_title([](const SelectorView &) { return LOCALIZED(CONTENT_LANGUAGE); })
+				->set_on_change([](const SelectorView &view) {
+					auto next_lang = std::vector<std::string>{"en", "ja"}[view.selected_button];
+					if (var_lang_content != next_lang) {
+						var_lang_content = next_lang;
+						save_settings_request = true;
+						youtube_change_content_language(var_lang_content);
+					}
+				}),
+			// LCD Brightness
+			(new BarView(0, 0, 320, 40))
+				->set_values(15, 163, var_lcd_brightness)
+				->set_title([] (const BarView &view) { return LOCALIZED(LCD_BRIGHTNESS); })
+				->set_while_holding([] (const BarView &view) {
+					var_lcd_brightness = view.value;
+					change_brightness_request = true;
+				})
+				->set_on_release([] (const BarView &view) { save_settings_request = true; }),
+			// Time to turn off LCD
+			(new BarView(0, 0, 320, 40))
+				->set_values(10, 310, var_time_to_turn_off_lcd <= 309 ? var_time_to_turn_off_lcd : 310)
+				->set_title([] (const BarView &view) { return LOCALIZED(TIME_TO_TURN_OFF_LCD) + " : " +
+					(view.value <= 309 ? std::to_string((int) view.value) + " " + LOCALIZED(SECONDS) : LOCALIZED(NEVER_TURN_OFF)); })
+				->set_on_release([] (const BarView &view) {
+					var_time_to_turn_off_lcd = view.value <= 309 ? view.value : 1000000000;
+					save_settings_request = true;
+				}),
+			// Eco mode
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+					(std::function<std::string ()>) []() { return LOCALIZED(ON); }
+				}, var_eco_mode)
+				->set_title([](const SelectorView &) { return LOCALIZED(ECO_MODE); })
+				->set_on_change([](const SelectorView &view) {
+					if (var_eco_mode != view.selected_button) {
+						var_eco_mode = view.selected_button;
+						save_settings_request = true;
+					}
+				}),
+			// margin at the end of the list
+			(new EmptyView(0, 0, 320, 4))
+		});
 	
 	// result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SEARCH_NUM_OF_MSG);
 	// Util_log_save(DEF_SAPP0_INIT_STR, "Util_load_msg()..." + result.string + result.error_description, result.code);
@@ -103,77 +169,6 @@ void Sem_exit(void)
 	Util_log_save("settings/exit", "Exited.");
 }
 
-void draw_settings_menu() {
-	int y_offset = -scroller.get_offset();
-	
-	Draw(LOCALIZED(SETTINGS), SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
-	y_offset += MIDDLE_FONT_INTERVAL;
-	y_offset += SMALL_MARGIN;
-	Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_BLACK, 320 - SMALL_MARGIN, y_offset, DEF_DRAW_BLACK, 1);
-	y_offset += SMALL_MARGIN;
-	{ // UI language
-		Draw(LOCALIZED(UI_LANGUAGE), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
-		y_offset += DEFAULT_FONT_INTERVAL;
-		y_offset += SMALL_MARGIN;
-		int selected_x_l = var_lang == "en" ? 40 : 180;
-		int selected_x_r = var_lang == "en" ? 140 : 280;
-		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, selected_x_l, y_offset, selected_x_r - selected_x_l, 20);
-		Draw_x_centered(LOCALIZED(LANG_EN), 40, 140, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
-		Draw_x_centered(LOCALIZED(LANG_JA), 180, 280, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
-		y_offset += 20;
-	}
-	{ // Content language
-		Draw(LOCALIZED(CONTENT_LANGUAGE), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
-		y_offset += DEFAULT_FONT_INTERVAL;
-		y_offset += SMALL_MARGIN;
-		int selected_x_l = var_lang_content == "en" ? 40 : 180;
-		int selected_x_r = var_lang_content == "en" ? 140 : 280;
-		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, selected_x_l, y_offset, selected_x_r - selected_x_l, 20);
-		Draw_x_centered(LOCALIZED(LANG_EN), 40, 140, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
-		Draw_x_centered(LOCALIZED(LANG_JA), 180, 280, y_offset + 2, 0.5, 0.5, DEF_DRAW_BLACK);
-		y_offset += 20;
-	}
-	{ // LCD Brightness
-		Draw(LOCALIZED(LCD_BRIGHTNESS), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
-		y_offset += DEFAULT_FONT_INTERVAL;
-		y_offset += SMALL_MARGIN * 3;
-		float bar_x_l = 40;
-		float bar_x_r = 280;
-		float x = bar_x_l + (bar_x_r - bar_x_l) * (var_lcd_brightness - 15) / (163 - 15);
-		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, bar_x_l, y_offset, bar_x_r - bar_x_l, 3);
-		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, bar_x_l, y_offset, x - bar_x_l, 3);
-		C2D_DrawCircleSolid(x, y_offset + 1, 0, bar_holding == 0 ? 6 : 4, DEF_DRAW_WEAK_AQUA);
-		
-		y_offset += SMALL_MARGIN * 3;
-	}
-	{ // Time to turn off the LCD
-		Draw(LOCALIZED(TIME_TO_TURN_OFF_LCD) + " : " + (var_time_to_turn_off_lcd <= 310 ? std::to_string(var_time_to_turn_off_lcd) + " " + LOCALIZED(SECONDS) :
-			LOCALIZED(NEVER_TURN_OFF)), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
-		y_offset += DEFAULT_FONT_INTERVAL;
-		y_offset += SMALL_MARGIN * 3;
-		float bar_x_l = 40;
-		float bar_x_r = 280;
-		float x = bar_x_l + (bar_x_r - bar_x_l) * std::min<float>(1.0f, (float) (var_time_to_turn_off_lcd - 10) / (310 - 10));
-		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, bar_x_l, y_offset, bar_x_r - bar_x_l, 3);
-		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, bar_x_l, y_offset, x - bar_x_l, 3);
-		C2D_DrawCircleSolid(x, y_offset + 1, 0, bar_holding == 1 ? 6 : 4, DEF_DRAW_WEAK_AQUA);
-		
-		y_offset += SMALL_MARGIN * 3;
-	}
-	{ // Eco mode
-		Draw(LOCALIZED(ECO_MODE), SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
-		y_offset += DEFAULT_FONT_INTERVAL;
-		y_offset += SMALL_MARGIN;
-		int selected_x_l = !var_eco_mode ? 40 : 180;
-		int selected_x_r = !var_eco_mode ? 140 : 280;
-		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, selected_x_l, y_offset, selected_x_r - selected_x_l, 20);
-		Draw_x_centered(LOCALIZED(OFF), 40, 140, y_offset + 3, 0.5, 0.5, DEF_DRAW_BLACK);
-		Draw_x_centered(LOCALIZED(ON), 180, 280, y_offset + 3, 0.5, 0.5, DEF_DRAW_BLACK);
-		y_offset += 20;
-	}
-}
-
-
 Intent Sem_draw(void)
 {
 	Intent intent;
@@ -195,7 +190,7 @@ Intent Sem_draw(void)
 	
 	bool video_playing_bar_show = video_is_playing();
 	CONTENT_Y_HIGH = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
-	scroller.change_area(0, 320, 0, CONTENT_Y_HIGH);
+	main_view->update_y_range(0, CONTENT_Y_HIGH);
 	
 	if(var_need_reflesh || !var_eco_mode)
 	{
@@ -210,11 +205,10 @@ Intent Sem_draw(void)
 		
 		Draw_screen_ready(1, back_color);
 		
-		draw_settings_menu();
+		main_view->draw();
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);
-		scroller.draw_slider_bar();
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
@@ -237,78 +231,11 @@ Intent Sem_draw(void)
 	} else {
 		update_overlay_menu(&key, &intent, SceneType::SETTINGS);
 		
-		int content_height = 0;
-		auto released_point = scroller.update(key, content_height);
+		main_view->update(key);
 		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		
-		// handle touches
-		/*
-		if (released_point.second != -1) do {
-		} while (0);*/
-		if (key.p_touch) {
-			int y_offset = -scroller.get_offset();
-			y_offset += MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2;
-			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN;
-			if (key.touch_y >= y_offset && key.touch_y < y_offset + 20) {
-				auto prev_value = var_lang;
-				if (key.touch_x >= 40 && key.touch_x < 140) var_lang = "en";
-				if (key.touch_x >= 180 && key.touch_x < 280) var_lang = "ja";
-				if (var_lang != prev_value) {
-					save_settings_request = true;
-					string_resource_reload_request = true;
-				}
-			}
-			y_offset += 20;
-			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN;
-			if (key.touch_y >= y_offset && key.touch_y < y_offset + 20) {
-				auto prev_value = var_lang_content;
-				if (key.touch_x >= 40 && key.touch_x < 140) var_lang_content = "en";
-				if (key.touch_x >= 180 && key.touch_x < 280) var_lang_content = "ja";
-				if (var_lang_content != prev_value) {
-					save_settings_request = true;
-					youtube_change_content_language(var_lang_content);
-				}
-			}
-			y_offset += 20;
-			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 3;
-			if (key.touch_y >= y_offset - 5 && key.touch_y <= y_offset + 3 + 5 && key.touch_x >= 40 - 5 && key.touch_x <= 280 + 5) {
-				bar_holding = 0;
-			}
-			y_offset += SMALL_MARGIN * 3;
-			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 3;
-			if (key.touch_y >= y_offset - 5 && key.touch_y <= y_offset + 3 + 5 && key.touch_x >= 40 - 5 && key.touch_x <= 280 + 5) {
-				bar_holding = 1;
-			}
-			y_offset += SMALL_MARGIN * 3;
-			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN;
-			if (key.touch_y >= y_offset && key.touch_y < y_offset + 20) {
-				auto prev_value = var_eco_mode;
-				if (key.touch_x >= 40 && key.touch_x < 140) var_eco_mode = false;
-				if (key.touch_x >= 180 && key.touch_x < 280) var_eco_mode = true;
-				if (var_eco_mode != prev_value) save_settings_request = true;
-			}
-			y_offset += 20;
-		}
-		if (last_touch_x != -1 && key.touch_x == -1 && bar_holding != -1) {
-			save_settings_request = true;
-			bar_holding = -1;
-			var_need_reflesh = true;
-		}
-		if (bar_holding == 0) {
-			var_lcd_brightness = 15 + (163 - 15) * std::max(0.0f, std::min<float>(1.0f,  (float) (key.touch_x - 40) / (280 - 40)));
-			change_brightness_request = true;
-		} else if (bar_holding == 1) {
-			if (key.touch_x >= 280) var_time_to_turn_off_lcd = 1000000000; // never turn off
-			else var_time_to_turn_off_lcd = 10 + (310 - 10) * std::max(0.0f, std::min<float>(1.0f, (float) (key.touch_x - 40) / (280 - 40)));
-		}
-		
 		if (key.p_b) intent.next_scene = SceneType::BACK;
-		if (key.p_x) load_settings();
-		
-		last_touch_x = key.touch_x;
-		last_touch_y = key.touch_y;
-		
 		if (key.h_touch || key.p_touch) var_need_reflesh = true;
 		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	}

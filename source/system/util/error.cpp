@@ -1,4 +1,5 @@
 ﻿#include "headers.hpp"
+#include "ui/colors.hpp"
 
 bool err_error_display = false;
 std::string err_error_summary = "N/A";

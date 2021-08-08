@@ -1,4 +1,5 @@
 #include "headers.hpp"
+#include "ui/colors.hpp"
 
 double draw_frametime[20] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, };
 std::string draw_part_text[2][1024];

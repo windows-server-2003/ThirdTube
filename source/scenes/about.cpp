@@ -6,6 +6,7 @@
 #include "scenes/video_player.hpp"
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
+#include "ui/colors.hpp"
 
 #define SMALL_MARGIN 3
 #define DEFAULT_FONT_INTERVAL 13

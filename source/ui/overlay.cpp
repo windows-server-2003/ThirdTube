@@ -2,6 +2,7 @@
 #include "variables.hpp"
 #include "headers.hpp"
 #include "ui/dialog.hpp"
+#include "ui/colors.hpp"
 
 
 
