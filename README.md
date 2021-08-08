@@ -39,13 +39,6 @@ I haven't tested the minimum system version, but at least 8.1.0-0 is needed.
 
 ## Known issues
 
- - Extracted stream urls randomly return 403 and the video playback fails  
-   The reason is unknown, but a temporary workaround is to press Advanced Tab -> Reload when this happens.
- - Stream downloading randomly slows down (about 10% of the times)  
-   This is due to YouTube (probably deliberately) throttling the download speed.  
-   The workaround is the same as the 403 issue; reloading will fix it.
-   Reference : https://github.com/ytdl-org/youtube-dl/issues/29326  
-   It looks like the devs on youtube-dl found the solution, and I'm looking into it.  
  - Long comments are cut  
    This is intentionally done for a performance reason and probably fixable by, for example, folding the comments by default.  
 
