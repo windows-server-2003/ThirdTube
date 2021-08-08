@@ -407,7 +407,6 @@ static void decode_thread(void* arg)
 	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Thread started.");
 
 	Result_with_string result;
-	int bitrate = 0;
 	int ch = 0;
 	int audio_size = 0;
 	int w = 0;
@@ -506,7 +505,7 @@ static void decode_thread(void* arg)
 			if (vid_play_request) {
 				{
 					auto tmp = network_decoder.get_audio_info();
-					bitrate = tmp.bitrate;
+					// bitrate = tmp.bitrate;
 					vid_sample_rate = tmp.sample_rate;
 					ch = tmp.ch;
 					vid_audio_format = tmp.format_name;
@@ -687,9 +686,7 @@ static void convert_thread(void* arg)
 				do {
 					osTickCounterUpdate(&counter1);
 					osTickCounterUpdate(&counter0);
-					// Util_log_save("conv", "r8");
 					result = network_decoder.get_decoded_video_frame(vid_width, vid_height, network_decoder.hw_decoder_enabled ? &video : &yuv_video, &pts);
-					// Util_log_save("conv", "r9");
 					osTickCounterUpdate(&counter0);
 					if (result.code != DEF_ERR_NEED_MORE_INPUT) break;
 					if (vid_pausing || vid_pausing_seek) usleep(10000);
@@ -756,31 +753,18 @@ static void convert_thread(void* arg)
 					osTickCounterUpdate(&counter1);
 					cur_convert_time = osTickCounterRead(&counter1);
 					
-					// Util_log_save("conv", "r2");
 					// sync with sound
 					double cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
-					double sleep_sum = 0;
-					int sleep_cnt = 0;
-					// Util_log_save("conv", "r2 : " + std::to_string(pts) + " " + std::to_string(cur_sound_pos));
 					// Util_log_save("conv", "pos : " + std::to_string(pts) + " / " + std::to_string(cur_sound_pos));
 					if (cur_sound_pos < 0) { // sound is not playing, probably because the video is lagging behind, so draw immediately
 						
 					} else {
 						while (pts - cur_sound_pos > 0.003 && vid_play_request && !vid_seek_request && !vid_change_video_request) {
-							if ((int) ((pts - cur_sound_pos - 0.0015) * 1000) >= 50)
-								Util_log_save("conv", "sleep " + std::to_string((int) ((pts - cur_sound_pos - 0.0015) * 1000)) + " ms");
-							sleep_sum += (pts - cur_sound_pos - 0.0015) * 1000;
-							sleep_cnt++;
-							
 							usleep((pts - cur_sound_pos - 0.0015) * 1000000);
 							cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
 							if (cur_sound_pos < 0) break;
 						}
 					}
-					// Util_log_save("conv", "r3");
-					/*
-					if (sleep_sum >= 50 || sleep_cnt >= 15)
-					Util_log_save("conv", "r3 : " + std::to_string(pts) + " " + std::to_string(cur_sound_pos) + " " + std::to_string(sleep_sum) + " " + std::to_string(sleep_cnt));*/
 					
 					osTickCounterUpdate(&counter0);
 					osTickCounterUpdate(&counter1);
@@ -1717,7 +1701,6 @@ Intent VideoPlayer_draw(void)
 		*/
 		
 		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
-		if (key.h_x && key.p_y || key.h_y && key.p_x) var_debug_mode = !var_debug_mode;
 	}
 
 	if(Util_log_query_log_show_flag())

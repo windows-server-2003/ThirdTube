@@ -271,7 +271,7 @@ void Menu_get_system_info(void)
 
 	var_wifi_signal = osGetWifiStrength();
 	//Get wifi state from shared memory #0x1FF81067
-	memcpy(&var_wifi_state, (void*)0x1FF81067, 0x1);
+	var_wifi_state = *(u8 *) 0x1FF81067;
 	if(var_wifi_state == 2)
 	{
 		if (!var_connect_test_succes)

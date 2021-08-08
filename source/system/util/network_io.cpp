@@ -71,9 +71,9 @@ std::vector<double> NetworkStream::get_buffering_progress_bar(int res_len) {
 	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
 	std::vector<double> res(res_len);
 	auto itr = downloaded_data.begin();
-	for (u64 i = 0; i < res_len; i++) {
+	for (int i = 0; i < res_len; i++) {
 		u64 l = (u64) len * i / res_len;
-		u64 r = std::min<u64>(len, (u64) len * (i + 1) / res_len);
+		u64 r = std::min<u64>(len, len * (i + 1) / res_len);
 		while (itr != downloaded_data.end()) {
 			u64 il = itr->first * BLOCK_SIZE;
 			u64 ir = std::min((itr->first + 1) * BLOCK_SIZE, len);
@@ -113,7 +113,6 @@ void NetworkStreamDownloader::add_stream(NetworkStream *stream) {
 		streams.push_back(stream);
 	}
 	svcReleaseMutex(streams_lock);
-	Util_log_save("net/dl", "added index : " + std::to_string(index));
 }
 
 
@@ -250,7 +249,7 @@ void NetworkStreamDownloader::downloader_thread() {
 					continue;
 				}
 			}
-			Util_log_save("net/dl", "dl next : " + std::to_string(cur_stream_index) + " " + std::to_string(block_reading));
+			// Util_log_save("net/dl", "dl next : " + std::to_string(cur_stream_index) + " " + std::to_string(block_reading));
 			
 			u64 start = block_reading * BLOCK_SIZE;
 			u64 end = cur_stream->ready ? std::min((block_reading + 1) * BLOCK_SIZE, cur_stream->len) : (block_reading + 1) * BLOCK_SIZE;
