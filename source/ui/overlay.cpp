@@ -42,13 +42,13 @@ static bool holding_touch = false;
 
 static Dialog dialog;
 
-static const u32 menu_icon_background_color = COLOR_GRAY(0xC0);
-static const u32 menu_icon_background_color_selected = COLOR_GRAY(0xA0);
-static const u32 menu_icon_line_color = COLOR_GRAY(0x33);
-static const u32 menu_content_background_color = menu_icon_background_color;
-static const u32 menu_content_background_color_selected = COLOR_GRAY(0xA0);
-static const u32 menu_content_string_color = COLOR_GRAY(0x00);
-static const u32 menu_content_border_color = COLOR_GRAY(0xDD);
+#define menu_icon_background_color             COLOR_GRAY(var_night_mode ? 0x3F : 0xC0)
+#define menu_icon_background_color_selected    COLOR_GRAY(var_night_mode ? 0x5F : 0xA0)
+#define menu_icon_line_color                   COLOR_GRAY(var_night_mode ? 0xCC : 0x33)
+#define menu_content_background_color          menu_icon_background_color
+#define menu_content_background_color_selected COLOR_GRAY(var_night_mode ? 0x5F : 0xA0)
+#define menu_content_string_color              DEFAULT_TEXT_COLOR
+#define menu_content_border_color              COLOR_GRAY(var_night_mode ? 0x22 : 0xDD)
 
 static bool in_icon(int x, int y) {
 	return x >= menu_icon_x && x < menu_icon_x + OVERLAY_MENU_ICON_SIZE && y >= menu_icon_y && y < menu_icon_y + OVERLAY_MENU_ICON_SIZE;

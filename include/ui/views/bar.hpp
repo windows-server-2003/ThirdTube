@@ -48,7 +48,7 @@ public :
 	}
 	
 	void draw() const override {
-		Draw(title, x0 + SMALL_MARGIN, y0, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw(title, x0 + SMALL_MARGIN, y0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, bar_x0(), bar_y() - 1, bar_len(), 3);
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, bar_x0(), bar_y() - 1, get_x_from_value(value) - bar_x0(), 3);
 		C2D_DrawCircleSolid(get_x_from_value(value), bar_y(), 0, holding ? 6 : 4, DEF_DRAW_WEAK_AQUA);

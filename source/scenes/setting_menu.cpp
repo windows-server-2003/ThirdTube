@@ -143,6 +143,24 @@ void Sem_init(void)
 						save_settings_request = true;
 					}
 				}),
+			// Dark theme (plus flash)
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+					(std::function<std::string ()>) []() { return LOCALIZED(ON); },
+					(std::function<std::string ()>) []() { return LOCALIZED(FLASH); }
+				}, var_flash_mode ? 2 : var_night_mode)
+				->set_title([](const SelectorView &) { return LOCALIZED(DARK_THEME); })
+				->set_on_change([](const SelectorView &view) {
+					if (var_flash_mode != (view.selected_button == 2)) {
+						var_flash_mode = (view.selected_button == 2);
+						save_settings_request = true;
+					}
+					if (!var_flash_mode && var_night_mode != view.selected_button) {
+						var_night_mode = view.selected_button;
+						save_settings_request = true;
+					}
+				}),
 			// margin at the end of the list
 			(new EmptyView(0, 0, 320, 4))
 		});
@@ -174,17 +192,9 @@ Intent Sem_draw(void)
 	Intent intent;
 	intent.next_scene = SceneType::NO_CHANGE;
 	
-	int color = DEF_DRAW_BLACK;
-	int back_color = DEF_DRAW_WHITE;
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	Util_hid_key_flag_reset();
-	
-	if (var_night_mode)
-	{
-		color = DEF_DRAW_WHITE;
-		back_color = DEF_DRAW_BLACK;
-	}
 	
 	thumbnail_set_active_scene(SceneType::SETTINGS);
 	
@@ -196,14 +206,14 @@ Intent Sem_draw(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, back_color);
+		Draw_screen_ready(0, DEFAULT_BACK_COLOR);
 
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
 
 		Draw_top_ui();
 		
-		Draw_screen_ready(1, back_color);
+		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
 		main_view->draw();
 		

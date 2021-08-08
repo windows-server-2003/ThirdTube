@@ -9,7 +9,7 @@ public :
 	
 	void draw() const override {
 		int y = (int)((y0 + y1) / 2);
-		Draw_line(x0 + SMALL_MARGIN, y, DEF_DRAW_BLACK, x1 - SMALL_MARGIN, y, DEF_DRAW_BLACK, 1);
+		Draw_line(x0 + SMALL_MARGIN, y, DEFAULT_TEXT_COLOR, x1 - SMALL_MARGIN, y, DEFAULT_TEXT_COLOR, 1);
 	}
 	void update(Hid_info key) override {}
 };

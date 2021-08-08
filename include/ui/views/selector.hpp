@@ -63,11 +63,11 @@ public :
 	}
 	
 	void draw() const override {
-		Draw(title, x0 + SMALL_MARGIN, y0, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw(title, x0 + SMALL_MARGIN, y0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, button_x_left(selected_button), button_y_pos(), button_x_size(), button_y_size());
 		for (int i = 0; i < button_num; i++)
-			Draw_x_centered(button_texts[i], button_x_left(i), button_x_right(i), button_y_pos(), 0.5, 0.5, DEF_DRAW_BLACK);
+			Draw_x_centered(button_texts[i], button_x_left(i), button_x_right(i), button_y_pos(), 0.5, 0.5, DEFAULT_TEXT_COLOR);
 	}
 	void update(Hid_info key) override {
 		if (key.p_touch && key.touch_y >= button_y_pos() && key.touch_y < button_y_pos() + button_y_size())

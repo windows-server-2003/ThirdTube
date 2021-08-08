@@ -196,9 +196,9 @@ void thumbnail_downloader_thread_func(void *arg) {
 					u8 g = (decoded_data[(i * w + j) * 2 + 0] >> 5) | ((decoded_data[(i * w + j) * 2 + 1] & ((1 << 3) - 1)) << 3);
 					u8 r = decoded_data[(i * w + j) * 2 + 1] >> 3;
 					float proportion = std::max(0.0f, std::min(1.0f, radius + 0.5f - distance));
-					b = b * proportion + ((1 << 5) - 1) * (1 - proportion);
-					g = g * proportion + ((1 << 6) - 1) * (1 - proportion);
-					r = r * proportion + ((1 << 5) - 1) * (1 - proportion);
+					b = b * proportion + (var_night_mode ? 0 : ((1 << 5) - 1)) * (1 - proportion);
+					g = g * proportion + (var_night_mode ? 0 : ((1 << 6) - 1)) * (1 - proportion);
+					r = r * proportion + (var_night_mode ? 0 : ((1 << 5) - 1)) * (1 - proportion);
 					decoded_data[(i * w + j) * 2 + 0] = b | g << 5;
 					decoded_data[(i * w + j) * 2 + 1] = g >> 3 | r << 3;
 				}

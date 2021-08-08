@@ -23,7 +23,7 @@ public :
 	
 	void draw() const override {
 		int y = (int)((y0 + y1 - interval) / 2);
-		Draw(text, x0 + SMALL_MARGIN, y, font_size, font_size, DEF_DRAW_BLACK);
+		Draw(text, x0 + SMALL_MARGIN, y, font_size, font_size, DEFAULT_TEXT_COLOR);
 	}
 	void update(Hid_info key) override {}
 };

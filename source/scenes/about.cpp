@@ -87,66 +87,66 @@ void About_exit(void)
 static void draw_about() {
 	int y_offset = -scroller.get_offset();
 	{ // About section
-		Draw("About", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
+		Draw("About", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR);
 		y_offset += MIDDLE_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN;
-		Draw_line(SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 320 - SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 1);
+		Draw_line(SMALL_MARGIN, std::round(y_offset), DEFAULT_TEXT_COLOR, 320 - SMALL_MARGIN, std::round(y_offset), DEFAULT_TEXT_COLOR, 1);
 		y_offset += SMALL_MARGIN;
-		Draw_x_centered("ThirdTube", 0, 320, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
+		Draw_x_centered("ThirdTube", 0, 320, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR);
 		y_offset += MIDDLE_FONT_INTERVAL;
-		Draw_x_centered("Version " + DEF_CURRENT_APP_VER, 0, 320, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+		Draw_x_centered("Version " + DEF_CURRENT_APP_VER, 0, 320, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 		y_offset += DEFAULT_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN;
 		
 		for (auto line : app_description_lines) {
-			Draw_x_centered(line, 0, 320, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+			Draw_x_centered(line, 0, 320, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL;
 		}
 		
-		Draw("GitHub", SMALL_MARGIN * 2, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw("GitHub", SMALL_MARGIN * 2, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		y_offset += DEFAULT_FONT_INTERVAL;
-		Draw(GITHUB_URL, SMALL_MARGIN * 3, y_offset, 0.4, 0.4, DEF_DRAW_BLACK);
+		Draw(GITHUB_URL, SMALL_MARGIN * 3, y_offset, 0.4, 0.4, DEFAULT_TEXT_COLOR);
 		y_offset += DEFAULT_FONT_INTERVAL;
 	}
 	{ // Credits section
 		y_offset += SMALL_MARGIN * 2;
-		Draw("Credits", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
+		Draw("Credits", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR);
 		y_offset += MIDDLE_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN;
-		Draw_line(SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 320 - SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 1);
+		Draw_line(SMALL_MARGIN, std::round(y_offset), DEFAULT_TEXT_COLOR, 320 - SMALL_MARGIN, std::round(y_offset), DEFAULT_TEXT_COLOR, 1);
 		y_offset += SMALL_MARGIN;
 		for (auto i : credits) {
-			Draw(i.first, SMALL_MARGIN * 2, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
+			Draw(i.first, SMALL_MARGIN * 2, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR);
 			y_offset += MIDDLE_FONT_INTERVAL;
 			for (auto line : i.second) {
-				Draw(line, SMALL_MARGIN * 4, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+				Draw(line, SMALL_MARGIN * 4, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 				y_offset += DEFAULT_FONT_INTERVAL;
 			}
 		}
 	}
 	{ // License section
 		y_offset += SMALL_MARGIN * 2;
-		Draw("License", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
+		Draw("License", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR);
 		y_offset += MIDDLE_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN;
-		Draw_line(SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 320 - SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 1);
+		Draw_line(SMALL_MARGIN, std::round(y_offset), DEFAULT_TEXT_COLOR, 320 - SMALL_MARGIN, std::round(y_offset), DEFAULT_TEXT_COLOR, 1);
 		y_offset += SMALL_MARGIN;
 		for (auto line : license_lines) {
-			Draw(line, SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+			Draw(line, SMALL_MARGIN, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL;
 		}
 	}
 	{ // Thirdparty licenses
 		y_offset += SMALL_MARGIN * 2;
-		Draw("Third-party Licenses", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEF_DRAW_BLACK);
+		Draw("Third-party Licenses", SMALL_MARGIN, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR);
 		y_offset += MIDDLE_FONT_INTERVAL;
 		y_offset += SMALL_MARGIN;
-		Draw_line(SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 320 - SMALL_MARGIN, std::round(y_offset), DEF_DRAW_BLACK, 1);
+		Draw_line(SMALL_MARGIN, std::round(y_offset), DEFAULT_TEXT_COLOR, 320 - SMALL_MARGIN, std::round(y_offset), DEFAULT_TEXT_COLOR, 1);
 		y_offset += SMALL_MARGIN;
 		for (auto license : third_party_licenses) {
-			Draw(license.first, SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_BLACK);
+			Draw(license.first, SMALL_MARGIN, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL;
-			Draw(license.second, SMALL_MARGIN * 3, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+			Draw(license.second, SMALL_MARGIN * 3, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN;
 		}
 	}
@@ -159,17 +159,9 @@ Intent About_draw(void)
 	Intent intent;
 	intent.next_scene = SceneType::NO_CHANGE;
 	
-	int color = DEF_DRAW_BLACK;
-	int back_color = DEF_DRAW_WHITE;
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	Util_hid_key_flag_reset();
-	
-	if (var_night_mode)
-	{
-		color = DEF_DRAW_WHITE;
-		back_color = DEF_DRAW_BLACK;
-	}
 	
 	thumbnail_set_active_scene(SceneType::ABOUT);
 	
@@ -181,14 +173,14 @@ Intent About_draw(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, back_color);
+		Draw_screen_ready(0, DEFAULT_BACK_COLOR);
 
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
 
 		Draw_top_ui();
 		
-		Draw_screen_ready(1, back_color);
+		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
 		draw_about();
 		

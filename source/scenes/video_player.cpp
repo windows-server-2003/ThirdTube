@@ -1025,22 +1025,22 @@ void VideoPlayer_exit(void)
 	Util_log_save(DEF_SAPP0_EXIT_STR, "Exited.");
 }
 
-static void draw_video_content(Hid_info key, int color) {
+static void draw_video_content(Hid_info key) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	int y_offset = -scroller[selected_tab].get_offset();
 	if (selected_tab == TAB_GENERAL) {
 		if (cur_video_info.title.size()) { // only draw if the metadata is loaded
 			for (int i = 0; i < (int) title_lines.size(); i++) {
-				Draw(title_lines[i], SMALL_MARGIN, y_offset + 15 * i, title_font_size, title_font_size, color);
+				Draw(title_lines[i], SMALL_MARGIN, y_offset + 15 * i, title_font_size, title_font_size, DEFAULT_TEXT_COLOR);
 			}
 			y_offset += 15 * title_lines.size() + SMALL_MARGIN;
 			
-			Draw(cur_video_info.views_str, SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
-			Draw_right(cur_video_info.publish_date, 320 - SMALL_MARGIN * 2, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+			Draw(cur_video_info.views_str, SMALL_MARGIN, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
+			Draw_right(cur_video_info.publish_date, 320 - SMALL_MARGIN * 2, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 			
 			Draw(LOCALIZED(YOUTUBE_LIKE) + ":" + cur_video_info.like_count_str + " " + LOCALIZED(YOUTUBE_DISLIKE) + ":" + cur_video_info.dislike_count_str,
-				SMALL_MARGIN, y_offset, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+				SMALL_MARGIN, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 			
 			y_offset += SMALL_MARGIN;
@@ -1048,7 +1048,7 @@ static void draw_video_content(Hid_info key, int color) {
 			y_offset += SMALL_MARGIN;
 			
 			thumbnail_draw(icon_thumbnail_handle, SMALL_MARGIN, y_offset, ICON_SIZE, ICON_SIZE);
-			Draw(cur_video_info.author.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset + ICON_SIZE * 0.1, 0.55, 0.55, DEF_DRAW_BLACK);
+			Draw(cur_video_info.author.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset + ICON_SIZE * 0.1, 0.55, 0.55, DEFAULT_TEXT_COLOR);
 			Draw(cur_video_info.author.subscribers, ICON_SIZE + SMALL_MARGIN * 3, y_offset + ICON_SIZE * 0.1 + DEFAULT_FONT_VERTICAL_INTERVAL + SMALL_MARGIN, 0.45, 0.45, DEF_DRAW_GRAY);
 			y_offset += ICON_SIZE;
 			
@@ -1057,7 +1057,7 @@ static void draw_video_content(Hid_info key, int color) {
 				Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
 				y_offset += SMALL_MARGIN;
 				
-				Draw(cur_video_info.playability_reason, SMALL_MARGIN, y_offset - 1, 0.5, 0.5, color);
+				Draw(cur_video_info.playability_reason, SMALL_MARGIN, y_offset - 1, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 				y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 			}
 			
@@ -1069,14 +1069,14 @@ static void draw_video_content(Hid_info key, int color) {
 			int description_displayed_l = std::min(description_line_num, std::max(0, -y_offset / DEFAULT_FONT_VERTICAL_INTERVAL));
 			int description_displayed_r = std::min(description_line_num, std::max(0, (-y_offset + CONTENT_Y_HIGH - 1) / DEFAULT_FONT_VERTICAL_INTERVAL + 1));
 			for (int i = description_displayed_l; i < description_displayed_r; i++) {
-				Draw(description_lines[i], SMALL_MARGIN, y_offset + i * DEFAULT_FONT_VERTICAL_INTERVAL, 0.5, 0.5, color);
+				Draw(description_lines[i], SMALL_MARGIN, y_offset + i * DEFAULT_FONT_VERTICAL_INTERVAL, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			}
 			y_offset += description_line_num * DEFAULT_FONT_VERTICAL_INTERVAL;
 			
 			y_offset += SMALL_MARGIN;
 			Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
 			y_offset += SMALL_MARGIN;
-		} else Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, color);
+		} else Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 	} else if (selected_tab == TAB_SUGGESTIONS) {
 		if (cur_video_info.suggestions.size()) {
 			int suggestion_num = cur_video_info.suggestions.size();
@@ -1088,6 +1088,7 @@ static void draw_video_content(Hid_info key, int color) {
 				
 				if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r) {
 					u8 darkness = std::min<int>(0xFF, 0xD0 + (1 - scroller[TAB_SUGGESTIONS].selected_overlap_darkness()) * 0x30);
+					if (var_night_mode) darkness = 0xFF - darkness;
 					u32 color = 0xFF000000 | darkness << 16 | darkness << 8 | darkness;
 					Draw_texture(var_square_image[0], color, 0, y_l, 320, y_r - y_l);
 				}
@@ -1099,22 +1100,22 @@ static void draw_video_content(Hid_info key, int color) {
 				// title
 				auto title_lines = suggestion_titles_lines[i];
 				for (size_t line = 0; line < title_lines.size(); line++) {
-					Draw(title_lines[line], SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, color);
+					Draw(title_lines[line], SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 					cur_y += DEFAULT_FONT_VERTICAL_INTERVAL;
 				}
 				cur_y += 2;
-				Draw(cur_video.author, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+				Draw(cur_video.author, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 				cur_y += DEFAULT_FONT_VERTICAL_INTERVAL;
-				Draw(cur_video.duration_text, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEF_DRAW_GRAY);
+				Draw(cur_video.duration_text, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, LIGHT1_TEXT_COLOR);
 				cur_y += DEFAULT_FONT_VERTICAL_INTERVAL;
 			}
 			y_offset += cur_video_info.suggestions.size() * SUGGESTIONS_VERTICAL_INTERVAL;
 			if (cur_video_info.has_more_suggestions() || cur_video_info.error != "") {
 				std::string draw_str = cur_video_info.error != "" ? cur_video_info.error : LOCALIZED(LOADING);
-				if (y_offset < 240) Draw_x_centered(draw_str, 0, 320, y_offset, 0.5, 0.5, color);
+				if (y_offset < 240) Draw_x_centered(draw_str, 0, 320, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 				y_offset += SUGGESTION_LOAD_MORE_MARGIN;
 			}
-		} else Draw_x_centered(LOCALIZED(EMPTY), 0, 320, 0, 0.5, 0.5, color);
+		} else Draw_x_centered(LOCALIZED(EMPTY), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 	} else if (selected_tab == TAB_COMMENTS) {
 		y_offset += SMALL_MARGIN;
 		for (int i = 0; i < (int) cur_video_info.comments.size(); i++) {
@@ -1128,7 +1129,7 @@ static void draw_video_content(Hid_info key, int color) {
 				for (int j = 0; j < (int) comments_lines[i].size(); j++) {
 					int cur_y = y_offset + (j + 1) * DEFAULT_FONT_VERTICAL_INTERVAL - 2;
 					if (cur_y + DEFAULT_FONT_VERTICAL_INTERVAL > 0 && cur_y < CONTENT_Y_HIGH)
-						Draw(comments_lines[i][j], SMALL_MARGIN * 2 + COMMENT_ICON_SIZE, cur_y, 0.5, 0.5, color);
+						Draw(comments_lines[i][j], SMALL_MARGIN * 2 + COMMENT_ICON_SIZE, cur_y, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 				}
 			}
 			
@@ -1140,32 +1141,32 @@ static void draw_video_content(Hid_info key, int color) {
 			else if (cur_video_info.error != "") draw_string = cur_video_info.error;
 			else if (cur_video_info.has_more_comments()) draw_string = LOCALIZED(LOADING);
 			else draw_string = LOCALIZED(NO_COMMENTS);
-			if (y_offset < CONTENT_Y_HIGH) Draw_x_centered(draw_string, 0, 320, y_offset, 0.5, 0.5, color);
+			if (y_offset < CONTENT_Y_HIGH) Draw_x_centered(draw_string, 0, 320, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += COMMENT_LOAD_MORE_MARGIN;
 		}
 	} else if (selected_tab == TAB_ADVANCED) {
-		Draw(vid_video_format, 0, y_offset, 0.5, 0.5, color);
+		Draw(vid_video_format, 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
-		Draw(vid_audio_format, 0, y_offset, 0.5, 0.5, color);
+		Draw(vid_audio_format, 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
-		Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, y_offset, 0.5, 0.5, color);
+		Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
-		Draw(LOCALIZED(HW_DECODER) + " : " + LOCALIZED_ENABLED_STATUS(network_decoder.hw_decoder_enabled), 0, y_offset, 0.5, 0.5, color);
+		Draw(LOCALIZED(HW_DECODER) + " : " + LOCALIZED_ENABLED_STATUS(network_decoder.hw_decoder_enabled), 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		
 		{
 			const char *message = get_network_waiting_status();
-			Draw(LOCALIZED(WAITING_STATUS) + " : " + std::string(message ? message : ""), 0, y_offset, 0.5, 0.5, color);
+			Draw(LOCALIZED(WAITING_STATUS) + " : " + std::string(message ? message : ""), 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		}
 		{
 			u32 cpu_limit;
 			APT_GetAppCpuTimeLimit(&cpu_limit);
-			Draw(LOCALIZED(CPU_LIMIT) + " : " + std::to_string(cpu_limit) + "%", 0, y_offset, 0.5, 0.5, color);
+			Draw(LOCALIZED(CPU_LIMIT) + " : " + std::to_string(cpu_limit) + "%", 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		}
 		if (cur_video_info.is_livestream && network_decoder.ready) {
-			Draw(LOCALIZED(FORWARD_BUFFER) + " : " + std::to_string(network_decoder.get_forward_buffer()) + " s", 0, y_offset, 0.5, 0.5, color);
+			Draw(LOCALIZED(FORWARD_BUFFER) + " : " + std::to_string(network_decoder.get_forward_buffer()) + " s", 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		}
 		//controls
@@ -1177,13 +1178,13 @@ static void draw_video_content(Hid_info key, int color) {
 		y_offset += SMALL_MARGIN;
 		{
 			Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 15, y_offset, 135, DEFAULT_FONT_VERTICAL_INTERVAL);
-			Draw_x_centered(LOCALIZED(VIDEO_FILTER), 15, 15 + 135, y_offset, 0.4, 0.4, color);
+			Draw_x_centered(LOCALIZED(VIDEO_FILTER), 15, 15 + 135, y_offset, 0.4, 0.4, DEFAULT_TEXT_COLOR);
 		}
 		{
 			u32 button_color = is_webpage_loading_requested(LoadRequestType::VIDEO) ? DEF_DRAW_LIGHT_GRAY : DEF_DRAW_WEAK_AQUA;
 			Draw_texture(var_square_image[0], button_color, 170, y_offset, 135, DEFAULT_FONT_VERTICAL_INTERVAL);
 			int width = Draw_get_width(LOCALIZED(RELOAD), 0.4, 0.4);
-			Draw(LOCALIZED(RELOAD), (170.0 + 170.0 + 135.0) / 2 - width / 2, y_offset, 0.4, 0.4, color);
+			Draw(LOCALIZED(RELOAD), (170.0 + 170.0 + 135.0) / 2 - width / 2, y_offset, 0.4, 0.4, DEFAULT_TEXT_COLOR);
 		}
 		y_offset += DEFAULT_FONT_VERTICAL_INTERVAL;
 		y_offset += SMALL_MARGIN;
@@ -1216,7 +1217,7 @@ static void draw_video_content(Hid_info key, int color) {
 		}
 		
 		y_offset += SMALL_MARGIN;
-		Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_BLACK, 320 - SMALL_MARGIN - 1, y_offset, DEF_DRAW_BLACK, 1);
+		Draw_line(SMALL_MARGIN, y_offset, DEFAULT_TEXT_COLOR, 320 - SMALL_MARGIN - 1, y_offset, DEFAULT_TEXT_COLOR, 1);
 		y_offset += SMALL_MARGIN;
 		
 		//decoding detail
@@ -1226,13 +1227,13 @@ static void draw_video_content(Hid_info key, int color) {
 			Draw_line(i, y_offset + 90 - vid_time[0][i], DEF_DRAW_RED, i + 1, y_offset + 90 - vid_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
 		}
 
-		Draw_line(0, y_offset + 90, color, 320, y_offset + 90, color, 2);
+		Draw_line(0, y_offset + 90, DEFAULT_TEXT_COLOR, 320, y_offset + 90, DEFAULT_TEXT_COLOR, 2);
 		Draw_line(0, y_offset + 90 - vid_frametime, 0xFFFFFF00, 320, y_offset + 90 - vid_frametime, 0xFFFFFF00, 2);
 		if(vid_total_frames != 0 && vid_min_time != 0  && vid_recent_total_time != 0)
 		{
 			Draw("avg " + std::to_string(1000 / (vid_total_time / vid_total_frames)).substr(0, 5) + " min " + std::to_string(1000 / vid_max_time).substr(0, 5) 
 			+  " max " + std::to_string(1000 / vid_min_time).substr(0, 5) + " recent avg " + std::to_string(1000 / (vid_recent_total_time / 90)).substr(0, 5) +  " fps",
-			0, y_offset + 90, 0.4, 0.4, color);
+			0, y_offset + 90, 0.4, 0.4, DEFAULT_TEXT_COLOR);
 		}
 
 		Draw("Deadline : " + std::to_string(vid_frametime).substr(0, 5) + "ms", 0, y_offset + 100, 0.4, 0.4, 0xFFFFFF00);
@@ -1243,7 +1244,7 @@ static void draw_video_content(Hid_info key, int color) {
 		Draw("Data copy 1 : " + std::to_string(vid_copy_time[1]).substr(0, 5) + "ms", 160, y_offset + 120, 0.4, 0.4, DEF_DRAW_BLUE);
 		Draw("Thread 0 : " + std::to_string(vid_time[0][319]).substr(0, 6) + "ms", 0, y_offset + 130, 0.5, 0.5, DEF_DRAW_RED);
 		Draw("Thread 1 : " + std::to_string(vid_time[1][319]).substr(0, 6) + "ms", 160, y_offset + 130, 0.5, 0.5, DEF_DRAW_BLUE);
-		Draw("Zoom : x" + std::to_string(vid_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_x) + " Y : " + std::to_string((int)vid_y), 0, y_offset + 140, 0.5, 0.5, color);
+		Draw("Zoom : x" + std::to_string(vid_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_x) + " Y : " + std::to_string((int)vid_y), 0, y_offset + 140, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		y_offset += 160;
 	}
 	scroller[selected_tab].draw_slider_bar();
@@ -1255,20 +1256,12 @@ Intent VideoPlayer_draw(void)
 	Intent intent;
 	intent.next_scene = SceneType::NO_CHANGE;
 	
-	int color = DEF_DRAW_BLACK;
-	int back_color = DEF_DRAW_WHITE;
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	Util_hid_key_flag_reset();
 	
 	int image_num = network_decoder.hw_decoder_enabled ? !vid_mvd_image_num : 0;
 
-	if (var_night_mode)
-	{
-		color = DEF_DRAW_WHITE;
-		back_color = DEF_DRAW_BLACK;
-	}
-	
 	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 	
 	bool video_playing_bar_show = video_is_playing();
@@ -1277,7 +1270,7 @@ Intent VideoPlayer_draw(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, network_decoder.ready ? DEF_DRAW_BLACK : back_color);
+		Draw_screen_ready(0, network_decoder.ready ? DEF_DRAW_BLACK : DEFAULT_BACK_COLOR);
 
 		if(network_decoder.ready)
 		{
@@ -1298,9 +1291,9 @@ Intent VideoPlayer_draw(void)
 
 		Draw_top_ui();
 
-		Draw_screen_ready(1, back_color);
+		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 
-		draw_video_content(key, color);
+		draw_video_content(key);
 			
 			// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
 
@@ -1336,9 +1329,9 @@ Intent VideoPlayer_draw(void)
 			*/
 		
 		// tab selector
-		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, 0, CONTENT_Y_HIGH, 320, TAB_SELECTOR_HEIGHT);
-		Draw_texture(var_square_image[0], DEF_DRAW_GRAY, selected_tab * 320 / TAB_NUM, CONTENT_Y_HIGH, 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
-		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, selected_tab * 320 / TAB_NUM, CONTENT_Y_HIGH, 320 / TAB_NUM + 1, TAB_SELECTOR_SELECTED_LINE_HEIGHT);
+		Draw_texture(var_square_image[0], LIGHT1_BACK_COLOR, 0, CONTENT_Y_HIGH, 320, TAB_SELECTOR_HEIGHT);
+		Draw_texture(var_square_image[0], LIGHT2_BACK_COLOR, selected_tab * 320 / TAB_NUM, CONTENT_Y_HIGH, 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
+		Draw_texture(var_square_image[0], LIGHT3_BACK_COLOR, selected_tab * 320 / TAB_NUM, CONTENT_Y_HIGH, 320 / TAB_NUM + 1, TAB_SELECTOR_SELECTED_LINE_HEIGHT);
 		for (int i = 0; i < TAB_NUM; i++) {
 			float font_size = 0.4;
 			float x_l = i * 320 / TAB_NUM;
@@ -1350,7 +1343,7 @@ Intent VideoPlayer_draw(void)
 			else if (i == TAB_SUGGESTIONS) tab_string = LOCALIZED(SUGGESTIONS);
 			else if (i == TAB_COMMENTS) tab_string = LOCALIZED(COMMENTS);
 			else if (i == TAB_ADVANCED) tab_string = LOCALIZED(ADVANCED);
-			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEF_DRAW_BLACK);
+			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEFAULT_TEXT_COLOR);
 		}
 		
 		// playing bar

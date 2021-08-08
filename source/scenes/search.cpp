@@ -160,7 +160,7 @@ struct TemporaryCopyOfSearchResult {
 	bool has_continue;
 };
 
-static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key, int color) {
+static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key) {
 	if (result.result_num) {
 		for (int i = result.displayed_l; i < result.displayed_r; i++) {
 			int y_l = RESULT_Y_LOW + i * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset() + RESULTS_MARGIN;
@@ -168,6 +168,7 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 			
 			if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r) {
 				u8 darkness = std::min<int>(0xFF, 0xD0 + (1 - results_scroller.selected_overlap_darkness()) * 0x30);
+				if (var_night_mode) darkness = 0xFF - darkness;
 				u32 color = 0xFF000000 | darkness << 16 | darkness << 8 | darkness;
 				Draw_texture(var_square_image[0], color, 0, y_l, 320, y_r - y_l);
 			}
@@ -180,26 +181,26 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 				// title
 				auto title_lines = result.wrapped_titles[i];
 				for (size_t line = 0; line < title_lines.size(); line++) {
-					Draw(title_lines[line], THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, color);
+					Draw(title_lines[line], THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 					cur_y += 13;
 				}
 				cur_y += 2;
-				Draw(cur_video.views_str, THUMBNAIL_WIDTH + 3, cur_y, 0.45, 0.45, DEF_DRAW_GRAY);
+				Draw(cur_video.views_str, THUMBNAIL_WIDTH + 3, cur_y, 0.45, 0.45, LIGHT1_TEXT_COLOR);
 				cur_y += 12;
-				Draw(cur_video.publish_date, THUMBNAIL_WIDTH + 3, cur_y, 0.45, 0.45, DEF_DRAW_GRAY);
+				Draw(cur_video.publish_date, THUMBNAIL_WIDTH + 3, cur_y, 0.45, 0.45, LIGHT1_TEXT_COLOR);
 				cur_y += 12;
 			} else if (result.results[i].type == YouTubeSearchResult::Item::CHANNEL) {
 				auto cur_channel = result.results[i].channel;
-				Draw_texture(var_square_image[0], DEF_DRAW_WHITE, 0, y_l, THUMBNAIL_WIDTH, y_r - y_l);
+				Draw_texture(var_square_image[0], DEFAULT_BACK_COLOR, 0, y_l, THUMBNAIL_WIDTH, y_r - y_l);
 				int cur_y = y_l;
 				// icon
 				thumbnail_draw(thumbnail_handles[i], (THUMBNAIL_WIDTH - THUMBNAIL_HEIGHT) / 2, cur_y, THUMBNAIL_HEIGHT, THUMBNAIL_HEIGHT);
 				// name, subscribers video_num
-				Draw(cur_channel.name, THUMBNAIL_WIDTH + 3, cur_y, 0.6, 0.6, color);
+				Draw(cur_channel.name, THUMBNAIL_WIDTH + 3, cur_y, 0.6, 0.6, DEFAULT_TEXT_COLOR);
 				cur_y += 17;
-				Draw(cur_channel.subscribers, THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+				Draw(cur_channel.subscribers, THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 				cur_y += 13;
-				Draw(cur_channel.video_num, THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEF_DRAW_DARK_GRAY);
+				Draw(cur_channel.video_num, THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 				cur_y += 13;
 			}
 		}
@@ -210,11 +211,11 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 			else if (result.error != "") draw_str = result.error;
 			
 			int y = RESULT_Y_LOW + result.result_num * RESULTS_VERTICAL_INTERVAL + RESULTS_MARGIN - results_scroller.get_offset();
-			if (y < RESULT_Y_HIGH) Draw_x_centered(draw_str, 0, 320, y, 0.5, 0.5, color);
+			if (y < RESULT_Y_HIGH) Draw_x_centered(draw_str, 0, 320, y, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		}
 	} else {
 		std::string draw_str = is_webpage_loading_requested(LoadRequestType::SEARCH) ? LOCALIZED(LOADING) : (search_done ? LOCALIZED(NO_RESULTS) : "");
-		Draw_x_centered(draw_str, 0, 320, RESULT_Y_LOW, 0.5, 0.5, color);
+		Draw_x_centered(draw_str, 0, 320, RESULT_Y_LOW, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 	}
 	results_scroller.draw_slider_bar();
 }
@@ -240,17 +241,9 @@ Intent Search_draw(void)
 {
 	Intent intent;
 	intent.next_scene = SceneType::NO_CHANGE;
-	int color = DEF_DRAW_BLACK;
-	int back_color = DEF_DRAW_WHITE;
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	Util_hid_key_flag_reset();
-	
-	if (var_night_mode)
-	{
-		color = DEF_DRAW_WHITE;
-		back_color = DEF_DRAW_BLACK;
-	}
 	
 	thumbnail_set_active_scene(SceneType::SEARCH);
 	
@@ -307,25 +300,26 @@ Intent Search_draw(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, back_color);
+		Draw_screen_ready(0, DEFAULT_BACK_COLOR);
 
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
 
 		Draw_top_ui();
 		
-		Draw_screen_ready(1, back_color);
+		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
 		// (!) : I don't know how to draw textures truncated, so I will just fill the margin with white again
-		draw_search_result(search_result_bak, key, color);
-		Draw_texture(var_square_image[0], back_color, 0, 0, 320, RESULT_Y_LOW - 1);
-		Draw_texture(var_square_image[0], color, 0, RESULT_Y_LOW - 1, 320, 1);
+		draw_search_result(search_result_bak, key);
+		Draw_texture(var_square_image[0], DEFAULT_BACK_COLOR, 0, 0, 320, RESULT_Y_LOW - 1);
+		// the line looks very weird with dark theme
+		if (!var_night_mode) Draw_texture(var_square_image[0], DEFAULT_TEXT_COLOR, 0, RESULT_Y_LOW - 1, 320, 1);
 
 		// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
 		
-		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_LIGHT_GRAY, SEARCH_BOX_MARGIN, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 2, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2);
-		if (cur_search_word == "") Draw(LOCALIZED(SEARCH_HINT), SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEF_DRAW_GRAY);
-		else Draw(cur_search_word, SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEF_DRAW_BLACK);
+		Draw_texture(var_square_image[0], LIGHT0_BACK_COLOR, SEARCH_BOX_MARGIN, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 2, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2);
+		if (cur_search_word == "") Draw(LOCALIZED(SEARCH_HINT), SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, LIGHT1_TEXT_COLOR);
+		else Draw(cur_search_word, SEARCH_BOX_MARGIN + 3, SEARCH_BOX_MARGIN, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);

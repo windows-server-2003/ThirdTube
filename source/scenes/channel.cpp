@@ -162,9 +162,9 @@ struct TemporaryCopyOfChannelInfo {
 	std::map<int, std::vector<std::string> > wrapped_titles;
 	bool has_continue;
 };
-static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_info key, int color) {
+static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_info key) {
 	if (is_webpage_loading_requested(LoadRequestType::CHANNEL)) {
-		Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, color);
+		Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 	} else  {
 		int y_offset = -videos_scroller.get_offset();
 		if (channel_info.banner_url != "") {
@@ -175,14 +175,14 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 		if (channel_info.icon_url != "") {
 			thumbnail_draw(icon_thumbnail_handle, SMALL_MARGIN, y_offset, ICON_SIZE, ICON_SIZE); // icon
 		}
-		Draw(channel_info.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color); // channel name
+		Draw(channel_info.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR); // channel name
 		y_offset += ICON_SIZE;
 		y_offset += SMALL_MARGIN;
 		
 		// tab selector
-		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, 0, y_offset, 320, TAB_SELECTOR_HEIGHT);
-		Draw_texture(var_square_image[0], DEF_DRAW_GRAY, selected_tab * 320 / TAB_NUM, y_offset, 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
-		Draw_texture(var_square_image[0], DEF_DRAW_DARK_GRAY, selected_tab * 320 / TAB_NUM, y_offset + TAB_SELECTOR_HEIGHT - TAB_SELECTOR_SELECTED_LINE_HEIGHT,
+		Draw_texture(var_square_image[0], LIGHT1_BACK_COLOR, 0, y_offset, 320, TAB_SELECTOR_HEIGHT);
+		Draw_texture(var_square_image[0], LIGHT2_BACK_COLOR, selected_tab * 320 / TAB_NUM, y_offset, 320 / TAB_NUM + 1, TAB_SELECTOR_HEIGHT);
+		Draw_texture(var_square_image[0], LIGHT3_BACK_COLOR, selected_tab * 320 / TAB_NUM, y_offset + TAB_SELECTOR_HEIGHT - TAB_SELECTOR_SELECTED_LINE_HEIGHT,
 			320 / TAB_NUM + 1, TAB_SELECTOR_SELECTED_LINE_HEIGHT);
 		for (int i = 0; i < TAB_NUM; i++) {
 			float font_size = 0.4;
@@ -193,7 +193,7 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 			else if (i == 1) tab_string = LOCALIZED(INFO);
 			float y = y_offset + 3;
 			if (i == selected_tab) y -= 1;
-			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEF_DRAW_BLACK);
+			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEFAULT_TEXT_COLOR);
 		}
 		y_offset += TAB_SELECTOR_HEIGHT;
 		
@@ -205,6 +205,7 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 					
 					if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r) {
 						u8 darkness = std::min<int>(0xFF, 0xD0 + (1 - videos_scroller.selected_overlap_darkness()) * 0x30);
+						if (var_night_mode) darkness = 0xFF - darkness;
 						u32 color = 0xFF000000 | darkness << 16 | darkness << 8 | darkness;
 						Draw_texture(var_square_image[0], color, 0, y_l, 320, y_r - y_l);
 					}
@@ -216,7 +217,7 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 					// title
 					auto title_lines = channel_info.wrapped_titles[i];
 					for (size_t line = 0; line < title_lines.size(); line++) {
-						Draw(title_lines[line], THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, color);
+						Draw(title_lines[line], THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 						cur_y += 13;
 					}
 					cur_y += 2;
@@ -230,15 +231,15 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 					if (is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE)) draw_string = "Loading...";
 					else if (channel_info.error != "") draw_string = channel_info.error;
 					
-					if (y_offset < VIDEO_LIST_Y_HIGH) Draw_x_centered(draw_string, 0, 320, y_offset, 0.5, 0.5, color);
+					if (y_offset < VIDEO_LIST_Y_HIGH) Draw_x_centered(draw_string, 0, 320, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 					y_offset += LOAD_MORE_MARGIN;
 				}
-			} else Draw_x_centered(LOCALIZED(NO_VIDEOS), 0, 320, y_offset, 0.5, 0.5, color);
+			} else Draw_x_centered(LOCALIZED(NO_VIDEOS), 0, 320, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		} else if (selected_tab == 1) { // channel description
-			Draw(LOCALIZED(CHANNEL_DESCRIPTION), 3, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, color);
+			Draw(LOCALIZED(CHANNEL_DESCRIPTION), 3, y_offset, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR);
 			y_offset += Draw_get_height(LOCALIZED(CHANNEL_DESCRIPTION), MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
 			y_offset += SMALL_MARGIN; // without this, the following description somehow overlaps with the above text
-			Draw(channel_info.description, 3, y_offset, 0.5, 0.5, color);
+			Draw(channel_info.description, 3, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += Draw_get_height(channel_info.description, 0.5, 0.5);
 			y_offset += SMALL_MARGIN;
 			Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
@@ -253,17 +254,9 @@ Intent Channel_draw(void)
 {
 	Intent intent;
 	intent.next_scene = SceneType::NO_CHANGE;
-	int color = DEF_DRAW_BLACK;
-	int back_color = DEF_DRAW_WHITE;
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	Util_hid_key_flag_reset();
-	
-	if (var_night_mode)
-	{
-		color = DEF_DRAW_WHITE;
-		back_color = DEF_DRAW_BLACK;
-	}
 	
 	thumbnail_set_active_scene(SceneType::CHANNEL);
 	
@@ -327,16 +320,16 @@ Intent Channel_draw(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, back_color);
+		Draw_screen_ready(0, DEFAULT_BACK_COLOR);
 
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
 
 		Draw_top_ui();
 		
-		Draw_screen_ready(1, back_color);
+		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
-		draw_channel_content(channel_info_bak, key, color);
+		draw_channel_content(channel_info_bak, key);
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);
