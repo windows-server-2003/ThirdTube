@@ -64,7 +64,35 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	}
 	js_url = "https://www.youtube.com" + js_url;
 	if (!cipher_transform_proc_cache.count(js_url) || !nparam_transform_proc_cache.count(js_url)) {
-		std::string js_content = http_get(js_url);
+		
+		std::string js_id;
+		std::string js_content;
+		{
+			std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
+			std::smatch match_res;
+			if (std::regex_search(js_url, match_res, std::regex("/s/player/([\\w]+)/"))) js_id = match_res[1].str();
+			else debug("failed to extract js id");
+#ifdef _WIN32
+			js_content = http_get(js_url);
+#else
+			char *buf = (char *) malloc(0x200000);
+			u32 read_size;
+			if (buf && js_id != "" && Util_file_load_from_file(js_id, DEF_MAIN_DIR + "js_cache", (u8 *) buf, 0x200000, &read_size).code == 0) {
+				debug("cache found (" + js_id + ") size:" + std::to_string(read_size) + " found, using...");
+				js_content = std::string(buf);
+			} else {
+				js_content = http_get(js_url);
+				if (js_id != "") {
+					Result_with_string result = Util_file_save_to_file(js_id, DEF_MAIN_DIR + "js_cache", (u8 *) js_content.c_str(), js_content.size(), true);
+					if (result.code != 0) {
+						debug("cache write failed : " + result.error_description);
+					}
+				}
+			}
+			free(buf);
+#endif
+		}
+		
 		if (!js_content.size()) {
 			debug("base js download failed");
 			return false;
