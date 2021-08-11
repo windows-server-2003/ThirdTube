@@ -8,7 +8,7 @@
 // one instance per one url (once constructed, the url is not changeable)
 struct NetworkStream {
 	static constexpr u64 BLOCK_SIZE = 0x40000; // 256 KiB
-	static constexpr u64 MAX_CACHE_BLOCKS = 100;
+	static constexpr u64 MAX_CACHE_BLOCKS = 12 * 1000 * 1000 / BLOCK_SIZE;
 	
 	u64 block_num = 0;
 	std::string url;
