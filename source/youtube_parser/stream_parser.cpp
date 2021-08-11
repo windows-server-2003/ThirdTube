@@ -54,15 +54,23 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	// get base js url
 	if (player_config["assets"]["js"] != Json()) js_url = player_config["assets"]["js"] != Json();
 	else {
-		std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
+		std::vector<std::regex> patterns = {
+			std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)")),
+			std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/\\w+_\\w+/base\\.js)"))
+		};
 		std::smatch match_res;
-		if (std::regex_search(html, match_res, pattern)) js_url = match_res[1].str();
-		else {
+		for (auto &pattern : patterns) {
+			if (std::regex_search(html, match_res, pattern)) {
+				js_url = match_res[1].str();
+				break;
+			}
+		}
+		if (js_url == "") {
 			debug("could not find base js url");
 			return false;
 		}
 	}
-	js_url = "https://www.youtube.com" + js_url;
+	js_url = "https://m.youtube.com" + js_url;
 	if (!cipher_transform_proc_cache.count(js_url) || !nparam_transform_proc_cache.count(js_url)) {
 		
 		std::string js_id;

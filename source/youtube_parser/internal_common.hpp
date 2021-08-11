@@ -19,8 +19,12 @@
 
 #	define debug(s) std::cerr << (s) << std::endl
 #else // if it's a 3ds...
-#	include "headers.hpp"
-#	define debug(s) Util_log_save("yt-parser", (s));
+#	include "types.hpp"
+#	include "system/util/log.hpp"
+#	include "system/util/file.hpp"
+#	include "system/cpu_limit.hpp"
+#	include "definitions.hpp"
+#	define debug(s) Util_log_save("yt-parser", (s))
 #endif
 
 

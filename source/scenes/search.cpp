@@ -1,5 +1,8 @@
 #include "headers.hpp"
 #include <vector>
+#include <string>
+#include <set>
+#include <map>
 #include <numeric>
 
 #include "scenes/search.hpp"
@@ -8,6 +11,8 @@
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"
+#include "network/thumbnail_loader.hpp"
+#include "network/webpage_loader.hpp"
 
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -381,7 +386,7 @@ Intent Search_draw(void)
 		if (key.p_a) {
 			search();
 		} else if (RESULT_Y_LOW + search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset() < RESULT_Y_HIGH &&
-			!is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE) && search_result_bak.result_num) {
+			!is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE) && search_result_bak.result_num && search_result_bak.error == "") {
 			
 			send_load_more_request();
 		} else if(key.h_touch || key.p_touch)

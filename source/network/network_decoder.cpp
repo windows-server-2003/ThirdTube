@@ -1,5 +1,6 @@
 #include "headers.hpp"
-#include "system/util/network_io.hpp"
+#include "network/network_decoder.hpp"
+#include "network/network_downloader.hpp"
 
 // mostly stolen from decoder.cpp
 

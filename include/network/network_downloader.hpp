@@ -2,8 +2,8 @@
 #include <vector>
 #include <map>
 #include <string>
-#include <utility>
 #include <3ds.h>
+#include "network/network_io.hpp"
 
 // one instance per one url (once constructed, the url is not changeable)
 struct NetworkStream {
@@ -15,8 +15,9 @@ struct NetworkStream {
 	Handle downloaded_data_lock; // std::map needs locking when searching and inserting at the same time
 	std::map<u64, std::vector<u8> > downloaded_data;
 	bool whole_download = false;
+	NetworkSessionList *session_list = NULL;
 	
-	// anything above here is not supposed to be used from outside network_io.cpp and network_io.hpp
+	// anything above here is not supposed to be used from outside network_downloader.cpp and network_downloader.hpp
 	u64 len = 0;
 	volatile bool ready = false;
 	volatile bool suspend_request = false;
@@ -32,7 +33,7 @@ struct NetworkStream {
 	bool livestream_private = false;
 	
 	// if `whole_download` is true, it will not use Range request but download the whole content at once (used for livestreams)
-	NetworkStream (std::string url, bool whole_download = false);
+	NetworkStream (std::string url, bool whole_download, NetworkSessionList *session_list);
 	
 	double get_download_percentage();
 	std::vector<double> get_buffering_progress_bar(int res_len);
@@ -74,12 +75,3 @@ public :
 };
 // 'arg' should be a pointer to an instance of NetworkStreamDownloader
 void network_downloader_thread(void *arg);
-
-// it's just useful
-std::pair<std::string, httpcContext> access_http_get(std::string url, std::map<std::string, std::string> request_headers);
-std::pair<std::string, httpcContext> access_http_get_modify_on_redirect(std::string &url, std::map<std::string, std::string> request_headers);
-std::pair<std::string, httpcContext> access_http_post(std::string url, std::vector<u8> content, std::map<std::string, std::string> request_headers);
-
-#define HTTP_STATUS_CODE_OK 200
-#define HTTP_STATUS_CODE_NO_CONTENT 204
-#define HTTP_STATUS_CODE_PARTIAL_CONTENT 206

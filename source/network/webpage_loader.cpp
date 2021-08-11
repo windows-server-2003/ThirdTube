@@ -1,5 +1,5 @@
 #include "headers.hpp"
-
+#include "network/webpage_loader.hpp"
 
 static Handle resource_lock;
 static bool resource_lock_initialized = false;

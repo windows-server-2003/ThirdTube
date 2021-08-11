@@ -8,6 +8,7 @@
 #include "ui/overlay.hpp"
 #include "ui/ui.hpp"
 #include "youtube_parser/parser.hpp"
+#include "network/thumbnail_loader.hpp"
 
 namespace Settings {
 	bool thread_suspend = false;

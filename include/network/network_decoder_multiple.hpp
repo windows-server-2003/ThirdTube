@@ -1,8 +1,9 @@
 #pragma once
 #include <string>
 #include <map>
-#include "network_decoder.hpp"
 #include "network_io.hpp"
+#include "network_decoder.hpp"
+#include "network_downloader.hpp"
 #include "types.hpp"
 #include "headers.hpp"
 
@@ -10,7 +11,7 @@
 
 class NetworkMultipleDecoder {
 private :
-	static constexpr int MAX_CACHE_FRAGMENTS_NUM = 15;
+	static constexpr int MAX_CACHE_FRAGMENTS_NUM = 10;
 	static constexpr int MAX_LIVESTREAM_RETRY = 2;
 	volatile bool initer_stop_request = true;
 	volatile bool initer_exit_request = false;
@@ -35,6 +36,9 @@ private :
 	std::map<int, int> error_count;
 	int fragment_len = -1;
 	NetworkStreamDownloader *downloader = NULL;
+	NetworkSessionList video_session_list;
+	NetworkSessionList audio_session_list;
+	NetworkSessionList both_session_list;
 	
 	volatile int seq_buffered_head = 0;
 	

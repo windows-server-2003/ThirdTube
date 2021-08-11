@@ -7,6 +7,7 @@
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"
+#include "network/thumbnail_loader.hpp"
 
 #define SMALL_MARGIN 3
 #define DEFAULT_FONT_INTERVAL 13

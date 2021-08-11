@@ -1,6 +1,10 @@
 #include <regex>
 #include "internal_common.hpp"
 
+#ifndef _WIN32
+#include "network/network_io.hpp"
+#endif
+
 void youtube_change_content_language(std::string language_code) {
 	youtube_parser::language_code = language_code;
 	youtube_parser::country_code = language_code == "en" ? "US" : "JP";
@@ -43,54 +47,36 @@ namespace youtube_parser {
 		return sstream.str();
 	}
 #else
+	static bool thread_network_session_list_inited = false;
+	static NetworkSessionList thread_network_session_list;
+	static void confirm_thread_network_session_list_inited() {
+		if (!thread_network_session_list_inited) {
+			thread_network_session_list_inited = true;
+			thread_network_session_list.init();
+		}
+	}
+	
 	std::string http_get(const std::string &url, std::map<std::string, std::string> header) {
-		// use mobile version of User-Agent for smaller webpage size (and the whole parser is designed to parse the mobile version)
-		if (!header.count("User-Agent")) header["User-Agent"] = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
+		confirm_thread_network_session_list_inited();
 		if (!header.count("Accept-Language")) header["Accept-Language"] = language_code + ";q=0.9";
 		
-		constexpr int BLOCK = 0x40000; // 256 KB
 		add_cpu_limit(25);
 		debug("accessing...");
-		auto network_res = access_http_get(url, header);
-		std::string res;
-		if (network_res.first == "") {
-			debug("downloading...");
-			std::vector<u8> buffer(BLOCK);
-			std::vector<u8> res_vec;
-			while (1) {
-				u32 len_read;
-				Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
-				res_vec.insert(res_vec.end(), buffer.begin(), buffer.begin() + len_read);
-				if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
-			}
-			
-			httpcCloseContext(&network_res.second);
-			res = std::string(res_vec.begin(), res_vec.end());
-		} else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "failed accessing : " + network_res.first);
-		
+		auto result = Access_http_get(thread_network_session_list, url, header);
+		if (result.fail) debug("fail : " + result.error);
+		else debug("ok");
 		remove_cpu_limit(25);
-		return res;
+		return std::string(result.data.begin(), result.data.end());
 	}
 	std::string http_post_json(const std::string &url, const std::string &json) {
-		auto network_res = access_http_post(url, std::vector<u8>(json.begin(), json.end()),
-			{{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"},
-			{"Content-Type", "application/json"}});
-		
-		std::string res;
-		if (network_res.first == "") {
-			constexpr int BLOCK = 0x40000; // 256 KB
-			std::vector<u8> buffer(BLOCK);
-			std::vector<u8> res_vec;
-			while (1) {
-				u32 len_read;
-				Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
-				res_vec.insert(res_vec.end(), buffer.begin(), buffer.begin() + len_read);
-				if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
-			}
-			res = std::string(res_vec.begin(), res_vec.end());
-			httpcCloseContext(&network_res.second);
-		} else Util_log_save("yt-parser/continue", "post err : " + network_res.first);
-		return res;
+		confirm_thread_network_session_list_inited();
+		add_cpu_limit(25);
+		debug("accessing(POST)...");
+		auto result = Access_http_post(thread_network_session_list, url, {{"Content-Type", "application/json"}}, json);
+		if (result.fail) debug("fail : " + result.error);
+		else debug("ok");
+		remove_cpu_limit(25);
+		return std::string(result.data.begin(), result.data.end());
 	}
 #endif
 	

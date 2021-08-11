@@ -1,6 +1,5 @@
 #pragma once
-#include "network_io.hpp"
-#include "speaker.hpp"
+#include "network_downloader.hpp"
 #include "types.hpp"
 #include <vector>
 #include <set>

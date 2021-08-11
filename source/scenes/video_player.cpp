@@ -7,6 +7,10 @@
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"
+#include "network/network_io.hpp"
+#include "network/network_decoder_multiple.hpp"
+#include "network/thumbnail_loader.hpp"
+#include "network/webpage_loader.hpp"
 
 #define NEW_3DS_CPU_LIMIT 50
 #define OLD_3DS_CPU_LIMIT 80
@@ -1700,6 +1704,7 @@ Intent VideoPlayer_draw(void)
 			vid_lr_count = 0;
 		*/
 		
+		if ((key.h_x && key.p_y) || (key.h_y && key.p_x)) var_debug_mode = !var_debug_mode;
 		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	}
 

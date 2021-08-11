@@ -1,0 +1,607 @@
+﻿#include "headers.hpp"
+#include <functional>
+
+#include "system/util/settings.hpp"
+#include "scenes/setting_menu.hpp"
+#include "scenes/video_player.hpp"
+#include "ui/scroller.hpp"
+#include "ui/overlay.hpp"
+#include "ui/ui.hpp"
+#include "youtube_parser/parser.hpp"
+#include "network/thumbnail_loader.hpp"
+#include "network/network_io.hpp" // <- TODO : erase
+#include <curl/curl.h>
+
+
+namespace Settings {
+	bool thread_suspend = false;
+	bool already_init = false;
+	bool exiting = false;
+	
+	int CONTENT_Y_HIGH = 240;
+	
+	volatile bool save_settings_request = false;
+	volatile bool change_brightness_request = false;
+	volatile bool string_resource_reload_request = false;
+	
+	volatile bool curl_access_request = false;
+	volatile bool httpc_access_request = false;
+	volatile bool sslc_access_request = false;
+	
+	Thread settings_misc_thread;
+};
+using namespace Settings;
+
+static std::string test_url0 = "https://r4---sn-ogueln7k.googlevideo.com/videoplayback?expire=1628537586&ei=ki4RYeyCJJX-4gK9paS4BQ&ip=221.240.44.218&id=JGFIw4dfbH0.1&itag=134&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278&source=yt_live_broadcast&requiressl=yes&mh=Y7&mm=44%2C29&mn=sn-ogueln7k%2Csn-oguesnzd&ms=lva%2Crdu&mv=m&mvi=4&pl=16&initcwndbps=893750&vprv=1&live=1&hang=1&noclen=1&mime=video%2Fmp4&ns=tgcYtcVUBEmuGct5Qvo55aoG&gir=yes&mt=1628515707&fvip=4&keepalive=yes&fexp=24001373%2C24007246&c=MWEB&n=AQJ2W4VX5sHcJA&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Clive%2Chang%2Cnoclen%2Cmime%2Cns%2Cgir&sig=AOq0QJ8wRAIgaRyOZGh41cViEz_JevpOMmg5ul2aeHtvnpXZHZQJryUCIE9T5Y8W0D7bl3u2iqLZdR5YVjAqybtHaU3X1z9e9fjN&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgVBjsOzt-UK9T4zN8aNvNc9i3wbE0-608as9oAfKgFnwCIE36h0asyBU1rRESvolaAqP9l2bKGCC1HJlAYon1JEmX&ratebypass=yes";
+static std::string test_url1 = "https://r4---sn-ogueln7k.googlevideo.com/videoplayback?expire=1628537586&ei=ki4RYeyCJJX-4gK9paS4BQ&ip=221.240.44.218&id=JGFIw4dfbH0.1&itag=140&source=yt_live_broadcast&requiressl=yes&mh=Y7&mm=44%2C29&mn=sn-ogueln7k%2Csn-oguesnzd&ms=lva%2Crdu&mv=m&mvi=4&pl=16&initcwndbps=893750&vprv=1&live=1&hang=1&noclen=1&mime=audio%2Fmp4&ns=tgcYtcVUBEmuGct5Qvo55aoG&gir=yes&mt=1628515707&fvip=4&keepalive=yes&fexp=24001373%2C24007246&c=MWEB&n=AQJ2W4VX5sHcJA&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Clive%2Chang%2Cnoclen%2Cmime%2Cns%2Cgir&sig=AOq0QJ8wRAIgIQz9sh1lovvc648vIBCrYJLhQLYNYEYU3tnFQF0SLmECIAqCaNnVMjbn05bvhi6CVfpWf6zJCsIGOdzSDuLVFN7F&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgVBjsOzt-UK9T4zN8aNvNc9i3wbE0-608as9oAfKgFnwCIE36h0asyBU1rRESvolaAqP9l2bKGCC1HJlAYon1JEmX&ratebypass=yes";
+static std::string test_url2 = "https://i.ytimg.com/an_webp/UvRItcvzKSQ/mqdefault_6s.webp?du=3000&sqp=CKyOxIgG&rs=AOn4CLBxY9N0hmBN16hYyh1v4M-X7Ha3Mg";
+static std::string test_url3 = "https://yt3.ggpht.com/ytc/AKedOLTvg20CxHmqMxDvSZ5nZprlrtXmdSXUl6Gb2IKXhw=s88-c-k-c0x00ffffff-no-rj";
+static std::string test_url4 = "https://m.youtube.com/watch?v=vLigCJOcHOE";
+
+static std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
+
+
+#include <fcntl.h>
+
+#include <sys/types.h>
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+
+
+static std::pair<std::string, std::string> get_host_and_page(std::string url) {
+	auto pos0 = url.find("://");
+	if (pos0 == std::string::npos) return {"", ""};
+	pos0 += 3;
+	auto pos1 = std::find(url.begin() + pos0, url.end(), '/') - url.begin();
+	return {url.substr(pos0, pos1 - pos0), url.substr(pos1, url.size() - pos1)};
+}
+static std::string remove_leading_whitespaces(std::string str) {
+	size_t i = 0;
+	while (i < str.size() && str[i] == ' ') i++;
+	return str.substr(i, str.size() - i);
+}
+static std::map<std::string, std::string> parse_header(std::string header) {
+	auto itr = header.begin();
+	std::map<std::string, std::string> res;
+	while (itr != header.end()) {
+		auto next_itr = std::find(itr, header.end(), '\n');
+		auto cur_line = std::string(itr, next_itr);
+		// Util_log_save("sslc", "header line : " + cur_line);
+		itr = next_itr == header.end() ? next_itr : next_itr + 1;
+		
+		if (cur_line.size() && cur_line.back() == '\r') cur_line.pop_back();
+		auto colon = std::find(cur_line.begin(), cur_line.end(), ':');
+		if (colon == cur_line.end()) continue;
+		auto key = remove_leading_whitespaces(std::string(cur_line.begin(), colon));
+		auto value = remove_leading_whitespaces(std::string(colon + 1, cur_line.end()));
+		res[key] = value;
+	}
+	return res;
+}
+struct sslc_session {
+	bool fail = false;
+	int sockfd;
+	sslcContext sslc_context;
+	std::string host_name;
+	
+	void close() {
+		sslcDestroyContext(&sslc_context);
+		closesocket(sockfd);
+	}
+};
+sslc_session sslc_init(std::string host_name) {
+	/*
+	int SOCKET_BUFFER_MAX_SIZE = 0x4000;
+	int cur_sock_buf_size;
+	socklen_t len_tmp = sizeof(int);
+	*/
+	
+	sslc_session res;
+	res.host_name = host_name;
+	
+	Result ret = 0;
+	
+	struct addrinfo hints;
+	struct addrinfo *resaddr = NULL;
+	
+	res.sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if (res.sockfd == -1) {
+		Util_log_save("sslc", "Failed to create the socket.");
+		goto fail;
+	}
+	/*
+	getsockopt(res.sockfd, SOL_SOCKET, SO_RCVBUF, &cur_sock_buf_size, &len_tmp);
+	Util_log_save("sslc", "buf size : ", cur_sock_buf_size);
+	Util_log_save("sslc", "setsockopt()...", setsockopt(res.sockfd, SOL_SOCKET, SO_RCVBUF, &SOCKET_BUFFER_MAX_SIZE, sizeof(int)));
+	getsockopt(res.sockfd, SOL_SOCKET, SO_RCVBUF, &cur_sock_buf_size, &len_tmp);
+	Util_log_save("sslc", "buf size : ", cur_sock_buf_size);
+	usleep(3000000);*/
+	
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	
+	Util_log_save("sslc", "Resolving hostname...");
+	
+	if (getaddrinfo(host_name.c_str(), "443", &hints, &resaddr) != 0) {
+		Util_log_save("sslc", "getaddrinfo() failed.");
+		goto fail;
+	}
+	
+	Util_log_save("sslc", "Connecting to the server...");
+	
+	struct addrinfo *resaddr_cur;
+	for (resaddr_cur = resaddr; resaddr_cur; resaddr_cur = resaddr_cur->ai_next) {
+		if(connect(res.sockfd, resaddr_cur->ai_addr, resaddr_cur->ai_addrlen)==0)break;
+	}
+	freeaddrinfo(resaddr);
+	
+	if (!resaddr_cur) {
+		Util_log_save("sslc", "Failed to connect.");
+		goto fail;
+	}
+	
+	Util_log_save("sslc", "Running sslc setup...");
+	
+	ret = sslcCreateContext(&res.sslc_context, res.sockfd, SSLCOPT_DisableVerify, host_name.c_str());
+	if (R_FAILED(ret)) {
+		Util_log_save("sslc", "sslcCreateContext() failed: ", (unsigned int) ret);
+		goto fail;
+	}
+	
+	return res;
+	fail :
+	res.fail = true;
+	if (res.sockfd != -1) closesocket(res.sockfd);
+	return res;
+}
+bool sslc_request(sslc_session session, std::string page_url) {
+	if (session.fail) return false;
+	Result ret = 0;
+	std::string request_content = std::string("") + 
+		"GET " + page_url + " HTTP/1.1\r\n" + 
+		"User-Agent: " + user_agent + "\r\n" + 
+		"Connection: Keep-Alive\r\n" + 
+		"Transfer-Encoding: chunked\r\n" + 
+		"Host: " + session.host_name + "\r\n\r\n";
+	
+	Util_log_save("sslc", "nonblock fcntl()..." + std::to_string(fcntl(session.sockfd, F_SETFL, fcntl(session.sockfd, F_GETFL, 0) | O_NONBLOCK)));
+	Util_log_save("sslc", "Starting the TLS connection...");
+
+	while (!exiting) {
+		ret = sslcStartConnection(&session.sslc_context, NULL, NULL);
+		if ((unsigned int) ret == 0xD840B807) {
+			Util_log_save("sslc", "sslcStartConnection would block");
+			usleep(5000);
+		} else if(R_FAILED(ret)) {
+			Util_log_save("sslc", "sslcStartConnection() failed: ", (unsigned int)ret);
+			return false;
+		} else break;
+	}
+
+	Util_log_save("sslc", "Sending request...");
+
+	ret = sslcWrite(&session.sslc_context, (u8 *) request_content.c_str(), request_content.size());
+	if(R_FAILED(ret)) {
+		Util_log_save("sslc", "sslcWrite() failed: ", (unsigned int)ret);
+		return false;
+	}
+
+	Util_log_save("sslc", "Total sent size: ", (unsigned int)ret);
+
+	static char readbuf[0x8000];
+	memset(readbuf, 0, sizeof(readbuf));
+
+	std::map<std::string, std::string> headers;
+	std::string content;
+	std::string tmp_content;
+	int content_length = -1;
+	bool header_end_encountered = false;
+	int block_count = 0;
+	auto hex = [&] (std::string str) {
+		u64 res = 0;
+		for (auto c : str) res *= 10, res += isdigit(c) ? (c - '0') : isupper(c) ? (c - 'A') : (c - 'a');
+		return res;
+	};
+	auto chunked_process = [&] () {
+		while (1) {
+			auto pos = tmp_content.find("\r\n");
+			if (pos == std::string::npos) return;
+			u64 size = hex(tmp_content.substr(0, pos));
+			if (pos + 2 + size + 2 >= tmp_content.size()) 
+		}
+	};
+	while (!exiting) {
+		if (content_length != -1 && (int) content.size() >= content_length) break;
+		ret = sslcRead(&session.sslc_context, readbuf, sizeof(readbuf) - 1, false);
+		
+		if ((u32) ret == 0xD840B802 || (u32) ret == 0xD840B803) {
+			Util_log_save("sslc", "would block");
+			usleep(3000);
+			if (++block_count > 50) {
+				break;
+			}
+		} else {
+			block_count = 0;
+			if(R_FAILED(ret)) {
+				Util_log_save("sslc", "sslcRead() failed: ", (unsigned int)ret);
+				return false;
+			} else {
+				if (content_length != -1) content += std::string(readbuf, readbuf + ret);
+				else {
+					tmp_content += std::string(readbuf, readbuf + ret);
+					if (!header_end_encountered) {
+						auto end_pos = tmp_content.find("\r\n\r\n", std::max<int>((int) tmp_content.size() - ret - 3, 0));
+						if (end_pos != std::string::npos) {
+							Util_log_save("sslc", "header end, size: " + std::to_string(end_pos + 4));
+							headers = parse_header(tmp_content.substr(0, end_pos + 4));
+							header_end_encountered = true;
+							if (headers.count("Content-Length")) {
+								content = tmp_content.substr(end_pos + 4, tmp_content.size());
+								Util_log_save("sslc", "content length : " + headers["Content-Length"]);
+								content_length = stoll(headers["Content-Length"]);
+							} else if (headers.count("Transfer-Encoding")) { // chunked...
+								tmp_content = tmp_content.substr(end_pos + 4, tmp_content.size());
+								chunked_process();
+							} else {
+								Util_log_save("sslc", "Neither Content-Length nor Transfer-Encoding is specified");
+							}
+						}
+					}
+				}
+				Util_log_save("sslc", "+" + std::to_string(ret));
+			}
+		}
+	}
+	Util_log_save("sslc", "header end encountered : " + std::to_string(header_end_encountered));
+	for (auto i : headers) Util_log_save("sslc", "header " + i.first + ": " + i.second);
+	Util_log_save("sslc", "content size         : ", content_length);
+	Util_log_save("sslc", "content size (actual): ", (unsigned int) content.size());
+	Util_log_save("sslc", "content : " + content.substr(0, 100));
+	return true;
+	/*
+	for (int i = 0; i < 20; i++) {
+		Util_log_save("sslc", "Reply:" + response.substr(i * 100, 100));
+		for (int j = 0; j < 10; j++) Util_log_save("", "");
+	}*/
+	
+	// -------------------------
+}
+
+
+static std::vector<u8> received_data;
+static size_t curl_write_callback_func(char *contents, size_t, size_t nmemb, void *) {
+	Util_log_save("curl", "write " + std::to_string(nmemb));
+	received_data.insert(received_data.end(), (u8 *) contents, (u8 *) contents + nmemb);
+	Util_log_save("curl", "write " + std::to_string(nmemb));
+	return nmemb;
+}
+static int curl_trace_func(CURL *curl, curl_infotype type, char *data, size_t size, void *) {
+	if (type == CURLINFO_TEXT) Util_log_save("curl", "Info: " + std::string(data));
+	else if (type == CURLINFO_HEADER_IN ) Util_log_save("curl", "<= Recv header: " + std::to_string(size));
+	else if (type == CURLINFO_HEADER_OUT) Util_log_save("curl", "=> Send header: " + std::to_string(size));
+	else if (type == CURLINFO_DATA_IN ) Util_log_save("curl", "<= Recv data: " + std::to_string(size));
+	else if (type == CURLINFO_DATA_OUT) Util_log_save("curl", "=> Send data: " + std::to_string(size));
+	else if (type == CURLINFO_SSL_DATA_IN ) Util_log_save("curl", "<= Recv SSL data: " + std::to_string(size));
+	else if (type == CURLINFO_SSL_DATA_OUT) Util_log_save("curl", "=> Send SSL data: " + std::to_string(size));
+	return 0;
+}
+
+static void settings_misc_thread_func(void *arg) {
+	sslc_session session;
+	bool sslc_session_inited = false;
+	while (!exiting) {
+		if (save_settings_request) {
+			save_settings_request = false;
+			save_settings();
+		} else if (change_brightness_request) {
+			change_brightness_request = false;
+			Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
+		} else if (string_resource_reload_request) {
+			string_resource_reload_request = false;
+			load_string_resources(var_lang);
+		} else if (curl_access_request) {
+			Util_log_save("curl", "r0");
+			curl_access_request = false;
+			CURL *curl;
+			CURLcode res;
+			
+			curl = curl_easy_init();
+			
+			curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400);
+			curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1);
+			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+			curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent.c_str());
+			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_callback_func);
+			curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
+			curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_trace_func);
+			res = curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2);
+			Util_log_save("curl", res == CURLE_OK ? "OK" : res == CURLE_UNKNOWN_OPTION ? "unknown option" : "?");
+			
+			if(curl) {
+				Util_log_save("curl", "r1");
+				for (int i = 0; i < 2; i++) {
+					// curl_easy_setopt(curl, CURLOPT_URL, (test_url0 + "&sq=" + std::to_string(1330 + i	)).c_str());
+					curl_easy_setopt(curl, CURLOPT_URL, test_url4.c_str());
+					// curl_easy_setopt(curl, CURLOPT_URL, (i % 2 ? test_url3 : test_url2).c_str());
+					res = curl_easy_perform(curl);
+					if(res != CURLE_OK) {
+						Util_log_save("curl", "curl_easy_perform failed: " + std::string(curl_easy_strerror(res)));
+						break;
+					}
+					long status_code = -1;
+					res = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+					if(res != CURLE_OK) {
+						Util_log_save("curl", "curl_easy_getinfo failed: " + std::string(curl_easy_strerror(res)));
+						break;
+					}
+					Util_log_save("curl", "got " + std::to_string(status_code) + " size:" + std::to_string(received_data.size()));
+					received_data.clear();
+				}
+			 
+				curl_easy_cleanup(curl);
+			}
+		} else if (httpc_access_request) {
+			httpc_access_request = false;
+			
+			for (int i = 0; i < 1; i++) {
+				std::string url = test_url4;
+				Util_log_save("httpc", "start");
+				
+				constexpr int BLOCK = 0x40000; // 256 KB
+				// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
+				auto network_res = access_http_get(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
+				Util_log_save("httpc", "middle");
+				std::vector<u8> res;
+				if (network_res.first == "") {
+					std::vector<u8> buffer(BLOCK);
+					while (1) {
+						u32 len_read;
+						Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
+						res.insert(res.end(), buffer.begin(), buffer.begin() + len_read);
+						if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
+					}
+					
+					httpcCloseContext(&network_res.second);
+				} else Util_log_save("httpc", "failed accessing : " + network_res.first);
+				Util_log_save("httpc", "end " + std::to_string(res.size()));
+			}
+		} else if (sslc_access_request) {
+			sslc_access_request = false;
+			if (!sslc_session_inited) {
+				session = sslc_init("r4---sn-ogueln7k.googlevideo.com");
+				Util_log_save("sslc session is_fail : ", std::to_string(session.fail));
+				if (!session.fail) sslc_session_inited = true;
+			}
+			
+			add_cpu_limit(25);
+			for (int i = 100; i < 110; i++) {
+				sslc_request(session, "/videoplayback?expire=1628537586&ei=ki4RYeyCJJX-4gK9paS4BQ&ip=221.240.44.218&id=JGFIw4dfbH0.1&itag=134&aitags=133%2C134%2C135%2C136%2C137%2C160%2C242%2C243%2C244%2C247%2C248%2C278&source=yt_live_broadcast&requiressl=yes&mh=Y7&mm=44%2C29&mn=sn-ogueln7k%2Csn-oguesnzd&ms=lva%2Crdu&mv=m&mvi=4&pl=16&initcwndbps=893750&vprv=1&live=1&hang=1&noclen=1&mime=video%2Fmp4&ns=tgcYtcVUBEmuGct5Qvo55aoG&gir=yes&mt=1628515707&fvip=4&keepalive=yes&fexp=24001373%2C24007246&c=MWEB&n=AQJ2W4VX5sHcJA&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Clive%2Chang%2Cnoclen%2Cmime%2Cns%2Cgir&sig=AOq0QJ8wRAIgaRyOZGh41cViEz_JevpOMmg5ul2aeHtvnpXZHZQJryUCIE9T5Y8W0D7bl3u2iqLZdR5YVjAqybtHaU3X1z9e9fjN&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgVBjsOzt-UK9T4zN8aNvNc9i3wbE0-608as9oAfKgFnwCIE36h0asyBU1rRESvolaAqP9l2bKGCC1HJlAYon1JEmX&ratebypass=yes" + std::to_string(i));
+			}
+			remove_cpu_limit(25);
+		} else usleep(50000);
+	}
+	if (sslc_session_inited) session.close();
+	
+	Util_log_save("settings/save", "Thread exit.");
+	threadExit(0);
+}
+
+ScrollView *main_view;
+
+bool Sem_query_init_flag(void) {
+	return already_init;
+}
+
+void Sem_resume(std::string arg)
+{
+	overlay_menu_on_resume();
+	main_view->on_resume();
+	thread_suspend = false;
+	var_need_reflesh = true;
+}
+
+void Sem_suspend(void)
+{
+	thread_suspend = true;
+}
+
+void Sem_init(void)
+{
+	Util_log_save("settings/init", "Initializing...");
+	Result_with_string result;
+	
+	load_settings();
+	load_string_resources(var_lang);
+	
+	settings_misc_thread = threadCreate(settings_misc_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 1, false);
+	
+	main_view = (new ScrollView(0, MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2, 320, 240 - MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2))
+		->set_views({
+			// 'Settings'
+			(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
+				->set_text(LOCALIZED(SETTINGS))
+				->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL),
+			// ---------------------
+			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
+			
+			// UI language
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(LANG_EN); },
+					(std::function<std::string ()>) []() { return LOCALIZED(LANG_JA); }
+				}, var_lang == "ja" ? 1 : 0)
+				->set_title([](const SelectorView &) { return LOCALIZED(UI_LANGUAGE); })
+				->set_on_change([](const SelectorView &view) {
+					auto next_lang = std::vector<std::string>{"en", "ja"}[view.selected_button];
+					if (var_lang != next_lang) {
+						var_lang = next_lang;
+						save_settings_request = true;
+						string_resource_reload_request = true;
+					}
+				}),
+			// Content language
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(LANG_EN); },
+					(std::function<std::string ()>) []() { return LOCALIZED(LANG_JA); }
+				}, var_lang_content == "ja" ? 1 : 0)
+				->set_title([](const SelectorView &) { return LOCALIZED(CONTENT_LANGUAGE); })
+				->set_on_change([](const SelectorView &view) {
+					auto next_lang = std::vector<std::string>{"en", "ja"}[view.selected_button];
+					if (var_lang_content != next_lang) {
+						var_lang_content = next_lang;
+						save_settings_request = true;
+						youtube_change_content_language(var_lang_content);
+					}
+				}),
+			// LCD Brightness
+			(new BarView(0, 0, 320, 40))
+				->set_values(15, 163, var_lcd_brightness)
+				->set_title([] (const BarView &view) { return LOCALIZED(LCD_BRIGHTNESS); })
+				->set_while_holding([] (const BarView &view) {
+					var_lcd_brightness = view.value;
+					change_brightness_request = true;
+				})
+				->set_on_release([] (const BarView &view) { save_settings_request = true; }),
+			// Time to turn off LCD
+			(new BarView(0, 0, 320, 40))
+				->set_values(10, 310, var_time_to_turn_off_lcd <= 309 ? var_time_to_turn_off_lcd : 310)
+				->set_title([] (const BarView &view) { return LOCALIZED(TIME_TO_TURN_OFF_LCD) + " : " +
+					(view.value <= 309 ? std::to_string((int) view.value) + " " + LOCALIZED(SECONDS) : LOCALIZED(NEVER_TURN_OFF)); })
+				->set_on_release([] (const BarView &view) {
+					var_time_to_turn_off_lcd = view.value <= 309 ? view.value : 1000000000;
+					save_settings_request = true;
+				}),
+			// Eco mode
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+					(std::function<std::string ()>) []() { return LOCALIZED(ON); }
+				}, var_eco_mode)
+				->set_title([](const SelectorView &) { return LOCALIZED(ECO_MODE); })
+				->set_on_change([](const SelectorView &view) {
+					if (var_eco_mode != view.selected_button) {
+						var_eco_mode = view.selected_button;
+						save_settings_request = true;
+					}
+				}),
+			// Dark theme (plus flash)
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+					(std::function<std::string ()>) []() { return LOCALIZED(ON); },
+					(std::function<std::string ()>) []() { return LOCALIZED(FLASH); }
+				}, var_flash_mode ? 2 : var_night_mode)
+				->set_title([](const SelectorView &) { return LOCALIZED(DARK_THEME); })
+				->set_on_change([](const SelectorView &view) {
+					if (var_flash_mode != (view.selected_button == 2)) {
+						var_flash_mode = (view.selected_button == 2);
+						save_settings_request = true;
+					}
+					if (!var_flash_mode && var_night_mode != view.selected_button) {
+						var_night_mode = view.selected_button;
+						save_settings_request = true;
+					}
+				}),
+			// margin at the end of the list
+			(new EmptyView(0, 0, 320, 4))
+		});
+	
+	// result = Util_load_msg("sapp0_" + var_lang + ".txt", vid_msg, DEF_SEARCH_NUM_OF_MSG);
+	// Util_log_save(DEF_SAPP0_INIT_STR, "Util_load_msg()..." + result.string + result.error_description, result.code);
+
+	Sem_resume("");
+	already_init = true;
+}
+
+void Sem_exit(void)
+{
+	already_init = false;
+	thread_suspend = false;
+	exiting = true;
+	
+	u64 time_out = 10000000000;
+	Util_log_save("settings", "threadJoin()...", threadJoin(settings_misc_thread, time_out));
+	threadFree(settings_misc_thread);
+	
+	save_settings();
+	
+	Util_log_save("settings/exit", "Exited.");
+}
+
+Intent Sem_draw(void)
+{
+	Intent intent;
+	intent.next_scene = SceneType::NO_CHANGE;
+	
+	Hid_info key;
+	Util_hid_query_key_state(&key);
+	Util_hid_key_flag_reset();
+	
+	thumbnail_set_active_scene(SceneType::SETTINGS);
+	
+	bool video_playing_bar_show = video_is_playing();
+	CONTENT_Y_HIGH = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
+	main_view->update_y_range(0, CONTENT_Y_HIGH);
+	
+	if(var_need_reflesh || !var_eco_mode)
+	{
+		var_need_reflesh = false;
+		Draw_frame_ready();
+		Draw_screen_ready(0, DEFAULT_BACK_COLOR);
+
+		if(Util_log_query_log_show_flag())
+			Util_log_draw();
+
+		Draw_top_ui();
+		
+		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
+		
+		main_view->draw();
+		
+		if (video_playing_bar_show) video_draw_playing_bar();
+		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);
+		
+		if(Util_expl_query_show_flag())
+			Util_expl_draw();
+
+		if(Util_err_query_error_show_flag())
+			Util_err_draw();
+
+		Draw_touch_pos();
+
+		Draw_apply_draw();
+	}
+	else
+		gspWaitForVBlank();
+	
+
+	if (Util_err_query_error_show_flag()) {
+		Util_err_main(key);
+	} else if(Util_expl_query_show_flag()) {
+		Util_expl_main(key);
+	} else {
+		update_overlay_menu(&key, &intent, SceneType::SETTINGS);
+		
+		main_view->update(key);
+		
+		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		
+		if (key.p_x) curl_access_request = true;
+		if (key.p_y) httpc_access_request = true;
+		if (key.p_a) sslc_access_request = true;
+		if (key.p_b) intent.next_scene = SceneType::BACK;
+		if (key.h_touch || key.p_touch) var_need_reflesh = true;
+		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
+	}
+
+	if(Util_log_query_log_show_flag())
+		Util_log_main(key);
+	
+	return intent;
+}

@@ -1,5 +1,8 @@
 #include "headers.hpp"
 #include <vector>
+#include <string>
+#include <set>
+#include <map>
 #include <numeric>
 
 #include "scenes/channel.hpp"
@@ -8,6 +11,8 @@
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"
+#include "network/thumbnail_loader.hpp"
+#include "network/webpage_loader.hpp"
 
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96

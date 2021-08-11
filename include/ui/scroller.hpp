@@ -1,5 +1,6 @@
 #pragma once
 #include <utility>
+#include <deque>
 #include "types.hpp"
 
 class VerticalScroller {

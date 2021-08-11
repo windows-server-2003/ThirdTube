@@ -5,6 +5,9 @@
 #include "scenes/channel.hpp"
 #include "scenes/about.hpp"
 #include "scenes/setting_menu.hpp"
+#include "network/network_io.hpp"
+#include "network/thumbnail_loader.hpp"
+#include "network/webpage_loader.hpp"
 #include "ui/colors.hpp"
 // add here
 
@@ -39,6 +42,13 @@ void Menu_init(void)
 	Util_log_save(DEF_MENU_INIT_STR, "aptInit()...", aptInit());
 	Util_log_save(DEF_MENU_INIT_STR, "mcuHwcInit()...", mcuHwcInit());
 	Util_log_save(DEF_MENU_INIT_STR, "ptmuInit()...", ptmuInit());
+	{
+		constexpr int SOC_BUFFERSIZE = 0x100000;
+		u32 *soc_buffer = (u32 *) memalign(0x1000, SOC_BUFFERSIZE);
+		if (!soc_buffer) Util_log_save(DEF_MENU_INIT_STR, "soc buffer out of memory");
+		else Util_log_save(DEF_MENU_INIT_STR, "socInit()...", socInit(soc_buffer, SOC_BUFFERSIZE));
+	}
+	Util_log_save(DEF_MENU_INIT_STR, "sslcInit()...", sslcInit(0));
 	Util_log_save(DEF_MENU_INIT_STR, "httpcInit()...", httpcInit(0x500000));
 	Util_log_save(DEF_MENU_INIT_STR, "romfsInit()...", romfsInit());
 	Util_log_save(DEF_MENU_INIT_STR, "cfguInit()...", cfguInit());
@@ -133,6 +143,8 @@ void Menu_exit(void)
 	threadFree(menu_update_thread);
 	threadFree(thumbnail_downloader_thread);
 	threadFree(webpage_loader_thread);
+	
+	NetworkSessionList::at_exit();
 
 	fsExit();
 	acExit();
@@ -144,6 +156,8 @@ void Menu_exit(void)
 	cfguExit();
 	amExit();
 	ndspExit();
+	sslcExit();
+	socExit();
 	Draw_exit();
 
 	Util_log_save(DEF_MENU_EXIT_STR, "Exited.");

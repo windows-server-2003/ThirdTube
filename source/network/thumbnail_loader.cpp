@@ -1,6 +1,18 @@
 #include "headers.hpp"
+#include "network/network_io.hpp"
+#include "network/thumbnail_loader.hpp"
+#include <set>
 #include <map>
 #include <queue>
+
+static bool thread_network_session_list_inited = false;
+static NetworkSessionList thread_network_session_list;
+static void confirm_thread_network_session_list_inited() {
+	if (!thread_network_session_list_inited) {
+		thread_network_session_list_inited = true;
+		thread_network_session_list.init();
+	}
+}
 
 struct LoadedThumbnail {
 	int image_width;
@@ -113,29 +125,14 @@ bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len
 	return res;
 }
 
-
 static std::vector<u8> http_get(const std::string &url) {
-	constexpr int BLOCK = 0x40000; // 256 KB
-	add_cpu_limit(30);
-	// use mobile version of User-Agent for smaller webpage (and the whole parser is designed to parse the mobile version)
-	auto network_res = access_http_get(url, {{"User-Agent", "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36"}});
-	std::vector<u8> res;
-	if (network_res.first == "") {
-		std::vector<u8> buffer(BLOCK);
-		while (1) {
-			u32 len_read;
-			Result ret = httpcDownloadData(&network_res.second, &buffer[0], BLOCK, &len_read);
-			res.insert(res.end(), buffer.begin(), buffer.begin() + len_read);
-			if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
-		}
-		
-		httpcCloseContext(&network_res.second);
-	} else Util_log_save("thumb-dl", "failed accessing : " + network_res.first);
-	
-	remove_cpu_limit(30);
-	return res;
+	confirm_thread_network_session_list_inited();
+	auto result = Access_http_get(thread_network_session_list, url, {});
+	if (result.fail) {
+		Util_log_save("thumb-dl", "access fail : " + result.error);
+	}
+	return result.data;
 }
-
 
 static bool should_be_running = true;
 void thumbnail_downloader_thread_func(void *arg) {
