@@ -2,6 +2,7 @@
 
 A work-in-progress homebrew YouTube client for the new 3DS  
 [GBAtemp Thread](https://gbatemp.net/threads/release-thirdtube-a-homebrew-youtube-client-for-the-new-3ds.591696/)
+[Discord Server](https://discord.com/invite/zwtxTxPP)
 
 ## Instability Warning
 
@@ -21,6 +22,7 @@ The name is derived from the fact that it is the third YouTube client on 3DS, fo
 
  - 360p Video Playback  
    480p might be possible and could be considered in the future development
+ - Livestreams and premiere videos support
  - Searching  
  - Video suggestion  
  - Comments  
