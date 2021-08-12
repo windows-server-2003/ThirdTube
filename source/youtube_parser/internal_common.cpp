@@ -16,6 +16,7 @@ namespace youtube_parser {
 	
 #ifdef _WIN32
 	std::string http_get(const std::string &url, std::map<std::string, std::string> header) {
+		static int cnt = 0;
 		static const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
 		if (!header.count("User-Agent")) header["User-Agent"] = user_agent;
 		if (!header.count("Accept-Language")) header["Accept-Language"] = language_code + ";q=0.9";
@@ -24,12 +25,13 @@ namespace youtube_parser {
 			std::ofstream file("wget_url.txt");
 			file << url;
 		}
+		std::string save_file_name = "wget_tmp" + std::to_string(cnt++) + ".txt";
 		
-		std::string command = "wget -i wget_url.txt -O wget_tmp.txt --no-check-certificate";
+		std::string command = "wget -i wget_url.txt -O " + save_file_name + " --no-check-certificate";
 		for (auto i : header) command += " --header=\"" + i.first + ": " + i.second + "\"";
 		
 		system(command.c_str());
-		std::ifstream file("wget_tmp.txt");
+		std::ifstream file(save_file_name);
 		std::stringstream sstream;
 		sstream << file.rdbuf();
 		return sstream.str();
@@ -128,7 +130,6 @@ namespace youtube_parser {
 		return "";
 	}
 
-	
 	std::string remove_garbage(const std::string &str, size_t start) {
 		while (start < str.size() && str[start] == ' ') start++;
 		if (start >= str.size()) {
@@ -143,9 +144,24 @@ namespace youtube_parser {
 					if (pos + 1 == str.size()) break;
 					if (str[pos + 1] == 'x') {
 						if (pos + 3 >= str.size()) break;
-						size_t err;
-						int char_code = stoi(str.substr(pos + 2, 2), &err, 16);
-						if (err != 2) {
+						int char_code = 0;
+						bool ok = true;
+						for (int i = 0; i < 2; i++) {
+							if (pos + 2 + i >= str.size()) {
+								ok = false;
+								break;
+							}
+							char cur_char = str[pos + 2 + i];
+							char_code <<= 4; // * 16
+							if ('0' <= cur_char && cur_char <= '9') char_code += cur_char - '0';
+							else if ('a' <= cur_char && cur_char <= 'f') char_code += cur_char - 'a' + 10;
+							else if ('A' <= cur_char && cur_char <= 'F') char_code += cur_char - 'A' + 10;
+							else {
+								ok = false;
+								break;
+							}
+						}
+						if (!ok) {
 							debug("remove_garbage : failed to parse " + str.substr(pos + 2, 2) + " as hex");
 							return "";
 						}
@@ -192,7 +208,26 @@ namespace youtube_parser {
 		if (error != "") return error_json(error);
 		return res;
 	}
-
+	// search for `var_name` = ' or `var_name` = {
+	bool fast_extract_initial(const std::string &html, const std::string &var_name, Json &res) {
+		size_t head = 0;
+		while (head < html.size()) {
+			auto pos = html.find(var_name, head);
+			if (pos == std::string::npos) break;
+			pos += var_name.size();
+			while (pos < html.size() && isspace(html[pos])) pos++;
+			if (pos < html.size() && html[pos] == '=') {
+				pos++;
+				while (pos < html.size() && isspace(html[pos])) pos++;
+				if (pos < html.size() && (html[pos] == '\'' || html[pos] == '{')) {
+					res = to_json(html, pos);
+					if (res != Json()) return true;
+				}
+			}
+			head = pos;
+		}
+		return false;
+	}
 	Json get_succeeding_json_regexes(const std::string &html, std::vector<const char *> patterns) {
 		for (auto pattern_str : patterns) {
 			std::regex pattern = std::regex(std::string(pattern_str));

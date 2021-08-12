@@ -3,9 +3,29 @@
 #include "parser.hpp"
 
 static Json get_initial_data(const std::string &html) {
-	auto res = get_succeeding_json_regexes(html, {
-		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]",
-		"ytInitialData\\s*=\\s*['\\{]"
+	Json res;
+	{ // fast extraction
+		size_t head = 0;
+		while (head < html.size()) {
+			auto pos = html.find("ytInitialData", head);
+			if (pos == std::string::npos) break;
+			pos += std::string("ytInitialData").size();
+			while (pos < html.size() && isspace(html[pos])) pos++;
+			if (pos < html.size() && html[pos] == '=') {
+				pos++;
+				while (pos < html.size() && isspace(html[pos])) pos++;
+				if (pos < html.size() && (html[pos] == '\'' || html[pos] == '\\' || html[pos] == '{')) {
+					res = to_json(html, pos);
+					break;
+				}
+			}
+			head = pos;
+		}
+	}
+	if (res != Json()) return res;
+	res = get_succeeding_json_regexes(html, {
+		"ytInitialData\\s*=\\s*['\\{]",
+		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]"
 	});
 	if (res == Json()) return Json::object{{{"Error", "did not match any of the ytInitialData regexes"}}};
 	return res;

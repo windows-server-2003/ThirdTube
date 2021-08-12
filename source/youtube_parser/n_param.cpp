@@ -13,23 +13,41 @@
 #define debug(s) std::cerr << (s) << std::endl
 #else
 #include "headers.hpp"
-#define debug(s) Util_log_save("yt-parser", (s));
 #endif
 
 /* Mostly ported from pytube */
 
-static std::string get_initial_function_name_precise(const std::string &js) {
-	std::vector<std::string> function_patterns = {
-		R"(a\.C&&\(b=a\.get\("n"\)\)&&\(b=([^(]+)\(b\),a\.set\("n",b\)\)}};)"
-	};
-	for (auto pattern_str : function_patterns) {
-		std::regex pattern(pattern_str);
-		std::smatch match_res;
-		if (std::regex_search(js, match_res, pattern))
-			return match_res[1].str();
-	}
+static std::string get_initial_function_name(const std::string &js) {
+	const std::string prefix = ".get(";
+	const std::string middle = "\"n\"";
+	const std::string suffix = "))&&(?=";
 	
-	return "";
+	size_t head = 0;
+	std::vector<std::string> candidates;
+	while (head < js.size()) {
+		auto pos = js.find(middle, head);
+		if (pos == std::string::npos) break;
+		pos += middle.size();
+		head = pos;
+		
+		if (pos >= prefix.size() + middle.size() && js.substr(pos - prefix.size() - middle.size(), prefix.size() + middle.size()) == prefix + middle) {
+			bool ok = true;
+			for (size_t i = 0; i < suffix.size(); i++) if (suffix[i] != '?' && suffix[i] != js[pos + i]) {
+				ok = false;
+				break;
+			}
+			if (!ok) continue;
+			std::string cur_name;
+			pos += suffix.size();
+			while (pos < js.size() && isalnum(js[pos])) cur_name.push_back(js[pos]), pos++;
+			candidates.push_back(cur_name);
+		}
+	}
+	if (candidates.size() != 1) {
+		debug("[nparam] initial funciton name candidate num : " + std::to_string(candidates.size()));
+		return "";
+	}
+	return candidates[0];
 }
 
 std::vector<char> get_h_cipher(const std::string &content) {
@@ -118,6 +136,18 @@ using FunctionType = NParamFunctionType;
 using CArrayContent = NParamCArrayContent;
 
 std::vector<CArrayContent> get_carray(const std::string &func_content) {
+	static const std::vector<std::pair<std::regex, FunctionType> > function_patterns = {
+		{std::regex(R"(\{for\(\w=\(\w%\w\.length\+\w\.length\)%\w\.length;\w--;\)\w\.unshift\(\w.pop\(\)\)\})"), FunctionType::ROTATE_RIGHT},
+		{std::regex(R"(\{\w\.reverse\(\)\})"), FunctionType::REVERSE},
+		{std::regex(R"(\{\w\.push\(\w\)\})"), FunctionType::PUSH},
+		{std::regex(R"(;var\s\w=\w\[0\];\w\[0\]=\w\[\w\];\w\[\w\]=\w\})"), FunctionType::SWAP},
+		{std::regex(R"(case\s\d+)"), FunctionType::CIPHER},
+		{std::regex(R"(\w\.splice\(0,1,\w\.splice\(\w,1,\w\[0\]\)\[0\]\))"), FunctionType::SWAP},
+		{std::regex(R"(;\w\.splice\(\w,1\)\})"), FunctionType::SPLICE},
+		{std::regex(R"(\w\.splice\(-\w\)\.reverse\(\)\.forEach\(function\(\w\)\{\w\.unshift\(\w\)\}\))"), FunctionType::ROTATE_RIGHT},
+		{std::regex(R"(for\(var \w=\w\.length;\w;\)\w\.push\(\w\.splice\(--\w,1\)\[0\]\)\})"), FunctionType::REVERSE}
+	};
+	
 	std::vector<CArrayContent> res;
 	
 	auto array_start = func_content.find(",c=[");
@@ -146,17 +176,6 @@ std::vector<CArrayContent> get_carray(const std::string &func_content) {
 			auto content = remove_garbage(array_str, start_pos);
 			auto end_pos = start_pos + content.size();
 			
-			std::vector<std::pair<std::regex, FunctionType> > function_patterns = {
-				{std::regex(R"(\{for\(\w=\(\w%\w\.length\+\w\.length\)%\w\.length;\w--;\)\w\.unshift\(\w.pop\(\)\)\})"), FunctionType::ROTATE_RIGHT},
-				{std::regex(R"(\{\w\.reverse\(\)\})"), FunctionType::REVERSE},
-				{std::regex(R"(\{\w\.push\(\w\)\})"), FunctionType::PUSH},
-				{std::regex(R"(;var\s\w=\w\[0\];\w\[0\]=\w\[\w\];\w\[\w\]=\w\})"), FunctionType::SWAP},
-				{std::regex(R"(case\s\d+)"), FunctionType::CIPHER},
-				{std::regex(R"(\w\.splice\(0,1,\w\.splice\(\w,1,\w\[0\]\)\[0\]\))"), FunctionType::SWAP},
-				{std::regex(R"(;\w\.splice\(\w,1\)\})"), FunctionType::SPLICE},
-				{std::regex(R"(\w\.splice\(-\w\)\.reverse\(\)\.forEach\(function\(\w\)\{\w\.unshift\(\w\)\}\))"), FunctionType::ROTATE_RIGHT},
-				{std::regex(R"(for\(var \w=\w\.length;\w;\)\w\.push\(\w\.splice\(--\w,1\)\[0\]\)\})"), FunctionType::REVERSE}
-			};
 			bool matched = false;
 			for (auto i : function_patterns) {
 				std::smatch match_result;
@@ -227,7 +246,7 @@ std::vector<std::pair<int, std::pair<int, int> > > get_ops(const std::string &fu
 	std::string ops_str;
 	for (auto c : remove_garbage(func_content, array_start + 3)) if (c != '\r' && c != '\n') ops_str.push_back(c);
 	
-	std::regex op_regex(std::string(R"(\w+\[(\d+)\]\(\w+\[(\d+)\](,\w+\[(\d+)\])?\))"));
+	static const std::regex op_regex(std::string(R"(\w+\[(\d+)\]\(\w+\[(\d+)\](,\w+\[(\d+)\])?\))"));
 	size_t head = 1;
 	while (head + 1 < ops_str.size()) {
 		if (!isalpha(ops_str[head])) {
@@ -265,15 +284,17 @@ yt_nparam_transform_procedure yt_nparam_get_transform_plan(const std::string &js
 	// get initial function name
 	std::string func_content;
 	{
-		std::string name = get_initial_function_name_precise(js);
+		std::string name = get_initial_function_name(js);
 		if (name == "") {
 			debug("Failed to get nparam transform function");
 			return {};
 		}
-		std::smatch match_res;
-		if (std::regex_search(js, match_res, std::regex(name + R"(=function\(\w+\))"))) {
-			auto itr = match_res[0].second;
-			func_content = remove_garbage(js, itr - js.begin());
+		auto pos = js.find(name + "=function(");
+		if (pos != std::string::npos) {
+			pos += (name + "=function(").size();
+			pos = std::find(js.begin() + pos, js.end(), ')') - js.begin();
+			if (pos + 1 < js.size()) func_content = remove_garbage(js, pos + 1);
+			else debug("[nparam] unexpected : function definition truncated");
 		} else {
 			debug("nparam transform function definition not found");
 			return {};
@@ -291,6 +312,10 @@ int64_t normalize(int64_t size, int64_t val) {
 	return (val % size + size) % size;
 }
 template<typename T> static void op_rotate_right(std::vector<T> &list, int64_t arg) {
+	if (!list.size()) {
+		debug("[nparam] list.size() == 0 in op_rotate_right()");
+		return;
+	}
 	arg = normalize(list.size(), arg);
 	std::rotate(list.begin(), list.end() - arg, list.end());
 }
@@ -299,10 +324,18 @@ template<typename T> static void op_reverse(std::vector<T> &list) {
 }
 // push is only for Type::SELF, so no separate function here
 template<typename T> static void op_swap(std::vector<T> &list, int64_t arg) {
+	if (!list.size()) {
+		debug("[nparam] list.size() == 0 in op_swap()");
+		return;
+	}
 	arg = normalize(list.size(), arg);
 	std::swap(list[0], list[arg]);
 }
 template<typename T> static void op_splice(std::vector<T> &list, int64_t arg, int64_t delete_count = -1) {
+	if (!list.size()) {
+		debug("[nparam] list.size() == 0 in op_splice()");
+		return;
+	}
 	arg = normalize(list.size(), arg);
 	
 	if (delete_count == -1 || delete_count > (int64_t) list.size() - arg)
@@ -311,7 +344,7 @@ template<typename T> static void op_splice(std::vector<T> &list, int64_t arg, in
 	list.erase(list.begin() + arg, list.begin() + arg + delete_count);
 }
 template<typename T> static void op_cipher(const std::string &internal_arg, std::vector<T> &list, std::vector<char> arg) {
-	auto chars = internal_arg;
+	auto &chars = internal_arg;
 	int f = 96;
 	
 	auto list_copy = list;
@@ -319,6 +352,10 @@ template<typename T> static void op_cipher(const std::string &internal_arg, std:
 		int bracket_val = (int) (std::find(chars.begin(), chars.end(), list_copy[i]) - chars.begin()) -
 						  (int) (std::find(chars.begin(), chars.end(), arg[i]) - chars.begin()) + i - 32 + f;
 		bracket_val %= chars.size();
+		if (bracket_val < 0) {
+			debug("[nparam] unexpected OoB error in op_cipher()");
+			return;
+		}
 		arg.push_back(chars[bracket_val]);
 		list[i] = chars[bracket_val];
 		f--;
@@ -331,6 +368,18 @@ std::string yt_modify_nparam(std::string n_param_org, const yt_nparam_transform_
 		int func_index = op.first;
 		int arg0_index = op.second.first;
 		int arg1_index = op.second.second;
+		if (func_index < 0 || func_index >= (int) c.size()) {
+			debug("[nparam] func index out of bound");
+			return n_param_org;
+		}
+		if (arg0_index < 0 || arg0_index >= (int) c.size()) {
+			debug("[nparam] arg0 index out of bound");
+			return n_param_org;
+		}
+		if (arg1_index != -1 && (arg1_index < 0 || arg1_index >= (int) c.size())) {
+			debug("[nparam] arg1 index out of bound");
+			return n_param_org;
+		}
 		if (c[func_index].type != CArrayContent::Type::FUNCTION) {
 			debug("function expected");
 			return n_param_org;
@@ -357,6 +406,10 @@ std::string yt_modify_nparam(std::string n_param_org, const yt_nparam_transform_
 				return n_param_org;
 			}
 		} else if (c[func_index].function == FunctionType::PUSH) {
+			if (arg1_index == -1) {
+				debug("push : arg1 expected");
+				return n_param_org;
+			}
 			if (c[arg0_index].type == CArrayContent::Type::SELF) c.push_back((CArrayContent) c[arg1_index]);
 			else {
 				debug("reverse : unknown arg0 type : " + c[arg0_index].to_string());
@@ -396,6 +449,9 @@ std::string yt_modify_nparam(std::string n_param_org, const yt_nparam_transform_
 				debug("splice : unknown arg0 type : " + c[arg0_index].to_string());
 				return n_param_org;
 			}
+		} else {
+			debug("[nparam] : unknown function : " + c[arg0_index].to_string());
+			return n_param_org;
 		}
 	}
 	

@@ -3,7 +3,9 @@
 #include "parser.hpp"
 
 static Json get_initial_data(const std::string &html) {
-	auto res = get_succeeding_json_regexes(html, {
+	Json res;
+	if (fast_extract_initial(html, "ytInitialData", res)) return res;
+	res = get_succeeding_json_regexes(html, {
 		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]",
 		"ytInitialData\\s*=\\s*['\\{]"
 	});
@@ -14,7 +16,7 @@ static Json get_initial_data(const std::string &html) {
 YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 	YouTubeChannelDetail res;
 	
-	url = convert_url_to_mobile(url); // mobile version doesn't offer channel description
+	url = convert_url_to_mobile(url);
 	
 	// append "/videos" at the end of the url
 	{
@@ -104,14 +106,15 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 	// debug(res.description);
 	
 	{
-		std::regex pattern(std::string(R"***("INNERTUBE_API_KEY":"([\w-]+)")***"));
-		std::smatch match_result;
-		if (std::regex_search(html, match_result, pattern)) {
-			res.continue_key = match_result[1].str();
-		} else {
+		const std::string prefix = "\"INNERTUBE_API_KEY\":\"";
+		auto pos = html.find(prefix);
+		if (pos != std::string::npos) {
+			pos += prefix.size();
+			while (pos < html.size() && html[pos] != '"') res.continue_key.push_back(html[pos++]);
+		}
+		if (res.continue_key == "") {
 			debug("INNERTUBE_API_KEY not found");
 			res.error = "INNERTUBE_API_KEY not found";
-			return res;
 		}
 	}
 	

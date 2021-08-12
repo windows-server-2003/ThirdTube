@@ -1,4 +1,6 @@
 #pragma once
+#include <vector>
+#include <string>
 
 enum class NParamFunctionType {
 	ROTATE_RIGHT,

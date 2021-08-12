@@ -4,6 +4,7 @@
 #include <string>
 #include <map>
 #include "cipher.hpp"
+#include "internal_common.hpp"
 
 #ifdef _WIN32
 #include <iostream> // <------------
@@ -12,7 +13,6 @@
 #define debug(s) std::cerr << (s) << std::endl
 #else
 #include "headers.hpp"
-#define debug(s) Util_log_save("yt-parser", (s));
 #endif
 
 
@@ -57,21 +57,64 @@ yt_cipher_transform_procedure yt_cipher_get_transform_plan(const std::string &js
 	// get initial function name
 	std::string initial_func_content;
 	{
-		std::regex simple_regex(std::string(R"((\w+)=function\(\w\)\{\w+=\w+\.split\(\"\"\);([^\{\}]*);(?:[^\{\}]+)\})"));
-		std::smatch match_res;
-		bool simple_detect_ok = true;
-		if (regex_search(js, match_res, simple_regex)) {
-			initial_func_content = match_res[2].str();
-			if (regex_search(match_res.suffix().first, js.end(), match_res, simple_regex)) simple_detect_ok = false;
-		} else {
-			debug("simple regex doesn't match at all");
-			simple_detect_ok = false;
+		bool fast_detect_ok = false;
+		{
+			// search for   =function(?){?=?.split("")   where ? refers to the same one character (seems like it's always 'a' though)
+			size_t head = 0;
+			std::vector<std::string> candidates;
+			
+			const std::string prefix = "function(?){?=?.spl";
+			const std::string middle = "it(\"\");";
+			while (head < js.size()) {
+				auto pos = js.find(middle, head);
+				if (pos == std::string::npos) break;
+				
+				if (pos >= std::string(prefix).size()) {
+					pos -= std::string(prefix).size();
+					char var_name;
+					bool var_name_first = true;
+					bool ok = true;
+					for (size_t i = 0; i < prefix.size(); i++) {
+						if (prefix[i] == '?') {
+							if (var_name_first) var_name = js[pos + i];
+							else if (var_name != js[pos + i]) {
+								ok = false;
+								break;
+							}
+						} else if (prefix[i] != js[pos + i]) {
+							ok = false;
+							break;
+						}
+					}
+					if (ok) {
+						size_t start = pos + prefix.size() + middle.size();
+						size_t end = start;
+						int level = 1;
+						for (; end < js.size() && level; end++) {
+							if (js[end] == '}') level--;
+							else if (js[end] == '{') level++;
+						}
+						if (start < end) {
+							while (--end >= start && js[end] != ';') end--;
+							candidates.push_back(js.substr(start, end - start));
+						}
+					}
+					pos += prefix.size();
+				}
+				head = pos + middle.size();
+			}
+			if (candidates.size() == 1) {
+				initial_func_content = candidates[0];
+				fast_detect_ok = true;
+			}
 		}
-		if (!simple_detect_ok) {
+		
+		if (!fast_detect_ok) {
 			debug("simple detection failed, conducting full detection");
 			std::string initial_func_name = get_initial_function_name_precise(js);
 			debug("initial func name : " + initial_func_name);
 			std::regex content_regex(initial_func_name + R"(=function\(\w\)\{[a-z=\.\(\"\)]*;(.*);(?:.+)\})");
+			std::smatch match_res;
 			if (regex_search(js, match_res, content_regex)) {
 				initial_func_content = match_res[1].str();
 			} else {
@@ -85,20 +128,40 @@ yt_cipher_transform_procedure yt_cipher_get_transform_plan(const std::string &js
 		if (!isdigit(c) && !isalpha(c) && c != '_' && c != '$') break;
 		var_name.push_back(c);
 	}
-	// debug("var name : " + var_name);
 	
 	// search for the definition of var_name, create the map of its member function names and operation types
 	std::map<std::string, int> operation_map;
 	{
-		std::regex pattern(std::string("var " + var_name + R"(\s*=\s*\{([\s\S]*?)\};)"));
-		std::smatch match_res;
-		std::string definition;
-		if (regex_search(js, match_res, pattern)) {
-			for (auto c : match_res[1].str()) if (c != ' ' && c != '\r' && c != '\n') definition.push_back(c);
-		} else {
-			debug("definition of the transformer var (" + var_name + ") not found");
+		// search for the variable definition
+		size_t head = 0;
+		std::vector<size_t> candidates;
+		// search for  var [var_name] = {...}
+		while (head < js.size()) {
+			auto pos = js.find(var_name, head);
+			if (pos == std::string::npos) break;
+			size_t left = pos;
+			while (left && isspace(js[left - 1])) left--;
+			size_t right = pos + var_name.size();
+			while (right < js.size() && isspace(js[right])) right++;
+			if (left >= 3 && js.substr(left - 3, 3) == "var" && right < js.size() && js[right] == '=') {
+				while (++right < js.size() && isspace(js[right]));
+				if (js[right] == '{') candidates.push_back(right);
+			}
+			
+			head = pos + var_name.size();
+		}
+		if (candidates.size() != 1) {
+			debug("[cipher] variable definition number not 1 : " + std::to_string(candidates.size()));
 			return {};
 		}
+		std::string definition = remove_garbage(js, candidates[0]);
+		if (definition.size() < 2) {
+			debug("[cipher] unexpected : definition size " + std::to_string(definition.size()));
+			return {};
+		}
+		definition.erase(definition.begin());
+		definition.pop_back();
+		
 		std::string cur_definition;
 		for (size_t i = 0; i <= definition.size(); i++) {
 			if (i == definition.size() || (i && definition[i] == ',' && definition[i - 1] == '}')) {
@@ -114,36 +177,54 @@ yt_cipher_transform_procedure yt_cipher_get_transform_plan(const std::string &js
 				else operation_map[func_name] = 2;
 				
 				cur_definition = "";
-			} else cur_definition.push_back(definition[i]);
+			} else if (!isspace(definition[i])) cur_definition.push_back(definition[i]);
 		}
-		
 	}
 	
 	yt_cipher_transform_procedure res;
-	std::string cur_operation;
-	for (size_t i = 0; i <= initial_func_content.size(); i++) {
-		if (i == initial_func_content.size() || initial_func_content[i] == ';') {
-			std::vector<std::string> patterns = {
-				R"(\w+\.(\w+)\(\w,(\d+)\))",
-				R"(\w+\[(\"\w+\")\]\(\w,(\d+)\))",
-			};
-			for (auto pattern_str : patterns) {
-				std::regex pattern(pattern_str);
-				std::smatch match_res;
-				if (std::regex_search(cur_operation, match_res, pattern)) {
-					std::string op_name = match_res[1].str();
-					if (!operation_map.count(op_name)) {
-						debug("op name not defined : " + op_name);
-						return {};
-					}
-					int op = operation_map[op_name];
-					int arg = stoi(match_res[2].str());
-					res.push_back({op, arg});
-					break;
-				}
+	std::vector<std::string> operation_strs = {""};
+	for (auto c : initial_func_content) {
+		if (c == ';') operation_strs.push_back("");
+		else operation_strs.back().push_back(c);
+	}
+	for (auto operation_str : operation_strs) {
+		if (!operation_str.size()) continue;
+		
+		size_t head = 0;
+		while (head < operation_str.size() && (isalnum(operation_str[head]) || operation_str[head] == '_')) head++;
+		
+		std::string op_name;
+		int arg = -1;
+		if (head < operation_str.size() && operation_str[head] == '.') {
+			auto par0 = std::find(operation_str.begin() + head + 1, operation_str.end(), '(');
+			auto par1 = std::find(par0, operation_str.end(), ',');
+			auto par2 = std::find(par1, operation_str.end(), ')');
+			if (par2 == operation_str.end()) {
+				debug("[cipher] bad line : " + operation_str);
+				continue;
+			} else {
+				op_name = operation_str.substr(head + 1, par0 - operation_str.begin() - (head + 1));
+				arg = stoi(std::string(par1 + 1, par2));
 			}
-			cur_operation = "";
-		} else cur_operation.push_back(initial_func_content[i]);
+		} else if (head + 1 < operation_str.size() && operation_str.substr(head, 2) == "[\"") {
+			auto par1 = std::find(operation_str.begin() + head + 2, operation_str.end(), ']');
+			if (operation_str.substr(par1 - operation_str.begin() - 1, 3) == "\"](") {
+				op_name = std::string(operation_str.begin() + head + 2, par1 - 1);
+				auto par2 = std::find(par1 + 2, operation_str.end(), ',');
+				arg = stoi(std::string(par1 + 2, par2));
+			} else {
+				debug("[cipher] bad line : " + operation_str);
+				continue;
+			}
+		} else {
+			debug("[cipher] unknown operation line : " + operation_str);
+			continue;
+		}
+		if (!operation_map.count(op_name)) {
+			debug("op name not defined : " + op_name);
+			return {};
+		}
+		res.push_back({operation_map[op_name], arg});
 	}
 	
 	return res;
@@ -153,8 +234,22 @@ yt_cipher_transform_procedure yt_cipher_get_transform_plan(const std::string &js
 std::string yt_deobfuscate_signature(std::string sig, const yt_cipher_transform_procedure &transform_plan) {
 	for (auto i : transform_plan) {
 		if (i.first == 0) std::reverse(sig.begin(), sig.end());
-		else if (i.first == 1) sig = sig.substr(i.second, sig.size() - i.second);
-		else std::swap(sig[0], sig[i.second % sig.size()]);
+		else if (i.first == 1) {
+			if (i.second < 0 || i.second > (int) sig.size()) {
+				debug("[cipher] OoB in splice()");
+				return "";
+			}
+			sig = sig.substr(i.second, sig.size() - i.second);
+		} else if (i.first == 2) {
+			if (i.second < 0) {
+				debug("[cipher] OoB in swap()");
+				return "";
+			}
+			std::swap(sig[0], sig[i.second % sig.size()]);
+		} else {
+			debug("[cipher] unknown operation type : " + std::to_string(i.first));
+			return "";
+		}
 	}
 	
 	return sig;

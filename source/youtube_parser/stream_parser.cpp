@@ -3,40 +3,35 @@
 #include "parser.hpp"
 #include "cipher.hpp"
 #include "n_param.hpp"
+#include "cache.hpp"
+
 
 static Json get_initial_data(const std::string &html) {
-	auto res = get_succeeding_json_regexes(html, {
-		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]",
-		"ytInitialData\\s*=\\s*['\\{]"
+	Json res;
+	if (fast_extract_initial(html, "ytInitialData", res)) return res;
+	res = get_succeeding_json_regexes(html, {
+		"ytInitialData\\s*=\\s*['\\{]",
+		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]"
 	});
 	if (res == Json()) return Json::object{{{"Error", "did not match any of the ytInitialData regexes"}}};
 	return res;
 }
 static Json initial_player_response(const std::string &html) {
-	auto res = get_succeeding_json_regexes(html, {
+	Json res;
+	if (fast_extract_initial(html, "ytInitialPlayerResponse", res)) return res;
+	res = get_succeeding_json_regexes(html, {
 		"window\\[['\\\"]ytInitialPlayerResponse['\\\"]]\\s*=\\s*['\\{]",
 		"ytInitialPlayerResponse\\s*=\\s*['\\{]"
 	});
 	if (res == Json()) return Json::object{{{"Error", "did not match any of the ytInitialPlayerResponse regexes"}}};
 	return res;
 }
-static Json get_ytplayer_config(const std::string &html) {
-	auto res = get_succeeding_json_regexes(html, {
-		"ytplayer\\.config\\s*=\\s*['\\{]",
-		"ytInitialPlayerResponse\\s*=\\s*['\\{]"
-	});
-	if (res != Json()) return res;
-	debug("setConfig handling");
-	res = get_succeeding_json_regexes(html, {"yt\\.setConfig\\(.*['\\\"]PLAYER_CONFIG['\\\"]:\\s*['\\{]"});
-	if (res != Json()) return res;
-	return Json::object{{{"Error", "failed to get ytplayer config"}}};
-}
 
 static std::map<std::string, yt_cipher_transform_procedure> cipher_transform_proc_cache;
 static std::map<std::string, yt_nparam_transform_procedure> nparam_transform_proc_cache;
+static std::map<std::pair<std::string, std::string>, std::string> nparam_transform_results_cache;
 static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	Json player_response = initial_player_response(html);
-	Json player_config = get_ytplayer_config(html);
 	
 	res.playability_status = player_response["playabilityStatus"]["status"].string_value();
 	res.playability_reason = player_response["playabilityStatus"]["reason"].string_value();
@@ -52,18 +47,13 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	// for obfuscated signatures & n parameter modification
 	std::string js_url;
 	// get base js url
-	if (player_config["assets"]["js"] != Json()) js_url = player_config["assets"]["js"] != Json();
+	if (player_response["assets"]["js"] != Json()) js_url = player_response["assets"]["js"] != Json();
 	else {
-		std::vector<std::regex> patterns = {
-			std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)")),
-			std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/\\w+_\\w+/base\\.js)"))
-		};
-		std::smatch match_res;
-		for (auto &pattern : patterns) {
-			if (std::regex_search(html, match_res, pattern)) {
-				js_url = match_res[1].str();
-				break;
-			}
+		auto pos = html.find("base.js\"");
+		if (pos != std::string::npos) {
+			size_t end = pos + std::string("base.js").size();
+			while (pos && html[pos] != '"') pos--;
+			if (html[pos] == '"') js_url = html.substr(pos + 1, end - (pos + 1));
 		}
 		if (js_url == "") {
 			debug("could not find base js url");
@@ -72,41 +62,40 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	}
 	js_url = "https://m.youtube.com" + js_url;
 	if (!cipher_transform_proc_cache.count(js_url) || !nparam_transform_proc_cache.count(js_url)) {
-		
 		std::string js_id;
-		std::string js_content;
-		{
-			std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
-			std::smatch match_res;
-			if (std::regex_search(js_url, match_res, std::regex("/s/player/([\\w]+)/"))) js_id = match_res[1].str();
-			else debug("failed to extract js id");
-#ifdef _WIN32
-			js_content = http_get(js_url);
-#else
-			char *buf = (char *) malloc(0x200000);
-			u32 read_size;
-			if (buf && js_id != "" && Util_file_load_from_file(js_id, DEF_MAIN_DIR + "js_cache", (u8 *) buf, 0x200000, &read_size).code == 0) {
-				debug("cache found (" + js_id + ") size:" + std::to_string(read_size) + " found, using...");
-				js_content = std::string(buf);
-			} else {
-				js_content = http_get(js_url);
-				if (js_id != "") {
-					Result_with_string result = Util_file_save_to_file(js_id, DEF_MAIN_DIR + "js_cache", (u8 *) js_content.c_str(), js_content.size(), true);
-					if (result.code != 0) {
-						debug("cache write failed : " + result.error_description);
-					}
-				}
-			}
-			free(buf);
-#endif
-		}
-		
-		if (!js_content.size()) {
-			debug("base js download failed");
+		std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
+		std::smatch match_res;
+		if (std::regex_search(js_url, match_res, std::regex("/s/player/([\\w]+)/"))) js_id = match_res[1].str();
+		if (js_url == "") {
+			debug("failed to extract js id");
 			return false;
 		}
-		cipher_transform_proc_cache[js_url] = yt_cipher_get_transform_plan(js_content);
-		nparam_transform_proc_cache[js_url] = yt_nparam_get_transform_plan(js_content);
+		bool cache_used = false;
+#ifndef _WIN32
+		char *buf = (char *) malloc(0x4000);
+		u32 read_size;
+		if (buf && Util_file_load_from_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) buf, 0x4000 - 1, &read_size).code == 0) {
+			debug("cache found (" + js_id + ") size:" + std::to_string(read_size) + " found, using...");
+			buf[read_size] = '\0';
+			if (yt_procs_from_string(buf, cipher_transform_proc_cache[js_url], nparam_transform_proc_cache[js_url])) cache_used = true;
+			else debug("failed to load cache");
+		}
+		free(buf);
+#endif
+		if (!cache_used) {
+			std::string js_content = http_get(js_url);
+			if (!js_content.size()) {
+				debug("base js download failed");
+				return false;
+			}
+			cipher_transform_proc_cache[js_url] = yt_cipher_get_transform_plan(js_content);
+			nparam_transform_proc_cache[js_url] = yt_nparam_get_transform_plan(js_content);
+#ifndef _WIN32
+			auto cache_str = yt_procs_to_string(cipher_transform_proc_cache[js_url], nparam_transform_proc_cache[js_url]);
+			Result_with_string result = Util_file_save_to_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) cache_str.c_str(), cache_str.size(), true);
+			if (result.code != 0) debug("cache write failed : " + result.error_description);
+#endif
+		}
 	}
 	
 	for (auto &i : formats) { // handle decipher
@@ -122,7 +111,12 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 		std::string url = i["url"].string_value();
 		std::smatch match_result;
 		if (std::regex_search(url, match_result, std::regex(std::string("[\?&]n=([^&]+)")))) {
-			std::string next_n = yt_modify_nparam(match_result[1].str(), nparam_transform_proc_cache[js_url]);
+			auto cur_n = match_result[1].str();
+			std::string next_n;
+			if (!nparam_transform_results_cache.count({js_url, cur_n})) {
+				next_n = yt_modify_nparam(match_result[1].str(), nparam_transform_proc_cache[js_url]);
+				nparam_transform_results_cache[{js_url, cur_n}] = next_n;
+			} else next_n = nparam_transform_results_cache[{js_url, cur_n}];
 			url = std::string(url.cbegin(), match_result[1].first) + next_n + std::string(match_result[1].second, url.cend());
 		} else debug("failed to detect `n` parameter");
 		if (url.find("ratebypass") == std::string::npos) url += "&ratebypass=yes";
@@ -268,11 +262,13 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 		}
 	}
 	{
-		std::regex pattern(std::string(R"***("INNERTUBE_API_KEY":"([\w-]+)")***"));
-		std::smatch match_result;
-		if (std::regex_search(html, match_result, pattern)) {
-			res.continue_key = match_result[1].str();
-		} else {
+		const std::string prefix = "\"INNERTUBE_API_KEY\":\"";
+		auto pos = html.find(prefix);
+		if (pos != std::string::npos) {
+			pos += prefix.size();
+			while (pos < html.size() && html[pos] != '"') res.continue_key.push_back(html[pos++]);
+		}
+		if (res.continue_key == "") {
 			debug("INNERTUBE_API_KEY not found");
 			res.error = "INNERTUBE_API_KEY not found";
 		}

@@ -52,6 +52,9 @@ namespace youtube_parser {
 	// html can contain unnecessary garbage at the end of the actual json data
 	Json to_json(const std::string &html, size_t start);
 
+	// search for `var_name` = ' or `var_name` = {
+	bool fast_extract_initial(const std::string &html, const std::string &var_name, Json &res);
+	
 	Json get_succeeding_json_regexes(const std::string &html, std::vector<const char *> patterns);
 
 	std::string convert_url_to_mobile(std::string url);
