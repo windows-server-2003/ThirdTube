@@ -426,7 +426,6 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 	std::map<std::string, std::string> request_headers, const std::string &body) {
 	
 	NetworkResult res;
-	res.redirected_url = url;
 	
 	if (!session_list.inited) {
 		res.fail = true;
@@ -448,57 +447,95 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 	};
 	for (auto header : default_headers) if (!request_headers.count(header.first)) request_headers[header.first] = header.second;
 	
-	auto host_name = url_get_host_name(url);
-	request_headers["Host"] = host_name;
-	
-	bool is_onetime_session = false;
-	NetworkSession &session_using = session_list.sessions[host_name];
-	if (!session_using.inited || session_using.fail) {
-		// Util_log_save("net-io", "init : " + host_name);
-		session_using.close();
-		for (int i = 0; i < 3; i++) {
-			session_using.open(host_name);
+	if (var_use_experimental_sslc) {
+		auto host_name = url_get_host_name(url);
+		request_headers["Host"] = host_name;
+		
+		bool is_onetime_session = false;
+		NetworkSession &session_using = session_list.sessions[host_name];
+		if (!session_using.inited || session_using.fail) {
+			// Util_log_save("net-io", "init : " + host_name);
+			session_using.close();
+			for (int i = 0; i < 3; i++) {
+				session_using.open(host_name);
+				if (!session_using.inited) {
+					Util_log_save("sslc", "retrying to init session : " + std::to_string(i));
+					usleep(500000);
+				} else break;
+			}
 			if (!session_using.inited) {
-				Util_log_save("sslc", "retrying to init session : " + std::to_string(i));
-				usleep(500000);
-			} else break;
+				res.fail = true;
+				res.error = "failed to init session for " + host_name;
+				return res;
+			}
 		}
-		if (!session_using.inited) {
+		
+		if (method == "POST") request_headers["Content-Length"] = std::to_string(body.size());
+		
+		auto page_url = get_page_url(url);
+		std::string request_content = method + " " + page_url + " HTTP/1.1\r\n";
+		for (auto header : request_headers) request_content += header.first + ": " + header.second + "\r\n";
+		request_content += "\r\n";
+		request_content += body;
+		
+		if (!perform_http_request(session_using, request_content, *session_list.buffer, res)) res.fail = true;
+		if (exiting) {
 			res.fail = true;
-			res.error = "failed to init session for " + host_name;
+			res.error = "The app is about to exit";
 			return res;
 		}
+	} else {
+		u32 status_code = 0;
+		Result libctru_res = 0;
+		libctru_res = httpcOpenContext(&res.context, method == "GET" ? HTTPC_METHOD_GET : HTTPC_METHOD_POST, url.c_str(), 0);
+		libctru_res = httpcSetSSLOpt(&res.context, SSLCOPT_DisableVerify); // to access https:// websites
+		libctru_res = httpcSetKeepAlive(&res.context, HTTPC_KEEPALIVE_ENABLED);
+		for (auto i : request_headers) libctru_res = httpcAddRequestHeaderField(&res.context, i.first.c_str(), i.second.c_str());
+		
+		if (method == "POST") httpcAddPostDataRaw(&res.context, (u32 *) body.c_str(), body.size());
+
+		libctru_res = httpcBeginRequest(&res.context);
+		if (libctru_res != 0) {
+			res.fail = true;
+			res.error = "httpcBeginRequest() failed : " + std::to_string(libctru_res);
+			return res;
+		}
+
+		libctru_res = httpcGetResponseStatusCode(&res.context, &status_code);
+		if (libctru_res != 0) {
+			res.fail = true;
+			res.error = "httpcGetResponseStatusCode() failed : " + std::to_string(libctru_res);
+			return res;
+		}
+		res.status_code = status_code;
+		
+		auto &buffer = *session_list.buffer;
+		while (1) {
+			u32 len_read;
+			Result ret = httpcDownloadData(&res.context, &buffer[0], buffer.size(), &len_read);
+			res.data.insert(res.data.end(), buffer.begin(), buffer.begin() + len_read);
+			if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
+		}
 	}
-	
-	if (method == "POST") request_headers["Content-Length"] = std::to_string(body.size());
-	
-	auto page_url = get_page_url(url);
-	std::string request_content = method + " " + page_url + " HTTP/1.1\r\n";
-	for (auto header : request_headers) request_content += header.first + ": " + header.second + "\r\n";
-	request_content += "\r\n";
-	request_content += body;
-	
-	perform_http_request(session_using, request_content, *session_list.buffer, res);
-	if (exiting) {
-		res.fail = true;
-		res.error = "The app is about to exit";
-		return res;
-	}
-	
 	return res;
 }
 NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url, const std::map<std::string, std::string> &request_headers) {
 	NetworkResult result;
 	while (1) {
 		result = access_http_internal(session_list, "GET", url , request_headers, "");
-		if (result.status_code / 100 != 3) return result;
+		if (result.status_code / 100 != 3) {
+			result.redirected_url = url;
+			return result;
+		}
 		Util_log_save("http", "redir");
 		auto new_url = result.get_header("Location");
-		auto old_host = url_get_host_name(url);
-		auto new_host = url_get_host_name(new_url);
-		if (old_host != new_host) {
-			session_list.sessions[old_host].close();
-			session_list.sessions.erase(old_host);
+		if (var_use_experimental_sslc) {
+			auto old_host = url_get_host_name(url);
+			auto new_host = url_get_host_name(new_url);
+			if (old_host != new_host) {
+				session_list.sessions[old_host].close();
+				session_list.sessions.erase(old_host);
+			}
 		}
 		url = new_url;
 	}
@@ -506,9 +543,24 @@ NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url,
 NetworkResult Access_http_post(NetworkSessionList &session_list, const std::string &url, const std::map<std::string, std::string> &request_headers,
 	const std::string &data) {
 	
-	return access_http_internal(session_list, "POST", url , request_headers, data);
+	auto result = access_http_internal(session_list, "POST", url , request_headers, data);
+	result.redirected_url = url;
+	return result;
+}
+void NetworkResult::finalize () {
+	if (!var_use_experimental_sslc) httpcCloseContext(&context);
 }
 
+std::string NetworkResult::get_header(std::string key) {
+	if (var_use_experimental_sslc) {
+		for (auto &c : key) c = tolower(c);
+		return response_headers.count(key) ? response_headers[key] : "";
+	} else {
+		char buffer[0x1000] = { 0 };
+		httpcGetResponseHeader(&context, key.c_str(), buffer, sizeof(buffer));
+		return buffer;
+	}
+}
 
 
 

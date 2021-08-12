@@ -162,6 +162,18 @@ void Sem_init(void)
 						save_settings_request = true;
 					}
 				}),
+			// Experimental SSLC
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(DISABLED); },
+					(std::function<std::string ()>) []() { return LOCALIZED(ENABLED); }
+				}, var_use_experimental_sslc_changed)
+				->set_title([](const SelectorView &view) { return LOCALIZED(USE_EXPERIMENTAL_SSLC) +
+					(var_use_experimental_sslc != var_use_experimental_sslc_changed ? " (" + LOCALIZED(RESTART_TO_APPLY) + ")" : ""); })
+				->set_on_change([](const SelectorView &view) {
+					var_use_experimental_sslc_changed = view.selected_button;
+					save_settings_request = true;
+				}),
 			// margin at the end of the list
 			(new EmptyView(0, 0, 320, 4))
 		});

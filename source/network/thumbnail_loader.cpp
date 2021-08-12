@@ -127,10 +127,11 @@ bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len
 
 static std::vector<u8> http_get(const std::string &url) {
 	confirm_thread_network_session_list_inited();
+	if (!var_use_experimental_sslc) add_cpu_limit(30);
 	auto result = Access_http_get(thread_network_session_list, url, {});
-	if (result.fail) {
-		Util_log_save("thumb-dl", "access fail : " + result.error);
-	}
+	if (!var_use_experimental_sslc) remove_cpu_limit(30);
+	if (result.fail) Util_log_save("thumb-dl", "access fail : " + result.error);
+	result.finalize();
 	return result.data;
 }
 

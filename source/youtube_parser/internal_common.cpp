@@ -68,6 +68,7 @@ namespace youtube_parser {
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
 		remove_cpu_limit(25);
+		result.finalize();
 		return std::string(result.data.begin(), result.data.end());
 	}
 	std::string http_post_json(const std::string &url, const std::string &json) {
@@ -78,6 +79,7 @@ namespace youtube_parser {
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
 		remove_cpu_limit(25);
+		result.finalize();
 		return std::string(result.data.begin(), result.data.end());
 	}
 #endif

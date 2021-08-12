@@ -5,6 +5,7 @@
 #include <3ds.h>
 
 struct NetworkResult {
+	httpcContext context;
 	std::string redirected_url;
 	bool fail = false; // receiving http error code like 404 is still counted as a 'success'
 	std::string error;
@@ -14,10 +15,8 @@ struct NetworkResult {
 	std::map<std::string, std::string> response_headers;
 	
 	bool status_code_is_success() { return status_code / 100 == 2; }
-	std::string get_header(std::string key) {
-		for (auto &c : key) c = tolower(c);
-		return response_headers.count(key) ? response_headers[key] : "";
-	}
+	std::string get_header(std::string key);
+	void finalize();
 };
 
 struct NetworkSession {

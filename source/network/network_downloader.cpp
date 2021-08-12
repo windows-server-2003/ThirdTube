@@ -54,10 +54,10 @@ void NetworkStream::set_data(u64 block, const std::vector<u8> &data) {
 	if (downloaded_data.size() > MAX_CACHE_BLOCKS) { // ensure it doesn't cache too much and run out of memory
 		u64 read_head_block = read_head / BLOCK_SIZE;
 		if (downloaded_data.begin()->first < read_head_block) {
-			Util_log_save("net/dl", "free " + std::to_string(downloaded_data.begin()->first));
+			// Util_log_save("net/dl", "free " + std::to_string(downloaded_data.begin()->first));
 			downloaded_data.erase(downloaded_data.begin());
 		} else {
-			Util_log_save("net/dl", "free " + std::to_string(std::prev(downloaded_data.end())->first));
+			// Util_log_save("net/dl", "free " + std::to_string(std::prev(downloaded_data.end())->first));
 			downloaded_data.erase(std::prev(downloaded_data.end()));
 		}
 	}
@@ -230,6 +230,7 @@ void NetworkStreamDownloader::downloader_thread() {
 						break;
 				}
 			}
+			result.finalize();
 		} else {
 			u64 block_reading = read_heads[cur_stream_index] / BLOCK_SIZE;
 			if (cur_stream->ready) {
@@ -269,6 +270,7 @@ void NetworkStreamDownloader::downloader_thread() {
 				if (cur_stream->ready && result.data.size() != expected_len) {
 					Util_log_save(LOG_THREAD_STR, "size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(result.data.size()));
 					cur_stream->error = true;
+					result.finalize();
 					continue;
 				}
 				cur_stream->set_data(block_reading, result.data);
@@ -277,6 +279,7 @@ void NetworkStreamDownloader::downloader_thread() {
 				Util_log_save("net/dl", "access failed : " + result.error);
 				cur_stream->error = true;
 			}
+			result.finalize();
 		}
 	}
 	Util_log_save(LOG_THREAD_STR, "Exit, deiniting...");

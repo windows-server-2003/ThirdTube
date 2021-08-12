@@ -33,6 +33,7 @@ void load_settings() {
 	var_eco_mode = load_int("eco_mode", 1);
 	var_night_mode = load_int("dark_theme", 0);
 	var_flash_mode = load_int("dark_theme_flash", 0);
+	var_use_experimental_sslc = var_use_experimental_sslc_changed = load_int("use_experimental_sslc", 0);
 	
 	Util_cset_set_wifi_state(true);
 	Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
@@ -46,7 +47,8 @@ void save_settings() {
 		"<time_to_turn_off_lcd>" + std::to_string(var_time_to_turn_off_lcd) + "</time_to_turn_off_lcd>\n" +
 		"<eco_mode>" + std::to_string(var_eco_mode) + "</eco_mode>\n" + 
 		"<dark_theme>" + std::to_string(var_night_mode) + "</dark_theme>\n" + 
-		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n";
+		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n" + 
+		"<use_experimental_sslc>" + std::to_string(var_use_experimental_sslc_changed) + "</use_experimental_sslc>\n";
 	
 	Result_with_string result = Util_file_save_to_file("settings.txt", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
 	Util_log_save("settings/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);

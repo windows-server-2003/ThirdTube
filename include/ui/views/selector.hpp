@@ -13,6 +13,7 @@ public :
 	int holding_button = -1;
 	
 	int selected_button = 0;
+	int changed_num = 0;
 	
 	int button_num;
 	std::vector<UI::FlexibleString<SelectorView> > button_texts;
@@ -81,6 +82,7 @@ public :
 			selected_button = holding_button;
 			var_need_reflesh = true;
 			if (on_change_func) on_change_func(*this);
+			changed_num++;
 			holding_button = -1;
 		}
 	}
