@@ -252,7 +252,7 @@ static void load_video_suggestion_continue(VideoRequestArg arg) {
 	svcReleaseMutex(arg.lock);
 	release();
 }
-#define COMMENT_MAX_LINE_NUM 40 // this limit exists due to performance reason (TODO : more efficient truncating)
+#define COMMENT_MAX_LINE_NUM 1000 // this limit exists due to performance reason (TODO : more efficient truncating)
 static void load_video_comment_continue(VideoRequestArg arg) {
 	lock();
 	if (requests[(int) LoadRequestType::VIDEO]) {
@@ -267,7 +267,7 @@ static void load_video_comment_continue(VideoRequestArg arg) {
 	remove_cpu_limit(25);
 	
 	// wrap comments
-	Util_log_save("wloader/v-comment", "truncate end");
+	Util_log_save("wloader/v-comment", "truncate start");
 	std::vector<std::vector<std::string> > comments_lines_add(new_result.comments.size() - prev_result.comments.size());
 	for (size_t i = prev_result.comments.size(); i < new_result.comments.size(); i++) {
 		auto &cur_comment = new_result.comments[i].content;
@@ -346,9 +346,9 @@ void webpage_loader_thread_func(void* arg) {
 
 // truncate and wrap into at most `max_lines` lines so that each line fit in `max_width` if drawn with the size of `x_size` x `y_size`
 std::vector<std::string> truncate_str(std::string input_str, int max_width, int max_lines, double x_size, double y_size) {
-	static std::string input[1024 + 1];
+	static std::string input[10000 + 1];
 	int n;
-	Exfont_text_parse(input_str, &input[0], 1024, &n);
+	Exfont_text_parse(input_str, &input[0], 10000, &n);
 	
 	std::vector<std::vector<std::string> > words; // each word is considered not separable
 	for (int i = 0; i < n; i++) {
@@ -362,49 +362,45 @@ std::vector<std::string> truncate_str(std::string input_str, int max_width, int 
 		else words.back().push_back(input[i]);
 	}
 	
+	float three_dots_width = Draw_get_width_one(".", x_size) * 3;
 	int m = words.size();
-	int head = 0;
+	int word_head = 0;
 	std::vector<std::string> res;
 	for (int line = 0; line < max_lines; line++) {
-		if (head >= m) break;
+		if (word_head >= m) break;
 		
-		int fit_word_num = 0;
-		{ // binary search the number of words that fit in the line
-			int l = 0;
-			int r = std::min(50, m - head + 1);
-			while (r - l > 1) {
-				int m = l + ((r - l) >> 1);
-				std::string query_text;
-				for (int i = head; i < head + m; i++) for (auto j : words[i]) query_text += j;
-				if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
-				else r = m;
-			}
-			fit_word_num = l;
-		}
-		
+		int cur_line_start_word = word_head;
+		float cur_line_width = 0;
 		std::string cur_line;
-		for (int i = head; i < head + fit_word_num; i++) for (auto j : words[i]) cur_line += j;
-		bool force_fit = !fit_word_num || (line == max_lines - 1 && fit_word_num < m - head);
-		if (force_fit) {
-			std::vector<std::string> cur_word = words[head + fit_word_num];
-			int l = 0;
-			int r = cur_word.size();
-			while (r - l > 1) { // binary search the number of characters that fit in the first line
-				int m = l + ((r - l) >> 1);
-				std::string query_text = cur_line;
-				for (int i = 0; i < m; i++) query_text += cur_word[i];
-				query_text += "...";
-				if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
-				else r = m;
+		while (word_head < m) {
+			float word_width = 0;
+			int word_length = 0;
+			int num_to_delete_when_adding_dots = 0;
+			bool include_three_dots = false;
+			bool cancel_this_word = false;
+			for (auto character : words[word_head]) {
+				word_width += Draw_get_width_one(character, x_size);
+				if (cur_line_width + word_width > max_width) {
+					if (word_head == cur_line_start_word || line == max_lines - 1) { // force fit
+						word_length -= num_to_delete_when_adding_dots;
+						include_three_dots = true;
+					} else cancel_this_word = true;
+					break;
+				} else {
+					if (cur_line_width + word_width + three_dots_width > max_width) num_to_delete_when_adding_dots++;
+					word_length++;
+				}
 			}
-			for (int i = 0; i < l; i++) cur_line += cur_word[i];
-			cur_line += "...";
-			res.push_back(cur_line);
-			head += fit_word_num + 1;
-		} else {
-			res.push_back(cur_line);
-			head += fit_word_num;
+			if (cancel_this_word) break;
+			for (int i = 0; i < word_length; i++) cur_line += words[word_head][i];
+			word_head++;
+			cur_line_width += word_width;
+			if (include_three_dots) {
+				cur_line += "...";
+				break;
+			}
 		}
+		res.push_back(cur_line);
 	}
 	if (!res.size()) res = {""};
 	return res;
