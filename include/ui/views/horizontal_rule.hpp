@@ -3,9 +3,10 @@
 #include "../ui_common.hpp"
 
 // simple horizontal line
-struct HorizontalRuleView : public View {
+struct HorizontalRuleView : public FixedSizeView {
 public :
-	using View::View;
+	using FixedSizeView::FixedSizeView;
+	virtual ~HorizontalRuleView () {}
 	
 	void draw() const override {
 		int y = (int)((y0 + y1) / 2);

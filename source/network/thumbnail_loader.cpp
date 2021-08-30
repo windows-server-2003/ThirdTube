@@ -68,11 +68,11 @@ int thumbnail_request(const std::string &url, SceneType scene_id, int priority, 
 	requested_urls[url].handles.insert(handle);
 	requested_urls[url].type = type;
 	release();
+	if (requests.size() > 100) Util_log_save("tloader", "WARNING : request size too large, possible resource leak : " + std::to_string(requests.size()));
 	return handle;
 }
-void thumbnail_cancel_request(int handle) {
+inline static void thumbnail_cancel_request_wo_lock(int handle) {
 	if (handle == -1) return;
-	lock();
 	std::string url = requests[handle].url;
 	auto &url_status = requested_urls[url];
 	url_status.handles.erase(handle);
@@ -81,6 +81,16 @@ void thumbnail_cancel_request(int handle) {
 		requested_urls.erase(url);
 	}
 	free_list.push(handle);
+}
+void thumbnail_cancel_request(int handle) {
+	if (handle == -1) return;
+	lock();
+	thumbnail_cancel_request_wo_lock(handle);
+	release();
+}
+void thumbnail_cancel_requests(const std::vector<int> &handles) {
+	lock();
+	for (auto handle : handles) if (handle != -1) thumbnail_cancel_request_wo_lock(handle);
 	release();
 }
 void thumbnail_set_priority(int handle, int value) {

@@ -2,9 +2,11 @@
 #include <utility>
 #include <vector>
 #include <deque>
+#include <functional>
 #include "view.hpp"
 
-class ScrollView : public View {
+class ScrollView : public FixedSizeView {
+protected :
 	int offset = 0;
 	
 	int last_touch_x = -1;
@@ -22,7 +24,19 @@ class ScrollView : public View {
 public :
 	std::vector<View *> views;
 	
-	using View::View;
+	using FixedSizeView::FixedSizeView;
+	virtual ~ScrollView () {}
+	
+	using OnDrawnCallBackFuncType = std::function<void (const ScrollView &, int)>;
+	std::vector<std::pair<int, OnDrawnCallBackFuncType> > on_child_drawn_callbacks;
+	
+	virtual void recursive_delete_subviews() override {
+		for (auto view : views) {
+			view->recursive_delete_subviews();
+			delete view;
+		}
+		views.clear();
+	}
 	
 	// direct access to `views` is also allowed
 	// this is just for method chaining mainly used immediately after the construction of the view
@@ -30,13 +44,27 @@ public :
 		this->views = views;
 		return this;
 	}
+	ScrollView *set_on_child_drawn(int index, OnDrawnCallBackFuncType func) {
+		bool found = false;
+		for (auto &i : on_child_drawn_callbacks) if (i.first == index) {
+			found = true;
+			i.second = func;
+		}
+		if (!found) on_child_drawn_callbacks.push_back({index, func});
+		return this;
+	}
 	
 	
 	void draw() const override {
 		double y_offset = y0 - offset;
-		for (auto view : views) {
-			view->draw(x0, y_offset);
-			y_offset += view->y1 - view->y0;
+		for (int i = 0; i < (int) views.size(); i++) {
+			auto &view = views[i];
+			double cur_height = view->get_height();
+			if (y_offset < y1 && y_offset + cur_height > 0) {
+				view->draw(x0, y_offset);
+				for (auto &callback : on_child_drawn_callbacks) if (callback.first == i) callback.second(*this, i);
+			}
+			y_offset += cur_height;
 		}
 		draw_slider_bar();
 	}
@@ -45,7 +73,7 @@ public :
 		double y_offset = y0 - offset;
 		for (auto view : views) {
 			view->update(key, x0, y_offset);
-			y_offset += view->y1 - view->y0;
+			y_offset += view->get_height();
 		}
 	}
 	

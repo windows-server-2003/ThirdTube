@@ -112,3 +112,69 @@ std::map<std::string, std::string> parse_xml_like_text(std::string data) {
 	return res;
 }
 
+// truncate and wrap into at most `max_lines` lines so that each line fit in `max_width` if drawn with the size of `x_size` x `y_size`
+std::vector<std::string> truncate_str(std::string input_str, int max_width, int max_lines, double x_size, double y_size) {
+	static std::string input[1024 + 1];
+	int n;
+	Exfont_text_parse(input_str, &input[0], 1024, &n);
+	
+	std::vector<std::vector<std::string> > words; // each word is considered not separable
+	for (int i = 0; i < n; i++) {
+		bool seperate;
+		if (!i) seperate = true;
+		else {
+			std::string last_char = words.back().back();
+			seperate = last_char.size() != 1 || input[i].size() != 1 || last_char == " " || input[i] == " ";
+		}
+		if (seperate) words.push_back({input[i]});
+		else words.back().push_back(input[i]);
+	}
+	
+	int m = words.size();
+	int head = 0;
+	std::vector<std::string> res;
+	for (int line = 0; line < max_lines; line++) {
+		if (head >= m) break;
+		
+		int fit_word_num = 0;
+		{ // binary search the number of words that fit in the line
+			int l = 0;
+			int r = std::min(50, m - head + 1);
+			while (r - l > 1) {
+				int m = l + ((r - l) >> 1);
+				std::string query_text;
+				for (int i = head; i < head + m; i++) for (auto j : words[i]) query_text += j;
+				if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
+				else r = m;
+			}
+			fit_word_num = l;
+		}
+		
+		std::string cur_line;
+		for (int i = head; i < head + fit_word_num; i++) for (auto j : words[i]) cur_line += j;
+		bool force_fit = !fit_word_num || (line == max_lines - 1 && fit_word_num < m - head);
+		if (force_fit) {
+			std::vector<std::string> cur_word = words[head + fit_word_num];
+			int l = 0;
+			int r = cur_word.size();
+			while (r - l > 1) { // binary search the number of characters that fit in the first line
+				int m = l + ((r - l) >> 1);
+				std::string query_text = cur_line;
+				for (int i = 0; i < m; i++) query_text += cur_word[i];
+				query_text += "...";
+				if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
+				else r = m;
+			}
+			for (int i = 0; i < l; i++) cur_line += cur_word[i];
+			cur_line += "...";
+			res.push_back(cur_line);
+			head += fit_word_num + 1;
+		} else {
+			res.push_back(cur_line);
+			head += fit_word_num;
+		}
+	}
+	if (!res.size()) res = {""};
+	return res;
+}
+

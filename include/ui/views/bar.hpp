@@ -2,11 +2,13 @@
 #include "view.hpp"
 #include "../ui_common.hpp"
 
-struct BarView : public View {
+struct BarView : public FixedSizeView {
 private :
 	UI::FlexibleString<BarView> title;
 public :
 	using CallBackFuncType = std::function<void (const BarView &value)>;
+	virtual ~BarView () {}
+	
 	bool holding = false;
 	
 	double low;
@@ -23,7 +25,7 @@ public :
 	CallBackFuncType on_release_func;
 	CallBackFuncType while_holding_func;
 	
-	using View::View;
+	using FixedSizeView::FixedSizeView;
 	BarView *set_values(double low, double high, double init_val) { // mandatory
 		this->low = low;
 		this->high = high;

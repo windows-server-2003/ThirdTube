@@ -1,6 +1,7 @@
 #pragma once
 #include "types.hpp"
 #include "youtube_parser/parser.hpp"
+#include "ui/ui.hpp"
 
 // does YouTube searching and channel loading (and more in the future)
 // we don't want to increase the number of threads every time we add a new feature, so this single thread handles everything
@@ -11,9 +12,6 @@ enum class LoadRequestType {
 	SEARCH_CONTINUE,
 	CHANNEL,
 	CHANNEL_CONTINUE,
-	VIDEO,
-	VIDEO_SUGGESTION_CONTINUE,
-	VIDEO_COMMENT_CONTINUE,
 	NONE // used internally
 };
 struct SearchRequestArg {
@@ -38,31 +36,6 @@ struct ChannelLoadRequestArg {
 	float text_size_x;
 	float text_size_y;
 	std::vector<std::vector<std::string> > *wrapped_titles;
-	
-	void (*on_load_complete) (void);
-};
-struct VideoRequestArg {
-	Handle lock;
-	YouTubeVideoDetail *result;
-	std::string url;
-	
-	// for truncating
-	int title_max_width;
-	int description_max_width;
-	float description_text_size_x;
-	float description_text_size_y;
-	int suggestion_title_max_width;
-	float suggestion_title_text_size_x;
-	float suggestion_title_text_size_y;
-	int comment_max_width;
-	float comment_text_size_x;
-	float comment_text_size_y;
-	
-	std::vector<std::string> *title_lines;
-	float *title_font_size;
-	std::vector<std::string> *description_lines;
-	std::vector<std::vector<std::string> > *suggestion_titles_lines;
-	std::vector<std::vector<std::string> > *comments_lines;
 	
 	void (*on_load_complete) (void);
 };
