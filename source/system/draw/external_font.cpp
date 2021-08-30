@@ -870,49 +870,36 @@ void Exfont_request_unload_system_font(void)
     exfont_unload_system_font_request = true;
 }
 
-std::string Exfont_text_sort(std::string sorce_part_string[], int max_loop)
-{
-    int right_to_left_pos = -1;
-    bool found = false;
-    std::string result_string = "";
-    std::string right_to_left_sample[2] = { "\u05BD", "\u0700", };
-
-    for (int i = 0; i < max_loop; i++)
-    {
-        found = false;
-        if (memcmp((void*)sorce_part_string[i].c_str(), (void*)exfont_font_samples[0].c_str(), 0x1) == 0)
-            break;
-
-        if (exfont_font_right_to_left_samples[201] == sorce_part_string[i])
-            found = true;
-        else if (sorce_part_string[i].length() == 2 && memcmp((void*)sorce_part_string[i].c_str(), (void*)right_to_left_sample[0].c_str(), 0x2) > 0
-            && memcmp((void*)sorce_part_string[i].c_str(), (void*)right_to_left_sample[1].c_str(), 0x2) < 0)
+void Exfont_text_sort(std::string *source_part_string, int characters) {
+    static std::string right_to_left_sample[2] = { "\u05BD", "\u0700", };
+	
+	int reverse_start = -1;
+	for (int i = 0; i < characters; i++) {
+		bool is_right_to_left = false;
+		
+        if (exfont_font_right_to_left_samples[201] == source_part_string[i]) is_right_to_left = true;
+        else if (source_part_string[i].length() == 2 && memcmp((void*)source_part_string[i].c_str(), (void*)right_to_left_sample[0].c_str(), 0x2) > 0
+            && memcmp((void*)source_part_string[i].c_str(), (void*)right_to_left_sample[1].c_str(), 0x2) < 0)
         {
             for (int j = 0; j < exfont_num_of_right_left_charcters - 1; j++)
             {
-                if (memcmp((void*)sorce_part_string[i].c_str(), (void*)exfont_font_right_to_left_samples[j].c_str(), 0x2) == 0)
+                if (memcmp((void*)source_part_string[i].c_str(), (void*)exfont_font_right_to_left_samples[j].c_str(), 0x2) == 0)
                 {
-                    found = true;
+                    is_right_to_left = true;
                     break;
                 }
             }
         }
-
-        if (found)
-        {
-            if (right_to_left_pos <= -1)
-                right_to_left_pos = result_string.length();
-
-            result_string.insert(right_to_left_pos, sorce_part_string[i]);
-        }
-        else
-        {
-            result_string += sorce_part_string[i];
-            right_to_left_pos = -1;
-        }
-    }
-    return result_string;
+		
+		if (is_right_to_left && reverse_start == -1) reverse_start = i;
+		if (!is_right_to_left && reverse_start != -1) {
+			std::reverse(source_part_string + reverse_start, source_part_string + i);
+			reverse_start = -1;
+		}
+	}
+	if (reverse_start != -1) std::reverse(source_part_string + reverse_start, source_part_string + characters);
 }
+
 
 void Exfont_text_parse(std::string sorce_string, std::string part_string[], int max_loop, int* out_element)
 {
@@ -1074,126 +1061,89 @@ void Exfont_draw_external_fonts(std::string in_string, float texture_x, float te
 }
 
 
-float Exfont_get_width(std::string in_string, float texture_size_x, float texture_size_y)
+float Exfont_get_width_one(const std::string &character, float texture_size_x)
 {
-    double interval_offset = 0.5;
-    double x_offset = 0.0;
-    // double y_offset = 0.0;
-    double x_size = 0.0;
-    int block = -1;
+    const double interval_offset = 0.5;
     int char_size = 0;
-    int characters = 0;
-    int memcmp_result = 0;
-    bool reverse = false;
-    bool unknown = true;
-    std::string sample_one_byte[1] = { "\u0080", };
-    std::string samples_two_bytes[10] = { "\u0100", "\u02B0", "\u0300", "\u0370", "\u0400", "\u0500", "\u0530", "\u0590", "\u0600", "\u0700", };
-    std::string samples_three_bytes[37] = { "\u0980", "\u0A80", "\u0C00", "\u0C80", "\u0D00", "\u0E00", "\u0E80", "\u0F00",
+    static const std::string sample_one_byte[1] = { "\u0080", };
+    static const std::string samples_two_bytes[10] = { "\u0100", "\u02B0", "\u0300", "\u0370", "\u0400", "\u0500", "\u0530", "\u0590", "\u0600", "\u0700", };
+    static const std::string samples_three_bytes[37] = { "\u0980", "\u0A80", "\u0C00", "\u0C80", "\u0D00", "\u0E00", "\u0E80", "\u0F00",
                                             "\u1000", "\u1100", "\u1680", "\u1D80", "\u1E00", "\u2000", "\u2070", "\u20A0",
                                             "\u2100", "\u2200", "\u2300", "\u2400", "\u2460", "\u2500", "\u2580", "\u25A0",
                                             "\u2600", "\u2700", "\u27C0", "\u2980", "\u2C00", "\u3040", "\u30A0", "\u3100",
                                             "\u3400", "\uA490", "\uA4D0", "\uFE50", "\uFFF0", };
-    std::string samples_four_bytes[2] = { "\U0001F600", "\U0001F650", };
+    static const std::string samples_four_bytes[2] = { "\U0001F600", "\U0001F650", };
 
-    Exfont_text_parse(in_string, exfont_part_string, 1023, &characters);
+	int block = -1;
+	
+	if (character.length() == 1)
+	{
+		char_size = 1;
+		if (memcmp((void*)character.c_str(), (void*)sample_one_byte[0].c_str(), 0x1) < 0)
+			block = 0;
+	}
+	else if (character.length() == 2)
+	{
+		char_size = 2;
+		for (int i = 0; i < 10; i++)
+		{
+			if (memcmp((void*)character.c_str(), (void*)samples_two_bytes[i].c_str(), 0x2) < 0)
+			{
+				block = i + 1;
+				break;
+			}
+		}
+	}
+	else if (character.length() == 3)
+	{
+		char_size = 3;
+		int l = -1;
+		int r = 37;
+		while (r - l > 1) {
+			int m = l + ((r - l) >> 1);
+			if (memcmp((void*)character.c_str(), (void*)samples_three_bytes[m].c_str(), 0x3) >= 0)
+				l = m;
+			else r = m;
+		}
+		if (r < 37) block = r + 11;
+	}
+	else if (character.length() == 4)
+	{
+		char_size = 4;
+		for (int i = 0; i < 2; i++)
+		{
+			if (memcmp((void*)character.c_str(), (void*)samples_four_bytes[i].c_str(), 0x4) < 0)
+			{
+				block = i + 48;
+				break;
+			}
+		}
+	}
 
-    for (int s = 0; s < characters; s++)
-    {
-        block = -1;
-        unknown = true;
-        if (memcmp((void*)exfont_part_string[s].c_str(), (void*)exfont_font_samples[0].c_str(), 0x1) == 0)
-            break;
+	if ((block == 25 || block == 46) && exfont_ignore_chars.find(character) != std::string::npos) return 0;
 
-        if (exfont_part_string[s].length() == 1)
-        {
-            char_size = 1;
-            if (memcmp((void*)exfont_part_string[s].c_str(), (void*)sample_one_byte[0].c_str(), 0x1) < 0)
-                block = 0;
-        }
-        else if (exfont_part_string[s].length() == 2)
-        {
-            char_size = 2;
-            for (int i = 0; i < 10; i++)
-            {
-                if (memcmp((void*)exfont_part_string[s].c_str(), (void*)samples_two_bytes[i].c_str(), 0x2) < 0)
-                {
-                    block = i + 1;
-                    break;
-                }
-            }
-        }
-        else if (exfont_part_string[s].length() == 3)
-        {
-            char_size = 3;
-            for (int i = 0; i < 37; i++)
-            {
-                if (memcmp((void*)exfont_part_string[s].c_str(), (void*)samples_three_bytes[i].c_str(), 0x3) < 0)
-                {
-                    block = i + 11;
-                    break;
-                }
-            }
-        }
-        else if (exfont_part_string[s].length() == 4)
-        {
-            char_size = 4;
-            for (int i = 0; i < 2; i++)
-            {
-                if (memcmp((void*)exfont_part_string[s].c_str(), (void*)samples_four_bytes[i].c_str(), 0x4) < 0)
-                {
-                    block = i + 48;
-                    break;
-                }
-            }
-        }
-
-        if (block == 25 || block == 46)
-        {
-            if (!(exfont_ignore_chars.find(exfont_part_string[s]) == std::string::npos))
-            {
-                unknown = false;
-                block = -1;
-            }
-        }
-
-        if (block != -1 && exfont_loaded_external_font[block] && char_size >= 1 && char_size <= 4)
-        {
-            reverse = false;
-            for (int k = 0;;)
-            {
-                if (!reverse)
-                    k += 20;
-                else
-                    k--;
-
-                if ((k < 0 || k > exfont_font_characters[block]) && reverse)
-                    break;
-                else
-                    memcmp_result = memcmp((void*)exfont_part_string[s].c_str(), (void*)exfont_font_samples[exfont_font_start_num[block] + k].c_str(), char_size);
-
-                if (memcmp_result == 0)
-                {
-                    unknown = false;
-                    x_size = (exfont_font_interval[exfont_font_start_num[block] + k] + interval_offset) * texture_size_x;
-                    x_offset += x_size;
-                    break;
-                }
-                else if (memcmp_result < 0 || k >= exfont_font_characters[block])
-                {
-                    reverse = true;
-                    if (k >= exfont_font_characters[block])
-                        k = exfont_font_characters[block];
-                }
-            }
-        }
-
-        if (unknown)
-        {
-            x_size = (exfont_font_interval[0] + interval_offset) * texture_size_x;
-            x_offset += x_size;
-        }
-    }
-    return x_offset;
+	if (block != -1 && exfont_loaded_external_font[block] && char_size >= 1 && char_size <= 4)
+	{
+		int l = -1;
+		int r = exfont_font_characters[block];
+		while (r - l > 1) {
+			int m = l + ((r - l) >> 1);
+			int memcmp_result = memcmp((void*)character.c_str(), (void*)exfont_font_samples[exfont_font_start_num[block] + m].c_str(), char_size);
+			if (memcmp_result == 0) return (exfont_font_interval[exfont_font_start_num[block] + m] + interval_offset) * texture_size_x;
+			if (memcmp_result > 0) l = m;
+			else r = m;
+		}
+	}
+	return (exfont_font_interval[0] + interval_offset) * texture_size_x;
+}
+float Exfont_get_width(std::string in_string, float texture_size_x)
+{
+	int characters = 0;
+	std::vector<std::string> part_strings(in_string.size() + 1);
+	Exfont_text_parse(in_string, &part_strings[0], in_string.size(), &characters);
+	float res = 0;
+	for (int s = 0; s < characters; s++) res += Exfont_get_width_one(part_strings[s], texture_size_x);
+	return res;
 }
 
 Result_with_string Exfont_load_exfont(int exfont_num)

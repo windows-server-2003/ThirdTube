@@ -18,6 +18,7 @@ void Draw_c2d_image_free(Image_data c2d_image);
 void Draw(std::string text, float x, float y, float text_size_x, float text_size_y, int abgr8888);
 
 float Draw_get_width(std::string text, float text_size_x, float text_size_y);
+float Draw_get_width_one(const std::string &character, float text_size_x);
 float Draw_get_height(std::string text, float text_size_x, float text_size_y);
 
 void Draw_x_centered(std::string text, float x0, float x1, float y, float text_size_x, float text_size_y, int abgr8888);

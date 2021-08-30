@@ -268,7 +268,7 @@ static void load_more_suggestions(void *arg_) {
 	svcReleaseMutex(small_resource_lock);
 }
 
-#define COMMENT_MAX_LINE_NUM 40 // this limit exists due to performance reason (TODO : more efficient truncating)
+#define COMMENT_MAX_LINE_NUM 1000 // this limit exists due to performance reason (TODO : more efficient truncating)
 static void load_more_comments(void *arg_) {
 	YouTubeVideoDetail *arg = (YouTubeVideoDetail *) arg_;
 	

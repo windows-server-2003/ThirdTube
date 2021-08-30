@@ -217,7 +217,7 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 	c2d_buf = C2D_TextBufNew(4096);
 
 	Exfont_text_parse(text, draw_part_text[0], 1023, &characters);
-	Exfont_text_parse(Exfont_text_sort(draw_part_text[0], 1023), draw_part_text[0], 1023, &characters);
+	Exfont_text_sort(draw_part_text[0], characters);
 
 	for (int i = 0; i < characters; i++)
 	{
@@ -381,51 +381,49 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 float Draw_get_height(std::string text, float text_size_x, float text_size_y) {
 	if (text == "") return 0;
 	int characters;
-	Exfont_text_parse(text, draw_part_text[0], 1023, &characters);
+	std::vector<std::string> part_text(text.size() + 1);
+	Exfont_text_parse(text, &part_text[0], text.size(), &characters);
 	int lines = 1;
-	for (int i = 0; i < characters; i++) if (draw_part_text[0][i] == "\n") lines++;
+	for (int i = 0; i < characters; i++) if (part_text[i] == "\n") lines++;
 	return lines * 20.0 * text_size_y;
 }
+
 float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 {
-	float x = 0, y = 0, x_max = 0;
+	float x = 0, x_max = 0;
 	bool reverse = false;
 	bool found = false;
 	bool font_loaded[2] = { Exfont_is_loaded_system_font(0), Exfont_is_loaded_system_font(1), };//JPN, CHN
-	float original_x;
 	int previous_num = -3;
 	int memcmp_result = -1;
 	int count = 0;
 	int characters = 0;
-	int font_num_list[2][1024];
-	std::string sample[8] = { "\u0000", "\u000A", "\u4DFF", "\uA000", "\u312F", "\u3190", "\uABFF", "\uD7B0", };
-	C2D_Text c2d_text;
-	C2D_TextBuf c2d_buf;
-	original_x = x;
-	c2d_buf = C2D_TextBufNew(4096);
-
-	Exfont_text_parse(text, draw_part_text[0], 1023, &characters);
-	Exfont_text_parse(Exfont_text_sort(draw_part_text[0], 1023), draw_part_text[0], 1023, &characters);
-
-	for (int i = 0; i < characters; i++)
-	{
+	static const std::string sample[8] = { "\u0000", "\u000A", "\u4DFF", "\uA000", "\u312F", "\u3190", "\uABFF", "\uD7B0", };
+	
+	std::vector<std::string> part_text[2];
+	for (int i = 0; i < 2; i++) part_text[i].resize(text.size() + 1);
+	Exfont_text_parse(text, &part_text[0][0], text.size(), &characters);
+	Exfont_text_sort(&part_text[0][0], characters);
+	
+	
+	std::vector<int> font_num_list[2];
+	for (int i = 0; i < 2; i++) font_num_list[i].resize(characters + 1);
+	
+	for (int i = 0; i < characters; i++) {
 		reverse = false;
-		if (memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[0].c_str(), 0x1) == 0)
-		{
+		if (memcmp((void*)part_text[0][i].c_str(), (void*)sample[0].c_str(), 0x1) == 0) {
 			font_num_list[0][i] = -2;
 			break;
-		}
-		else if (memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[1].c_str(), 0x1) == 0)
-		{
+		} else if (memcmp((void*)part_text[0][i].c_str(), (void*)sample[1].c_str(), 0x1) == 0) {
 			font_num_list[0][i] = -1;
 			continue;
 		}
 
-		if((memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[2].c_str(), 0x3) > 0 && memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[3].c_str(), 0x3) < 0)
-		|| (memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[4].c_str(), 0x3) > 0 && memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[5].c_str(), 0x3) < 0)
-		|| (memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[6].c_str(), 0x3) > 0 && memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[7].c_str(), 0x3) < 0))
+		if((memcmp((void*)part_text[0][i].c_str(), (void*)sample[2].c_str(), 0x3) > 0 && memcmp((void*)part_text[0][i].c_str(), (void*)sample[3].c_str(), 0x3) < 0)
+		|| (memcmp((void*)part_text[0][i].c_str(), (void*)sample[4].c_str(), 0x3) > 0 && memcmp((void*)part_text[0][i].c_str(), (void*)sample[5].c_str(), 0x3) < 0)
+		|| (memcmp((void*)part_text[0][i].c_str(), (void*)sample[6].c_str(), 0x3) > 0 && memcmp((void*)part_text[0][i].c_str(), (void*)sample[7].c_str(), 0x3) < 0))
 		{
-			if(memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[2].c_str(), 0x3) > 0 && memcmp((void*)draw_part_text[0][i].c_str(), (void*)sample[3].c_str(), 0x3) < 0)
+			if(memcmp((void*)part_text[0][i].c_str(), (void*)sample[2].c_str(), 0x3) > 0 && memcmp((void*)part_text[0][i].c_str(), (void*)sample[3].c_str(), 0x3) < 0)
 			{
 				found = false;
 				reverse = false;
@@ -448,7 +446,7 @@ float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 							s = 3000;
 						}
 						else
-							memcmp_result = memcmp((void*)draw_part_text[0][i].c_str(), (void*)draw_japanese_kanji[s].c_str(), 3);
+							memcmp_result = memcmp((void*)part_text[0][i].c_str(), (void*)draw_japanese_kanji[s].c_str(), 3);
 
 						if(memcmp_result == 0)
 						{
@@ -483,7 +481,7 @@ float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 								s = 6300;
 							}
 							else
-								memcmp_result = memcmp((void*)draw_part_text[0][i].c_str(), (void*)draw_simple_chinese[s].c_str(), 3);
+								memcmp_result = memcmp((void*)part_text[0][i].c_str(), (void*)draw_simple_chinese[s].c_str(), 3);
 
 							if(memcmp_result == 0)
 							{
@@ -507,7 +505,7 @@ float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 			font_num_list[0][i] = 4;
 	}
 
-	draw_part_text[1][0] = "";
+	part_text[1][0] = "";
 	previous_num = font_num_list[0][0];
 	for (int i = 0; i < characters; i++)
 	{
@@ -519,44 +517,161 @@ float Draw_get_width(std::string text, float text_size_x, float text_size_y)
 		else if(previous_num != font_num_list[0][i] || font_num_list[0][i] == -1)
 		{
 			count++;
-			draw_part_text[1][count] = "";
+			part_text[1][count] = "";
 		}
 
-		draw_part_text[1][count] += draw_part_text[0][i];
+		part_text[1][count] += part_text[0][i];
 		font_num_list[1][count] = font_num_list[0][i];
 		previous_num = font_num_list[0][i];
 	}
 
 	for (int i = 0; i <= count; i++)
 	{
-		if (font_num_list[1][i] == -2)
-			break;
-		else if (font_num_list[1][i] == -1)
-		{
-			y += 20.0 * text_size_y;
-			x = original_x;
+		if (font_num_list[1][i] == -2) break;
+		else if (font_num_list[1][i] == -1) {
+			x = 0;
 			continue;
 		}
 
-		if(!Exfont_is_loaded_external_font(0) || (font_num_list[1][i] >= 0 && font_num_list[1][i] <= 3))
-		{
+		if (!Exfont_is_loaded_external_font(0) || (font_num_list[1][i] >= 0 && font_num_list[1][i] <= 3)) {
 			if(!Exfont_is_loaded_external_font(0))
 				system_fonts[font_num_list[1][i]] = 0;
-
-			C2D_TextBufClear(c2d_buf);
-			C2D_TextFontParse(&c2d_text, system_fonts[font_num_list[1][i]], c2d_buf, draw_part_text[1][i].c_str());
-			float width, height;
-			C2D_TextGetDimensions(&c2d_text, text_size_x, text_size_y, &width, &height);
-			x += width;
-		}
-		else if(font_num_list[1][i] == 4)
-		{
-			x += Exfont_get_width(draw_part_text[1][i], text_size_x * 1.56, text_size_y * 1.56);
-		}
+			
+			fontGlyphPos_s glyphData;
+			auto &font = system_fonts[font_num_list[1][i]];
+			uint8_t *head = (uint8_t *) part_text[1][i].c_str();
+			while (*head != '\n' && *head) {
+				u32 code;
+				ssize_t units = decode_utf8(&code, head);
+				
+				if (units == -1) {
+					code = 0xFFFD;
+					units = 1;
+				}
+				head += units;
+				C2D_FontCalcGlyphPos(font, &glyphData, C2D_FontGlyphIndexFromCodePoint(font, code), 0, 1.0f, 1.0f);
+				x += glyphData.xAdvance * text_size_x;
+			}
+		} else if(font_num_list[1][i] == 4) x += Exfont_get_width(part_text[1][i], text_size_x * 1.56);
+		
 		x_max = std::max(x_max, x);
 	}
-	C2D_TextBufDelete(c2d_buf);
+	
 	return x_max;
+}
+
+float Draw_get_width_one(const std::string &character, float text_size_x)
+{
+	if (!character.size() || !character[0] || character[0] == '\n') return 0;
+	int font_index;
+	{
+		static const std::string sample[8] = { "\u0000", "\u000A", "\u4DFF", "\uA000", "\u312F", "\u3190", "\uABFF", "\uD7B0", };
+		static_assert(strlen("\u4DFF") == 3);
+		static_assert(strlen("\uA000") == 3);
+		static_assert(strlen("\u312F") == 3);
+		static_assert(strlen("\u3190") == 3);
+		static_assert(strlen("\uABFF") == 3);
+		static_assert(strlen("\uD7B0") == 3);
+		bool font_loaded[2] = { Exfont_is_loaded_system_font(0), Exfont_is_loaded_system_font(1), };//JPN, CHN
+		
+		if ((character.c_str() > sample[2] && character < sample[3])
+		||  (character.c_str() > sample[4] && character < sample[5])
+		||  (character.c_str() > sample[6] && character < sample[7])
+		) {
+			if(memcmp((void*)character.c_str(), (void*)sample[2].c_str(), 0x3) > 0 && memcmp((void*)character.c_str(), (void*)sample[3].c_str(), 0x3) < 0)
+			{
+				bool found = false;
+				bool reverse = false;
+				int memcmp_result = 1;
+
+				if(font_loaded[0])
+				{
+					for(int s = 0;;)
+					{
+						if(!reverse)
+							s += 100;
+						else
+							s--;
+
+						if((s < 0 || s > 3000) && reverse)
+							break;
+						else if(s > 3000)
+						{
+							reverse = true;
+							s = 3000;
+						}
+						else
+							memcmp_result = memcmp((void*)character.c_str(), (void*)draw_japanese_kanji[s].c_str(), 3);
+
+						if(memcmp_result == 0)
+						{
+							font_index = 0; //JPN
+							found = true;
+							break;
+						}
+						else if(memcmp_result < 0)
+							reverse = true;
+					}
+				}
+
+				if(!found)
+				{
+					reverse = false;
+					memcmp_result = 1;
+
+					if(font_loaded[1])
+					{
+						for(int s = 0;;)
+						{
+							if(!reverse)
+								s += 100;
+							else
+								s--;
+
+							if((s < 0 || s > 6300) && reverse)
+								break;
+							else if(s > 6300)
+							{
+								reverse = true;
+								s = 6300;
+							}
+							else
+								memcmp_result = memcmp((void*)character.c_str(), (void*)draw_simple_chinese[s].c_str(), 3);
+
+							if(memcmp_result == 0)
+							{
+								font_index = 1; //CHN
+								found = true;
+								break;
+							}
+							else if(memcmp_result < 0)
+								reverse = true;
+						}
+					}
+				}
+
+				if(!found)
+				  font_index = 3; //TWN
+			}
+			else
+				font_index = 2; //KOR
+		}
+		else
+			font_index = 4;
+	}
+	float res = 0;
+	if(!Exfont_is_loaded_external_font(0) || (font_index >= 0 && font_index <= 3)) {
+		if(!Exfont_is_loaded_external_font(0))
+			system_fonts[font_index] = 0;
+		
+		fontGlyphPos_s glyphData;
+		auto font = system_fonts[font_index];
+		u32 code;
+		if (decode_utf8(&code, (u8 *) character.c_str()) == -1) code = 0xFFFD;
+		C2D_FontCalcGlyphPos(font, &glyphData, C2D_FontGlyphIndexFromCodePoint(font, code), 0, 1.0f, 1.0f);
+		res += glyphData.xAdvance * text_size_x;
+	} else if (font_index == 4) res += Exfont_get_width_one(character, text_size_x * 1.56);
+	return res;
 }
 
 
