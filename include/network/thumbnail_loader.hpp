@@ -12,6 +12,7 @@ enum class ThumbnailType {
 // returns the 'handle' of the thumbnail
 int thumbnail_request(const std::string &url, SceneType scene_id, int priority, ThumbnailType type = ThumbnailType::DEFAULT);
 void thumbnail_cancel_request(int handle);
+void thumbnail_cancel_requests(const std::vector<int> &handles);
 void thumbnail_set_priority(int handle, int priority);
 void thumbnail_set_priorities(const std::vector<std::pair<int, int> > &priority_list);
 

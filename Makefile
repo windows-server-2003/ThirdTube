@@ -33,7 +33,7 @@ include $(DEVKITARM)/3ds_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source source/system source/system/util source/system/draw source/youtube_parser source/youtube_parser/json11 source/scenes source/ui source/ui/views source/network
+SOURCES		:=	source source/system source/system/util source/system/draw source/youtube_parser source/youtube_parser/json11 source/scenes source/ui source/ui/views source/ui/views/specialized source/network
 DATA		:=	data
 INCLUDES	:=	include library library/FFmpeg/include library/libctru/include 
 GRAPHICS	:=	gfx
@@ -64,7 +64,7 @@ CFLAGS	:= -Wall -Wextra -Wno-unused -Wno-psabi -O2 -mword-relocations \
 
 CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
+CXXFLAGS	:= $(CFLAGS) -fno-exceptions -std=gnu++11
 
 ASFLAGS	:= $(ARCH)
 LDFLAGS	=	-specs=3dsx.specs $(ARCH) -Wl,-Map,$(notdir $*.map)

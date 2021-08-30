@@ -197,6 +197,10 @@ void Sem_exit(void)
 	
 	save_settings();
 	
+	main_view->recursive_delete_subviews();
+	delete main_view;
+	main_view = NULL;
+	
 	Util_log_save("settings/exit", "Exited.");
 }
 

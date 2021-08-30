@@ -7,4 +7,5 @@
 #include "views/horizontal_rule.hpp"
 #include "views/text.hpp"
 #include "views/empty.hpp"
+#include "views/specialized/comment.hpp"
 #include "ui_common.hpp"

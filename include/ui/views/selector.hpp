@@ -3,7 +3,7 @@
 #include "view.hpp"
 #include "../ui_common.hpp"
 
-struct SelectorView : public View {
+struct SelectorView : public FixedSizeView {
 private :
 	UI::FlexibleString<SelectorView> title;
 	
@@ -35,7 +35,9 @@ public :
 	
 	CallBackFuncType on_change_func;
 	
-	using View::View;
+	using FixedSizeView::FixedSizeView;
+	virtual ~SelectorView () {}
+	
 	SelectorView *set_texts(const std::vector<UI::FlexibleString<SelectorView> > &button_texts, int init_selected) { // mandatory
 		this->button_num = button_texts.size();
 		this->button_texts = button_texts;

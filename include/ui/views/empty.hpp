@@ -2,9 +2,11 @@
 #include "view.hpp"
 
 // for margin
-struct EmptyView : public View {
+struct EmptyView : public FixedSizeView {
 public :
-	using View::View;
+	using FixedSizeView::FixedSizeView;
+	virtual ~EmptyView () {}
+	
 	void draw() const override {}
 	void update(Hid_info key) override {}
 };
