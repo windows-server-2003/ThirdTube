@@ -70,8 +70,15 @@ public :
 	}
 	void update(Hid_info key) override {
 		update_scroller(key);
+		
+		if (key.touch_x < x0 || key.touch_x >= x1 || key.touch_y < y0 || key.touch_y >= y1) {
+			key.touch_x = -1;
+			key.touch_y = -1;
+			key.p_touch = false;
+		}
 		double y_offset = y0 - offset;
 		for (auto view : views) {
+			if (scrolling) view->on_scroll();
 			view->update(key, x0, y_offset);
 			y_offset += view->get_height();
 		}

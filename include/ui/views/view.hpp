@@ -11,6 +11,7 @@ public :
 	View (double x0, double y0) : x0(x0), y0(y0) {}
 	virtual ~View () {}
 	
+	virtual void on_scroll() {}
 	virtual void recursive_delete_subviews() {}
 	virtual void add_offset(double x_offset, double y_offset) {
 		x0 += x_offset;

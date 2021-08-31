@@ -29,6 +29,9 @@ public :
 		for (auto view : views) res += view->get_height();
 		return res;
 	}
+	void on_scroll() override {
+		for (auto view : views) view->on_scroll();
+	}
 	void draw() const override {
 		double y_offset = y0;
 		for (auto view : views) {
@@ -40,8 +43,9 @@ public :
 	void update(Hid_info key) override {
 		double y_offset = y0;
 		for (auto view : views) {
-			view->update(key, x0, y_offset);
-			y_offset += view->get_height();
+			double y_bottom = y_offset + view->get_height();
+			if (y_bottom >= 0 && y_offset < 240) view->update(key, x0, y_offset);
+			y_offset = y_bottom;
 		}
 	}
 	std::pair<int, int> get_displayed_range(int offset) {
