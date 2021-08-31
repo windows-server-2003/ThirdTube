@@ -103,30 +103,41 @@ std::vector<char> get_h_cipher(const std::string &content) {
 		instructions.push_back({type, arg != "" ? stoll(arg) : -1});
 		start = end_pos + 1;
 		if (end_pos >= content.size() || content[end_pos] == '}') break;
+		if (content[end_pos + 1] == '}') {
+			start = end_pos + 2;
+			break;
+		}
 	}
 	if (start < content.size() && starts_with(content, "h.push(String.fromCharCode(f))", start))
 		instructions.push_back({"push_all", -1});
 	
+	int default_pos = -1;
+	for (size_t i = 0; i < instructions.size(); i++) if (instructions[i].first == "default") default_pos = i;
+	
 	std::vector<char> h;
 	int f = 64;
 	while (++f - h.size() - 32) {
-		bool continue_flag = false;
-		bool case_matched = false;
-		for (auto i : instructions) {
-			if (i.first == "default" || (i.first == "case" && f == i.second)) case_matched = true;
-			else if (case_matched) {
-				if (i.first == "add") f += i.second;
-				if (i.first == "sub") f -= i.second;
-				if (i.first == "assign") f = i.second;
-				if (i.first == "continue") {
+		int jump_pos = -1;
+		for (size_t i = 0; i < instructions.size(); i++) if (instructions[i].first == "case" && instructions[i].second == f) jump_pos = i;
+		if (jump_pos == -1) jump_pos = default_pos;
+		
+		if (jump_pos != -1) {
+			bool continue_flag = false;
+			for (; jump_pos < (int) instructions.size(); jump_pos++) {
+				auto &inst_type = instructions[jump_pos].first;
+				auto arg = instructions[jump_pos].second;
+				if (inst_type == "add") f += arg;
+				if (inst_type == "sub") f -= arg;
+				if (inst_type == "assign") f = arg;
+				if (inst_type == "continue") {
 					continue_flag = true;
 					break;
 				}
-				if (i.first == "break") break;
-				if (i.first == "push") h.push_back((char) f);
+				if (inst_type == "break") break;
+				if (inst_type == "push") h.push_back((char) f);
 			}
+			if (continue_flag) continue;
 		}
-		if (continue_flag) continue;
 		if (instructions.size() && instructions.back().first == "push_all") h.push_back((char) f);
 	}
 	return h;

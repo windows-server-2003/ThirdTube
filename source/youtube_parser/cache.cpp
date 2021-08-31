@@ -4,7 +4,7 @@
 #include "internal_common.hpp"
 
 
-#define CACHE_VERSION 0
+#define CACHE_VERSION 1
 
 std::string yt_procs_to_string(const yt_cipher_transform_procedure &cipher_proc, const yt_nparam_transform_procedure &nparam_proc) {
 	std::ostringstream stream;
@@ -49,6 +49,10 @@ bool yt_procs_from_string(const std::string &str, yt_cipher_transform_procedure 
 	}
 	if (version < 0 || version > CACHE_VERSION) {
 		debug("[cache] " + std::string(version < 0 ? "Invalid cache version" : "Unsupported version"));
+		return false;
+	}
+	if (version < CACHE_VERSION) {
+		debug("[cache] cache made by an outdated version of the app, ignoring...");
 		return false;
 	}
 	
