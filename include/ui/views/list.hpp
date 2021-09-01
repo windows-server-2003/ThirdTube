@@ -4,7 +4,7 @@
 
 struct ListView : public FixedWidthView {
 public :
-	using FixedWidthView::FixedWidthView;
+	ListView (double x0, double y0, double width) : View(x0, y0), FixedWidthView(x0, y0, width) {}
 	virtual ~ListView () {}
 	
 	std::vector<View *> views;

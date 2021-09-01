@@ -11,7 +11,7 @@ struct TextView : public FixedSizeView {
 	bool x_centered = false;
 	bool y_centered = true;
 public :
-	using FixedSizeView::FixedSizeView;
+	TextView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~TextView () {}
 	
 	TextView *set_text(UI::FlexibleString<TextView> text) {

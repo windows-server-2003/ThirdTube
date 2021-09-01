@@ -1,13 +1,12 @@
 #pragma once
 #include "types.hpp"
+#include "system/util/log.hpp"
 
 struct View {
 protected :
 	double x0 = 0;
 	double y0 = 0;
 public :
-	
-	View () = default;
 	View (double x0, double y0) : x0(x0), y0(y0) {}
 	virtual ~View () {}
 	
@@ -38,7 +37,7 @@ protected :
 	double width = 0;
 	double x1 = 0;
 public :
-	FixedWidthView (double x0, double y0, double width) : width(width), x1(x0 + width) {}
+	FixedWidthView (double x0, double y0, double width) : View(x0, y0), width(width), x1(x0 + width) {}
 	virtual ~FixedWidthView () {}
 	
 	void add_offset(double x_offset, double y_offset) override {
@@ -54,7 +53,7 @@ protected :
 	double height = 0;
 	double y1 = 0;
 public :
-	FixedHeightView (double x0, double y0, double height) : height(height), y1(y0 + height) {}
+	FixedHeightView (double x0, double y0, double height) : View(x0, y0), height(height), y1(y0 + height) {}
 	virtual ~FixedHeightView () {}
 	
 	void add_offset(double x_offset, double y_offset) override {

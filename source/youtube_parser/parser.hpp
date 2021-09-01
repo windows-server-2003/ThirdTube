@@ -77,25 +77,31 @@ struct YouTubeVideoDetail {
 		YouTubeChannelSuccinct author;
 		std::string content;
 		std::string id;
+		
 		int reply_num;
+		std::vector<Comment> replies;
+		std::string continue_key; // innertube key, equals to YouTubeChannelDetail.continue_key
+		std::string replies_continue_token;
+		bool has_more_replies() const { return replies_continue_token != ""; }
 	};
 	std::vector<Comment> comments;
 	
-	std::string continue_key;
+	std::string continue_key; // innertube key
 	std::string suggestions_continue_token;
 	std::string comment_continue_token;
 	int comment_continue_type; // -1 : unavailable, 0 : using watch_comments, 1 : using innertube
 	bool comments_disabled;
 	
-	bool has_more_suggestions() { return continue_key != "" && suggestions_continue_token != ""; }
-	bool has_more_comments() { return comment_continue_type != -1; }
-	bool needs_timestamp_adjusting() { return is_livestream && livestream_type == LivestreamType::PREMIERE; }
-	bool is_playable() { return playability_status == "OK" && (both_stream_url != "" || (audio_stream_url != "" && video_stream_url != "")); }
+	bool has_more_suggestions() const { return continue_key != "" && suggestions_continue_token != ""; }
+	bool has_more_comments() const { return comment_continue_type != -1; }
+	bool needs_timestamp_adjusting() const { return is_livestream && livestream_type == LivestreamType::PREMIERE; }
+	bool is_playable() const { return playability_status == "OK" && (both_stream_url != "" || (audio_stream_url != "" && video_stream_url != "")); }
 };
 // this function does not load comments; call youtube_video_page_load_more_comments() if necessary
 YouTubeVideoDetail youtube_parse_video_page(std::string url);
 YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDetail &prev_result);
 YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetail &prev_result);
+YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVideoDetail::Comment &comment);
 
 
 

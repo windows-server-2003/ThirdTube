@@ -729,8 +729,7 @@ void Draw_touch_pos(void)
 {
 	Hid_info key;
 	Util_hid_query_key_state(&key);
-	if(key.p_touch || key.h_touch)
-		Draw("●", key.touch_x, key.touch_y, 0.20, 0.20, DEF_DRAW_RED);
+	if(key.p_touch || key.h_touch) Draw_texture(var_square_image[0], DEF_DRAW_RED, key.touch_x - 1, key.touch_y - 1, 3, 3);
 }
 
 void Draw_top_ui(void)

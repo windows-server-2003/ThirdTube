@@ -50,9 +50,6 @@
 #define DEF_EXFONT_EXIT_STR (std::string)"Exfont/Exit"
 #define DEF_EXFONT_LOAD_FONT_THREAD_STR (std::string)"Exfont/Load font thread"
 
-// font size
-#define MIDDLE_FONT_SIZE 0.641
-
 //error num
 #define DEF_ERR_SUMMARY 0
 #define DEF_ERR_DESCRIPTION 1

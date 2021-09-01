@@ -4,6 +4,7 @@
 
 #include "scenes/about.hpp"
 #include "scenes/video_player.hpp"
+#include "ui/ui_common.hpp"
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"

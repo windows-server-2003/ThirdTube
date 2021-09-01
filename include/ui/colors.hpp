@@ -24,6 +24,8 @@
 #define DEF_DRAW_WEAK_YELLOW 0x5000C5FF
 #define DEF_DRAW_NO_COLOR 0x0
 
+#define COLOR_LINK 0xFFCB6600
+
 #define DEFAULT_TEXT_COLOR (var_night_mode ? COLOR_GRAY(0xFF) : COLOR_GRAY(0x00))
 #define LIGHT0_TEXT_COLOR (var_night_mode ? COLOR_GRAY(0xCC) : COLOR_GRAY(0x33))
 #define LIGHT1_TEXT_COLOR (var_night_mode ? COLOR_GRAY(0xA0) : COLOR_GRAY(0x77))

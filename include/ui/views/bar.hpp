@@ -7,6 +7,7 @@ private :
 	UI::FlexibleString<BarView> title;
 public :
 	using CallBackFuncType = std::function<void (const BarView &value)>;
+	BarView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~BarView () {}
 	
 	bool holding = false;
@@ -25,7 +26,6 @@ public :
 	CallBackFuncType on_release_func;
 	CallBackFuncType while_holding_func;
 	
-	using FixedSizeView::FixedSizeView;
 	BarView *set_values(double low, double high, double init_val) { // mandatory
 		this->low = low;
 		this->high = high;

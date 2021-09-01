@@ -107,8 +107,7 @@ namespace VideoPlayer {
 	int suggestion_thumbnail_request_r = 0;
 	std::vector<int> suggestion_thumbnail_handles;
 	std::vector<std::vector<std::string> > suggestion_titles_lines;
-	int comment_thumbnail_request_l = 0;
-	int comment_thumbnail_request_r = 0;
+	std::set<CommentView *> comment_thumbnail_loaded_list;
 	std::vector<std::string> title_lines;
 	float title_font_size;
 	std::vector<std::string> description_lines;
@@ -142,11 +141,14 @@ bool VideoPlayer_query_init_flag(void)
 #define DESC_MAX_WIDTH (320 - SMALL_MARGIN * 2)
 #define SUGGESTION_TITLE_MAX_WIDTH (320 - (SUGGESTION_THUMBNAIL_WIDTH + 3))
 #define COMMENT_MAX_WIDTH (320 - (COMMENT_ICON_SIZE + 2 * SMALL_MARGIN))
+#define REPLY_INDENT 25
+#define REPLY_MAX_WIDTH (320 - REPLY_INDENT - (REPLY_ICON_SIZE + 2 * SMALL_MARGIN))
 
 
 static void load_video_page(void *);
 static void load_more_comments(void *);
 static void load_more_suggestions(void *);
+static void load_more_replies(void *);
 
 static void update_bottom_view() {
 	delete comments_bottom_view;
@@ -161,9 +163,11 @@ static void update_bottom_view() {
 			->set_x_centered(true)
 			->set_y_centered(false);
 		
-		if (cur_video_info.has_more_comments()) comment_all_view->set_on_child_drawn(2, [] (const ScrollView &, int) {
-			if (!is_async_task_running(load_video_page) &&
-				!is_async_task_running(load_more_comments)) queue_async_task(load_more_comments, &cur_video_info);
+		comment_all_view->set_on_child_drawn(2, [] (const ScrollView &, int) {
+			if (cur_video_info.has_more_comments()) {
+				if (!is_async_task_running(load_video_page) &&
+					!is_async_task_running(load_more_comments)) queue_async_task(load_more_comments, &cur_video_info);
+			}
 		});
 		comments_bottom_view = bottom_view;
 	} else comments_bottom_view = new EmptyView(0, 0, 320, 0);
@@ -217,12 +221,11 @@ static void load_video_page(void *arg) {
 	title_font_size = title_font_size_tmp;
 	
 	// cancel thumbnail requests
-	for (auto view : comments_main_view->views) {
-		CommentView *cur_view = dynamic_cast<CommentView *>(view);
-		thumbnail_cancel_request(cur_view->author_icon_handle);
-		cur_view->author_icon_handle = -1;
+	for (auto view : comment_thumbnail_loaded_list) {
+		thumbnail_cancel_request(view->author_icon_handle);
+		view->author_icon_handle = -1;
 	}
-	comment_thumbnail_request_l = comment_thumbnail_request_r = 0;
+	comment_thumbnail_loaded_list.clear();
 	comments_main_view->recursive_delete_subviews();
 	
 	update_bottom_view();
@@ -269,6 +272,7 @@ static void load_more_suggestions(void *arg_) {
 }
 
 #define COMMENT_MAX_LINE_NUM 1000 // this limit exists due to performance reason (TODO : more efficient truncating)
+
 static void load_more_comments(void *arg_) {
 	YouTubeVideoDetail *arg = (YouTubeVideoDetail *) arg_;
 	
@@ -294,23 +298,67 @@ static void load_more_comments(void *arg_) {
 			else break;
 		}
 		new_comment_views.push_back((new CommentView(0, 0, 320))
-			->set_author_info(cur_comment.author.name, cur_comment.author.url, cur_comment.author.icon_url)
 			->set_content_lines(cur_lines)
-			->set_on_author_icon_pressed([] (const CommentView &view) {
-				channel_url_pressed = view.author_url;
-			}));
+			->set_get_yt_comment_object([i](const CommentView &) -> YouTubeVideoDetail::Comment & { return cur_video_info.comments[i]; })
+			->set_on_author_icon_pressed([] (const CommentView &view) { channel_url_pressed = view.get_yt_comment_object().author.url; })
+			->set_on_load_more_replies_pressed([i] (CommentView &view) {
+				queue_async_task(load_more_replies, &view);
+				view.is_loading_replies = true;
+			})
+		);
 	}
 	Util_log_save("player/load-c", "truncate end");
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-	if (new_result.error != "") cur_video_info.error = new_result.error;
-	else {
-		cur_video_info = new_result;
-		comments_main_view->views.insert(comments_main_view->views.end(), new_comment_views.begin(), new_comment_views.end());
-		update_bottom_view();
-	}
+	cur_video_info = new_result;
+	comments_main_view->views.insert(comments_main_view->views.end(), new_comment_views.begin(), new_comment_views.end());
+	update_bottom_view();
 	var_need_reflesh = true;
 	svcReleaseMutex(small_resource_lock);
+}
+
+static void load_more_replies(void *arg_) {
+	CommentView *comment_view = (CommentView *) arg_;
+	// only load_more_comments() can invalidate this reference, so it's safe
+	YouTubeVideoDetail::Comment &comment = comment_view->get_yt_comment_object();
+	
+	add_cpu_limit(25);
+	auto new_comment = youtube_video_page_load_more_replies(comment);
+	remove_cpu_limit(25);
+	
+	std::vector<CommentView *> new_reply_views;
+	// wrap comments
+	Util_log_save("player/load-r", "truncate start");
+	for (size_t i = comment.replies.size(); i < new_comment.replies.size(); i++) {
+		auto &cur_reply = new_comment.replies[i];
+		auto &cur_content = cur_reply.content;
+		std::vector<std::string> cur_lines;
+		auto itr = cur_content.begin();
+		while (itr != cur_content.end()) {
+			if (cur_lines.size() >= COMMENT_MAX_LINE_NUM) break;
+			auto next_itr = std::find(itr, cur_content.end(), '\n');
+			auto tmp = truncate_str(std::string(itr, next_itr), REPLY_MAX_WIDTH, COMMENT_MAX_LINE_NUM - cur_lines.size(), 0.5, 0.5);
+			cur_lines.insert(cur_lines.end(), tmp.begin(), tmp.end());
+			
+			if (next_itr != cur_content.end()) itr = std::next(next_itr);
+			else break;
+		}
+		new_reply_views.push_back((new CommentView(REPLY_INDENT, 0, 320 - REPLY_INDENT))
+			->set_content_lines(cur_lines)
+			->set_get_yt_comment_object([comment_view, i](const CommentView &) -> YouTubeVideoDetail::Comment & { return comment_view->get_yt_comment_object().replies[i]; })
+			->set_on_author_icon_pressed([] (const CommentView &view) { channel_url_pressed = view.get_yt_comment_object().author.url; })
+			->set_is_reply(true)
+		);
+	}
+	Util_log_save("player/load-r", "truncate end");
+	
+	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	comment = new_comment;
+	comment_view->replies.insert(comment_view->replies.end(), new_reply_views.begin(), new_reply_views.end());
+	comment_view->replies_shown = comment_view->replies.size();
+	comment_view->is_loading_replies = false;
+	svcReleaseMutex(small_resource_lock);
+	var_need_reflesh = true;
 }
 
 /* -------------------------------------------------------------------------------------------------------------- */
@@ -1438,36 +1486,50 @@ Intent VideoPlayer_draw(void)
 			thumbnail_set_priorities(priority_list);
 		}
 		if (cur_video_info.comments.size()) { // comments
-			int comment_num = cur_video_info.comments.size();
-			auto tmp = comments_main_view->get_displayed_range(-comment_all_view->get_offset());
-			int displayed_l = tmp.first;
-			int displayed_r = tmp.second + 1;
-			int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-			int request_target_r = std::min(comment_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
-			// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
-			std::set<int> new_indexes, cancelling_indexes;
-			for (int i = comment_thumbnail_request_l; i < comment_thumbnail_request_r; i++) cancelling_indexes.insert(i);
-			for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
-			for (int i = comment_thumbnail_request_l; i < comment_thumbnail_request_r; i++) new_indexes.erase(i);
-			for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
-			
-			for (auto i : cancelling_indexes) {
-				CommentView *cur_view = dynamic_cast<CommentView *>(comments_main_view->views[i]);
-				thumbnail_cancel_request(cur_view->author_icon_handle);
-				cur_view->author_icon_handle = -1;
+			std::vector<std::pair<float, CommentView *> > comments_list; // list of comment views whose author's thumbnails should be loaded
+			{
+				constexpr int LOW = -1000;
+				constexpr int HIGH = 1240;
+				float cur_y = -comment_all_view->get_offset();
+				for (size_t i = 0; i < comments_main_view->views.size(); i++) {
+					float cur_height = comments_main_view->views[i]->get_height();
+					if (cur_y < HIGH && cur_y + cur_height >= LOW) {
+						auto parent_comment_view = dynamic_cast<CommentView *>(comments_main_view->views[i]);
+						if (cur_y + parent_comment_view->get_self_height() >= LOW) comments_list.push_back({cur_y, parent_comment_view});
+						auto list = parent_comment_view->get_reply_pos_list(); // {y offset, reply view}
+						for (auto j : list) {
+							float cur_reply_height = j.second->get_height();
+							if (cur_y + j.first < HIGH && cur_y + j.first + cur_reply_height > LOW) comments_list.push_back({cur_y + j.first, j.second});
+						}
+					}
+					cur_y += cur_height;
+				}
+				if (comments_list.size() > MAX_THUMBNAIL_LOAD_REQUEST) {
+					int leftover = comments_list.size() - MAX_THUMBNAIL_LOAD_REQUEST;
+					comments_list.erase(comments_list.begin(), comments_list.begin() + leftover / 2);
+					comments_list.erase(comments_list.end() - (leftover - leftover / 2), comments_list.end());
+				}
 			}
-			for (auto i : new_indexes) {
-				CommentView *cur_view = dynamic_cast<CommentView *>(comments_main_view->views[i]);
-				cur_view->author_icon_handle = thumbnail_request(cur_video_info.comments[i].author.icon_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::ICON);
+			
+			std::set<CommentView *> newly_loading_views, cancelling_views;
+			for (auto i : comment_thumbnail_loaded_list) cancelling_views.insert(i);
+			for (auto i : comments_list) newly_loading_views.insert(i.second);
+			for (auto i : comment_thumbnail_loaded_list) newly_loading_views.erase(i);
+			for (auto i : comments_list) cancelling_views.erase(i.second);
+			
+			for (auto i : cancelling_views) {
+				thumbnail_cancel_request(i->author_icon_handle);
+				i->author_icon_handle = -1;
+				comment_thumbnail_loaded_list.erase(i);
+			}
+			for (auto i : newly_loading_views) {
+				i->author_icon_handle = thumbnail_request(i->get_yt_comment_object().author.icon_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::ICON);
+				comment_thumbnail_loaded_list.insert(i);
 			}
 			
-			comment_thumbnail_request_l = request_target_l;
-			comment_thumbnail_request_r = request_target_r;
-			
-			std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-			auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-			for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] =
-				{dynamic_cast<CommentView *>(comments_main_view->views[i])->author_icon_handle, 500 - dist(i)};
+			std::vector<std::pair<int, int> > priority_list;
+			auto priority = [&] (float i) { return 500 + (i < 0 ? i : 240 - i) / 100; };
+			for (auto i : comments_list) priority_list.push_back({i.second->author_icon_handle, priority(i.first)});
 			thumbnail_set_priorities(priority_list);
 		}
 		

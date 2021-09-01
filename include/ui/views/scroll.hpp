@@ -24,7 +24,7 @@ protected :
 public :
 	std::vector<View *> views;
 	
-	using FixedSizeView::FixedSizeView;
+	ScrollView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~ScrollView () {}
 	
 	using OnDrawnCallBackFuncType = std::function<void (const ScrollView &, int)>;

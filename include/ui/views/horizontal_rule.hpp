@@ -5,7 +5,7 @@
 // simple horizontal line
 struct HorizontalRuleView : public FixedSizeView {
 public :
-	using FixedSizeView::FixedSizeView;
+	HorizontalRuleView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~HorizontalRuleView () {}
 	
 	void draw() const override {

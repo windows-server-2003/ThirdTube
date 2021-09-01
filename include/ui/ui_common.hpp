@@ -8,6 +8,7 @@
 #define SMALL_MARGIN 3
 #define DEFAULT_FONT_INTERVAL 13
 #define MIDDLE_FONT_INTERVAL 18
+#define MIDDLE_FONT_SIZE 0.641
 
 namespace UI {
 	template<class CallArg> struct FlexibleString {
