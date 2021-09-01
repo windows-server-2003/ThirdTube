@@ -191,6 +191,7 @@ void webpage_loader_thread_func(void* arg) {
 		if (next_type == LoadRequestType::SEARCH) load_search(*((SearchRequestArg *) requests[(int) LoadRequestType::SEARCH]));
 		if (next_type == LoadRequestType::SEARCH_CONTINUE) load_search_continue(*((SearchRequestArg *) requests[(int) LoadRequestType::SEARCH_CONTINUE]));
 		if (next_type == LoadRequestType::CHANNEL) load_search_channel(*((ChannelLoadRequestArg *) requests[(int) LoadRequestType::CHANNEL]));
+		if (next_type == LoadRequestType::CHANNEL_CONTINUE) load_search_channel_continue(*((ChannelLoadRequestArg *) requests[(int) LoadRequestType::CHANNEL_CONTINUE]));
 		// add here
 		
 		lock();
