@@ -1339,6 +1339,7 @@ void VideoPlayer_exit(void)
 	Util_log_save(DEF_SAPP0_EXIT_STR, "Exited.");
 }
 
+#define DURATION_FONT_SIZE 0.4
 static void draw_video_content(Hid_info key) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	if (is_async_task_running(load_video_page)) {
@@ -1414,6 +1415,11 @@ static void draw_video_content(Hid_info key) {
 					int cur_y = y_l;
 					// thumbnail
 					thumbnail_draw(suggestion_thumbnail_handles[i], 0, cur_y, SUGGESTION_THUMBNAIL_WIDTH, SUGGESTION_THUMBNAIL_HEIGHT);
+					float duration_width = Draw_get_width(cur_video.duration_text, DURATION_FONT_SIZE, DURATION_FONT_SIZE);
+					Draw_texture(var_square_image[0], 0xBB000000, SUGGESTION_THUMBNAIL_WIDTH - duration_width, cur_y + SUGGESTION_THUMBNAIL_HEIGHT - 10, duration_width, 10);
+					Draw(cur_video.duration_text, SUGGESTION_THUMBNAIL_WIDTH - duration_width, cur_y + SUGGESTION_THUMBNAIL_HEIGHT - 11,
+						DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);
+					
 					// title
 					auto title_lines = suggestion_titles_lines[i];
 					for (size_t line = 0; line < title_lines.size(); line++) {
@@ -1422,8 +1428,6 @@ static void draw_video_content(Hid_info key) {
 					}
 					cur_y += 2;
 					Draw(cur_video.author, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, LIGHT0_TEXT_COLOR);
-					cur_y += DEFAULT_FONT_INTERVAL;
-					Draw(cur_video.duration_text, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, LIGHT1_TEXT_COLOR);
 					cur_y += DEFAULT_FONT_INTERVAL;
 				}
 				y_offset += cur_video_info.suggestions.size() * SUGGESTIONS_VERTICAL_INTERVAL;

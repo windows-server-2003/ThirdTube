@@ -165,6 +165,7 @@ struct TemporaryCopyOfSearchResult {
 	bool has_continue;
 };
 
+#define DURATION_FONT_SIZE 0.4
 static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key) {
 	if (result.result_num) {
 		for (int i = result.displayed_l; i < result.displayed_r; i++) {
@@ -183,6 +184,9 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 				int cur_y = y_l;
 				// thumbnail
 				thumbnail_draw(thumbnail_handles[i], 0, cur_y, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+				float duration_width = Draw_get_width(cur_video.duration_text, DURATION_FONT_SIZE, DURATION_FONT_SIZE);
+				Draw_texture(var_square_image[0], 0xBB000000, THUMBNAIL_WIDTH - duration_width, cur_y + THUMBNAIL_HEIGHT - 10, duration_width, 10);
+				Draw(cur_video.duration_text, THUMBNAIL_WIDTH - duration_width, cur_y + THUMBNAIL_HEIGHT - 11, DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);
 				// title
 				auto title_lines = result.wrapped_titles[i];
 				for (size_t line = 0; line < title_lines.size(); line++) {
