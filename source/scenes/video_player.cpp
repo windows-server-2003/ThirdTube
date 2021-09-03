@@ -902,9 +902,6 @@ static void decode_thread(void* arg)
 					osTickCounterUpdate(&counter0);
 					vid_audio_time = osTickCounterRead(&counter0);
 					
-					if (!std::isnan(pos) && !std::isinf(pos))
-						vid_current_pos = pos;
-					
 					if(result.code == 0)
 					{
 						while(true)
@@ -1093,6 +1090,7 @@ static void convert_thread(void* arg)
 							if (cur_sound_pos < 0) break;
 						}
 					}
+					vid_current_pos = pts;
 					
 					osTickCounterUpdate(&counter0);
 					osTickCounterUpdate(&counter1);
