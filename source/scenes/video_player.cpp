@@ -1087,25 +1087,25 @@ static void convert_thread(void* arg)
 					osTickCounterUpdate(&counter0);
 					osTickCounterUpdate(&counter1);
 					
-					result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width, vid_height_org, 1024, 1024, GPU_RGB565);
+					result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width_org, vid_height_org, 1024, 1024, GPU_RGB565);
 					if(result.code != 0)
 						Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 
 					if(vid_width > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width, vid_height_org, 1024, 0, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width_org, vid_height_org, 1024, 0, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 					if(vid_height > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width, vid_height_org, 0, 1024, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width_org, vid_height_org, 0, 1024, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 					if(vid_width > 1024 && vid_height > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width, vid_height_org, 1024, 1024, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width_org, vid_height_org, 1024, 1024, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
@@ -1438,7 +1438,7 @@ static void draw_video_content(Hid_info key) {
 			y_offset += DEFAULT_FONT_INTERVAL;
 			Draw(vid_audio_format, 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL;
-			Draw(std::to_string(vid_width) + "x" + std::to_string(vid_height) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
+			Draw(std::to_string(vid_width_org) + "x" + std::to_string(vid_height_org) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL;
 			Draw(LOCALIZED(HW_DECODER) + " : " + LOCALIZED_ENABLED_STATUS(network_decoder.hw_decoder_enabled), 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL;
@@ -1555,10 +1555,10 @@ Intent VideoPlayer_draw(void)
 	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 	
 	//fit to screen size
-	vid_zoom = std::min(400.0 / vid_width, (var_full_screen_mode ? 240.0 : 225.0) / vid_height);
+	vid_zoom = std::min(400.0 / vid_width_org, (var_full_screen_mode ? 240.0 : 225.0) / vid_height_org);
 	vid_zoom = std::min(10.0, std::max(0.05, vid_zoom));
-	vid_x = (400 - (vid_width * vid_zoom)) / 2;
-	vid_y = ((var_full_screen_mode ? 240 : 225) - (vid_height * vid_zoom)) / 2;
+	vid_x = (400 - (vid_width_org * vid_zoom)) / 2;
+	vid_y = ((var_full_screen_mode ? 240 : 225) - (vid_height_org * vid_zoom)) / 2;
 	if (!var_full_screen_mode) vid_y += 15;
 	
 	bool video_playing_bar_show = video_is_playing();
