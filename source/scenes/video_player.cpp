@@ -176,7 +176,7 @@ static void update_bottom_view() {
 			->set_y_centered(false);
 		
 		comment_all_view->set_on_child_drawn(2, [] (const ScrollView &, int) {
-			if (cur_video_info.has_more_comments()) {
+			if (cur_video_info.has_more_comments() && cur_video_info.error == "") {
 				if (!is_async_task_running(load_video_page) &&
 					!is_async_task_running(load_more_comments)) queue_async_task(load_more_comments, &cur_video_info);
 			}
