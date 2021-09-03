@@ -11,6 +11,7 @@ bool var_wifi_enabled = false;
 bool var_high_resolution_mode = true;
 bool var_use_experimental_sslc = true;
 bool var_use_experimental_sslc_changed = true;
+bool var_show_fps = false;
 u8 var_wifi_state = 0;
 u8 var_wifi_signal = 0;
 u8 var_battery_charge = 0;

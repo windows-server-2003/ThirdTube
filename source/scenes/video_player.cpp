@@ -2007,6 +2007,7 @@ Intent VideoPlayer_draw(void)
 		*/
 		
 		if ((key.h_x && key.p_y) || (key.h_y && key.p_x)) var_debug_mode = !var_debug_mode;
+		if ((key.h_x && key.p_a) || (key.h_x && key.p_a)) var_show_fps = !var_show_fps;
 		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	}
 
