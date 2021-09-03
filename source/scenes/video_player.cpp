@@ -853,14 +853,6 @@ static void decode_thread(void* arg)
 						vid_width += 16 - vid_width % 16;
 					if(vid_height % 16 != 0)
 						vid_height += 16 - vid_height % 16;
-
-					//fit to screen size
-					while(((vid_width * vid_zoom) > 400 || (vid_height * vid_zoom) > 225) && vid_zoom > 0.05)
-						vid_zoom -= 0.001;
-
-					vid_x = (400 - (vid_width * vid_zoom)) / 2;
-					vid_y = (225 - (vid_height * vid_zoom)) / 2;
-					vid_y += 15;
 				}
 			}
 			
@@ -1562,6 +1554,13 @@ Intent VideoPlayer_draw(void)
 
 	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 	
+	//fit to screen size
+	vid_zoom = std::min(400.0 / vid_width, (var_full_screen_mode ? 240.0 : 225.0) / vid_height);
+	vid_zoom = std::min(10.0, std::max(0.05, vid_zoom));
+	vid_x = (400 - (vid_width * vid_zoom)) / 2;
+	vid_y = ((var_full_screen_mode ? 240 : 225) - (vid_height * vid_zoom)) / 2;
+	if (!var_full_screen_mode) vid_y += 15;
+	
 	bool video_playing_bar_show = video_is_playing();
 	
 	if(var_need_reflesh || !var_eco_mode)
@@ -1587,7 +1586,7 @@ Intent VideoPlayer_draw(void)
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
 
-		Draw_top_ui();
+		if (!var_full_screen_mode || !network_decoder.ready) Draw_top_ui();
 		caption_overlay_view->cur_timestamp = vid_current_pos;
 		caption_overlay_view->draw();
 

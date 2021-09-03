@@ -31,6 +31,7 @@ void load_settings() {
 	var_time_to_turn_off_lcd = load_int("time_to_turn_off_lcd", 150);
 	if (var_time_to_turn_off_lcd < 10) var_time_to_turn_off_lcd = 150;
 	var_eco_mode = load_int("eco_mode", 1);
+	var_full_screen_mode = load_int("full_screen_mode", 0);
 	var_night_mode = load_int("dark_theme", 0);
 	var_flash_mode = load_int("dark_theme_flash", 0);
 	var_use_experimental_sslc = var_use_experimental_sslc_changed = load_int("use_experimental_sslc", 0);
@@ -46,6 +47,7 @@ void save_settings() {
 		"<lcd_brightness>" + std::to_string(var_lcd_brightness) + "</lcd_brightness>\n" +
 		"<time_to_turn_off_lcd>" + std::to_string(var_time_to_turn_off_lcd) + "</time_to_turn_off_lcd>\n" +
 		"<eco_mode>" + std::to_string(var_eco_mode) + "</eco_mode>\n" + 
+		"<full_screen_mode>" + std::to_string(var_full_screen_mode) + "</full_screen_mode>\n" +
 		"<dark_theme>" + std::to_string(var_night_mode) + "</dark_theme>\n" + 
 		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n" + 
 		"<use_experimental_sslc>" + std::to_string(var_use_experimental_sslc_changed) + "</use_experimental_sslc>\n";

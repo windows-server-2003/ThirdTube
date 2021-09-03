@@ -12,6 +12,7 @@ extern bool var_high_resolution_mode;
 extern bool var_use_experimental_sslc;
 extern bool var_use_experimental_sslc_changed;
 extern bool var_show_fps;
+extern bool var_full_screen_mode;
 extern u8 var_wifi_state;
 extern u8 var_wifi_signal;
 extern u8 var_battery_charge;

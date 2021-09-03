@@ -144,6 +144,19 @@ void Sem_init(void)
 						save_settings_request = true;
 					}
 				}),
+			// Eco mode
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+					(std::function<std::string ()>) []() { return LOCALIZED(ON); }
+				}, var_full_screen_mode)
+				->set_title([](const SelectorView &) { return LOCALIZED(FULL_SCREEN_MODE); })
+				->set_on_change([](const SelectorView &view) {
+					if (var_full_screen_mode != view.selected_button) {
+						var_full_screen_mode = view.selected_button;
+						save_settings_request = true;
+					}
+				}),
 			// Dark theme (plus flash)
 			(new SelectorView(0, 0, 320, 35))
 				->set_texts({
