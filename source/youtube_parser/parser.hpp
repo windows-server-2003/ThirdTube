@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <string>
+#include <map>
 
 struct YouTubeChannelSuccinct {
 	std::string name;
@@ -72,6 +73,28 @@ struct YouTubeVideoDetail {
 	std::string publish_date;
 	std::string views_str;
 	
+	// caption-related data
+	std::string caption_base_url;
+	struct CaptionBaseLanguage {
+		std::string name; // e.g. "English", "Japanese"
+		std::string id; // e.g. "en", "ja"
+		std::string base_url; // empty string for instances in caption_translated_languages
+		bool is_translatable;
+	};
+	struct CaptionTranslationLanguage {
+		std::string name;
+		std::string id;
+	};
+	std::vector<CaptionBaseLanguage> caption_base_languages;
+	std::vector<CaptionTranslationLanguage> caption_translation_languages;
+	struct CaptionPiece {
+		float start_time;
+		float end_time;
+		std::string content;
+	};
+	using Caption = std::vector<CaptionPiece>;
+	std::map<std::pair<std::string, std::string>, Caption> caption_data;
+	
 	std::vector<YouTubeVideoSuccinct> suggestions;
 	struct Comment {
 		YouTubeChannelSuccinct author;
@@ -102,6 +125,7 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url);
 YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDetail &prev_result);
 YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetail &prev_result);
 YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVideoDetail::Comment &comment);
+YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &prev_result, const std::string &base_lang_id, const std::string &translation_lang_id);
 
 
 

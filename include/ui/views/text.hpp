@@ -5,17 +5,27 @@
 
 // simple horizontal line
 struct TextView : public FixedSizeView {
-	UI::FlexibleString<TextView> text;
+	std::function<u32 ()> get_text_color = [] () { return DEFAULT_TEXT_COLOR; };
+	std::vector<UI::FlexibleString<TextView> > text;
 	double font_size = 0.5;
 	double interval = DEFAULT_FONT_INTERVAL;
 	bool x_centered = false;
 	bool y_centered = true;
+	bool holding = false;
 public :
 	TextView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~TextView () {}
 	
+	float text_x_offset = 0;
+	float text_y_offset = 0;
+	
 	TextView *set_text(UI::FlexibleString<TextView> text) {
-		this->text = text;
+		this->text = { text };
+		return this;
+	}
+	template<class T> TextView *set_text_lines(std::vector<T> text) {
+		this->text.clear();
+		for (auto i : text) this->text.push_back(i);
 		return this;
 	}
 	TextView *set_font_size(double font_size, double interval) {
@@ -31,11 +41,26 @@ public :
 		this->y_centered = y_centered;
 		return this;
 	}
-	
-	void draw() const override {
-		int y = y_centered ? (int)((y0 + y1 - interval) / 2) : y0;
-		if (x_centered) Draw_x_centered(text, x0 + SMALL_MARGIN, x1 - SMALL_MARGIN, y, font_size, font_size, DEFAULT_TEXT_COLOR);
-		else Draw(text, x0 + SMALL_MARGIN, y, font_size, font_size, DEFAULT_TEXT_COLOR);
+	TextView *set_text_offset(float text_x_offset, float text_y_offset) {
+		this->text_x_offset = text_x_offset;
+		this->text_y_offset = text_y_offset;
+		return this;
 	}
-	void update(Hid_info key) override {}
+	TextView *set_get_text_color(std::function<u32 ()> get_text_color) {
+		this->get_text_color = get_text_color;
+		return this;
+	}
+	
+	void draw_() const override {
+		int y = y_centered ? (int)((y0 + y1 - interval * text.size()) / 2) : y0;
+		if (x_centered) {
+			for (size_t i = 0; i < text.size(); i++) 
+				Draw_x_centered(text[i], x0 + SMALL_MARGIN + text_x_offset, x1 - SMALL_MARGIN + text_x_offset, y + i * interval + text_y_offset,
+					font_size, font_size, get_text_color());
+		} else {
+			for (size_t i = 0; i < text.size(); i++) 
+				Draw(text[i], x0 + SMALL_MARGIN + text_x_offset, y + i * interval + text_y_offset, font_size, font_size, get_text_color());
+		}
+	}
+	void update_(Hid_info key) override {}
 };

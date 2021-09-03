@@ -49,13 +49,13 @@ public :
 		return this;
 	}
 	
-	void draw() const override {
+	void draw_() const override {
 		Draw(title, x0 + SMALL_MARGIN, y0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, bar_x0(), bar_y() - 1, bar_len(), 3);
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, bar_x0(), bar_y() - 1, get_x_from_value(value) - bar_x0(), 3);
 		C2D_DrawCircleSolid(get_x_from_value(value), bar_y(), 0, holding ? 6 : 4, DEF_DRAW_WEAK_AQUA);
 	}
-	void update(Hid_info key) override {
+	void update_(Hid_info key) override {
 		if (key.p_touch && key.touch_y >= bar_y() - 5 && key.touch_y <= bar_y() + 5 && key.touch_x >= bar_x0() - 5 && key.touch_x <= bar_x1() + 5) 
 			holding = true;
 		if (holding && key.touch_x == -1) {

@@ -55,7 +55,7 @@ public :
 	}
 	
 	
-	void draw() const override {
+	void draw_() const override {
 		double y_offset = y0 - offset;
 		for (int i = 0; i < (int) views.size(); i++) {
 			auto &view = views[i];
@@ -68,7 +68,7 @@ public :
 		}
 		draw_slider_bar();
 	}
-	void update(Hid_info key) override {
+	void update_(Hid_info key) override {
 		update_scroller(key);
 		
 		if (key.touch_x < x0 || key.touch_x >= x1 || key.touch_y < y0 || key.touch_y >= y1) {

@@ -2,12 +2,13 @@
 #include "view.hpp"
 #include <vector>
 
-struct ListView : public FixedWidthView {
+struct VerticalListView : public FixedWidthView {
 public :
-	ListView (double x0, double y0, double width) : View(x0, y0), FixedWidthView(x0, y0, width) {}
-	virtual ~ListView () {}
+	VerticalListView (double x0, double y0, double width) : View(x0, y0), FixedWidthView(x0, y0, width) {}
+	virtual ~VerticalListView () {}
 	
 	std::vector<View *> views;
+	std::vector<int> draw_order;
 	
 	virtual void recursive_delete_subviews() override {
 		for (auto view : views) {
@@ -19,8 +20,12 @@ public :
 	
 	// direct access to `views` is also allowed
 	// this is just for method chaining mainly used immediately after the construction of the view
-	ListView *set_views(const std::vector<View *> &views) {
+	VerticalListView *set_views(const std::vector<View *> &views) {
 		this->views = views;
+		return this;
+	}
+	VerticalListView *set_draw_order(const std::vector<int> &draw_order) {
+		this->draw_order = draw_order;
 		return this;
 	}
 	
@@ -32,15 +37,21 @@ public :
 	void on_scroll() override {
 		for (auto view : views) view->on_scroll();
 	}
-	void draw() const override {
-		double y_offset = y0;
-		for (auto view : views) {
-			double y_bottom = y_offset + view->get_height();
-			if (y_bottom >= 0 && y_offset < 240) view->draw(x0, y_offset);
-			y_offset = y_bottom;
+	void draw_() const override {
+		if (!draw_order.size()) {
+			double y_offset = y0;
+			for (auto view : views) {
+				double y_bottom = y_offset + view->get_height();
+				if (y_bottom >= 0 && y_offset < 240) view->draw(x0, y_offset);
+				y_offset = y_bottom;
+			}
+		} else {
+			std::vector<float> y_pos(views.size() + 1, y0);
+			for (size_t i = 0; i < views.size(); i++) y_pos[i + 1] = y_pos[i] + views[i]->get_height();
+			for (auto i : draw_order) if (y_pos[i + 1] >= 0 && y_pos[i] < 240) views[i]->draw(x0, y_pos[i]);
 		}
 	}
-	void update(Hid_info key) override {
+	void update_(Hid_info key) override {
 		double y_offset = y0;
 		for (auto view : views) {
 			double y_bottom = y_offset + view->get_height();

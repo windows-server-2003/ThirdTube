@@ -181,6 +181,23 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 			res.both_stream_url = i["url"].string_value();
 		}
 	}
+	
+	// extract caption data
+	for (auto base_lang : player_response["captions"]["playerCaptionsTracklistRenderer"]["captionTracks"].array_items()) {
+		YouTubeVideoDetail::CaptionBaseLanguage cur_lang;
+		cur_lang.name = get_text_from_object(base_lang["name"]);
+		cur_lang.id = base_lang["languageCode"].string_value();
+		cur_lang.base_url = base_lang["baseUrl"].string_value();
+		cur_lang.is_translatable = base_lang["isTranslatable"].bool_value();
+		res.caption_base_languages.push_back(cur_lang);
+	}
+	for (auto translation_lang : player_response["captions"]["playerCaptionsTracklistRenderer"]["translationLanguages"].array_items()) {
+		YouTubeVideoDetail::CaptionTranslationLanguage cur_lang;
+		cur_lang.name = get_text_from_object(translation_lang["languageName"]);
+		cur_lang.id = translation_lang["languageCode"].string_value();
+		res.caption_translation_languages.push_back(cur_lang);
+	}
+	
 	return true;
 }
 
@@ -472,13 +489,13 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 }
 
 YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVideoDetail::Comment &comment) {
+	YouTubeVideoDetail::Comment res = comment;
+	res.replies_continue_token = "";
+	
 	if (!comment.has_more_replies()) {
 		debug("load_more_replies on a comment that has no replies to load");
 		return comment;
 	}
-	
-	YouTubeVideoDetail::Comment res = comment;
-	res.replies_continue_token = "";
 	
 	Json replies_data;
 	{
@@ -504,6 +521,57 @@ YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVi
 			if (item["continuationItemRenderer"] != Json())
 				res.replies_continue_token = item["continuationItemRenderer"]["button"]["buttonRenderer"]["command"]["continuationCommand"]["token"].string_value();
 		}
+	
+	return res;
+}
+
+YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &prev_result, const std::string &base_lang_id, const std::string &translation_lang_id) {
+	YouTubeVideoDetail res = prev_result;
+	
+	int base_lang_index = -1;
+	for (size_t i = 0; i < prev_result.caption_base_languages.size(); i++) if (prev_result.caption_base_languages[i].id == base_lang_id) {
+		base_lang_index = i;
+		break;
+	}
+	if (base_lang_index == -1) {
+		debug("[caption] unknown base language");
+		return res;
+	}
+		
+	int translation_lang_index = -1;
+	if (translation_lang_id != "") {
+		for (size_t i = 0; i < prev_result.caption_translation_languages.size(); i++) if (prev_result.caption_translation_languages[i].id == translation_lang_id) {
+			translation_lang_index = i;
+			break;
+		}
+		if (translation_lang_index == -1) {
+			debug("[caption] unknown translation language");
+			return res;
+		}
+	}
+	
+	std::string url = "https://m.youtube.com" + prev_result.caption_base_languages[base_lang_index].base_url;
+	if (translation_lang_id != "") url += "&tlang=" + translation_lang_id;
+	url += "&fmt=json3&xorb=2&xobt=3&xovt=3"; // the meanings of xorb, xobt, xovt are unknwon, and these three parameters seem to be unnecessar
+	
+	std::string received_str = http_get(url);
+	Json caption_json;
+	if (received_str != "") {
+		std::string json_err;
+		caption_json = Json::parse(received_str, json_err);
+		if (json_err != "") debug("[comment] json parsing failed : " + json_err);
+	}
+	
+	std::vector<YouTubeVideoDetail::CaptionPiece> cur_caption;
+	for (auto caption_piece : caption_json["events"].array_items()) {
+		YouTubeVideoDetail::CaptionPiece cur_caption_piece;
+		cur_caption_piece.start_time = caption_piece["tStartMs"].int_value() / 1000.0;
+		cur_caption_piece.end_time = cur_caption_piece.start_time + caption_piece["dDurationMs"].int_value() / 1000.0;
+		for (auto seg : caption_piece["segs"].array_items()) cur_caption_piece.content += seg["utf8"].string_value();
+		
+		cur_caption.push_back(cur_caption_piece);
+	}
+	res.caption_data[{base_lang_id, translation_lang_id}] = cur_caption;
 	
 	return res;
 }

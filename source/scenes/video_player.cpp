@@ -30,11 +30,12 @@
 #define MAX_THUMBNAIL_LOAD_REQUEST 30
 #define MAX_RETRY_CNT 5
 
-#define TAB_NUM 4
+#define TAB_NUM 5
 #define TAB_GENERAL 0
 #define TAB_COMMENTS 1
 #define TAB_SUGGESTIONS 2
-#define TAB_ADVANCED 3
+#define TAB_CAPTIONS 3
+#define TAB_ADVANCED 4
 
 namespace VideoPlayer {
 	bool vid_main_run = false;
@@ -115,9 +116,15 @@ namespace VideoPlayer {
 	std::string channel_url_pressed;
 	
 	View *comments_top_view = new EmptyView(0, 0, 320, 4);
-	ListView *comments_main_view = new ListView(0, 0, 320);
+	VerticalListView *comments_main_view = new VerticalListView(0, 0, 320);
 	View *comments_bottom_view = new EmptyView(0, 0, 320, 0);
 	ScrollView *comment_all_view = NULL;
+	
+	
+	ScrollView *caption_main_view;
+	VerticalListView *caption_language_select_view;
+	View *captions_tab_view;
+	CaptionOverlayView *caption_overlay_view;
 };
 using namespace VideoPlayer;
 
@@ -143,12 +150,17 @@ bool VideoPlayer_query_init_flag(void)
 #define COMMENT_MAX_WIDTH (320 - (COMMENT_ICON_SIZE + 2 * SMALL_MARGIN))
 #define REPLY_INDENT 25
 #define REPLY_MAX_WIDTH (320 - REPLY_INDENT - (REPLY_ICON_SIZE + 2 * SMALL_MARGIN))
+#define CAPTION_TIMESTAMP_WIDTH 60
+#define CAPTION_CONTENT_MAX_WIDTH (320 - CAPTION_TIMESTAMP_WIDTH)
 
+
+static void send_seek_request_wo_lock(double pos);
 
 static void load_video_page(void *);
 static void load_more_comments(void *);
 static void load_more_suggestions(void *);
 static void load_more_replies(void *);
+static void load_caption(void *);
 
 static void update_bottom_view() {
 	delete comments_bottom_view;
@@ -212,6 +224,97 @@ static void load_video_page(void *arg) {
 		suggestion_titles_lines_tmp[i] = truncate_str(tmp_video_info.suggestions[i].title, SUGGESTION_TITLE_MAX_WIDTH, 2, 0.5, 0.5);
 	Util_log_save("player/load-v", "truncate end");
 	
+	// prepare captions view
+	static std::string selected_base_lang = "";
+	static std::string selected_translation_lang = "";
+	static std::pair<std::string *, std::string *> load_caption_arg = {&selected_base_lang, &selected_translation_lang};
+	
+	selected_base_lang = tmp_video_info.caption_base_languages.size() ? tmp_video_info.caption_base_languages[0].id : "";
+	selected_translation_lang = "";
+	
+	int exit_button_height = DEFAULT_FONT_INTERVAL * 1.5;
+	View *exit_button_view = (new HorizontalListView(0, 0, exit_button_height))->set_views({
+		(new EmptyView(0, 0, 320 - 100, exit_button_height))
+			->set_get_background_color([] (int) { return DEFAULT_BACK_COLOR; }),
+		(new TextView(0, 0, 100, exit_button_height))
+			->set_text((std::function<std::string ()>) [] () { return LOCALIZED(OK); })
+			->set_x_centered(true)
+			->set_text_offset(0, -2.0)
+			->set_background_color(COLOR_GRAY(0x80))
+			->set_on_view_released([] (View &view) {
+				Util_log_save("debug", "ok");
+				queue_async_task(load_caption, &load_caption_arg);
+			})
+		}
+	)->set_draw_order({1, 0});
+	
+	int language_selector_height = CONTENT_Y_HIGH - exit_button_view->get_height();
+	// base languages
+	VerticalListView *caption_left_view = new VerticalListView(0, 0, 160);
+	caption_left_view->views.push_back((new TextView(0, 0, 160, DEFAULT_FONT_INTERVAL * 1.2))
+		->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CAPTION_BASE_LANGUAGES); })
+		->set_get_background_color([] (int) { return DEFAULT_BACK_COLOR; })
+	);
+	caption_left_view->views.push_back((new HorizontalRuleView(0, 0, 160, 3))
+		->set_get_background_color([] (int) { return DEFAULT_BACK_COLOR; }));
+	ScrollView *base_languages_selector_view = new ScrollView(0, 0, 160, language_selector_height - caption_left_view->get_height());
+	for (size_t i = 0; i < tmp_video_info.caption_base_languages.size(); i++) {
+		auto &cur_lang = tmp_video_info.caption_base_languages[i];
+		base_languages_selector_view->views.push_back((new TextView(0, 0, 160, DEFAULT_FONT_INTERVAL))
+			->set_text(cur_lang.name)
+			->set_text_offset(0.0, -1.0)
+			->set_get_background_color([cur_lang] (int holding_frames) {
+				if (cur_lang.id == selected_base_lang) return COLOR_GRAY(0x80);
+				else {
+					int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - std::min(1.0, 0.15 * holding_frames)));
+					if (var_night_mode) darkness = 0xFF - darkness;
+					return COLOR_GRAY(darkness);
+				}
+			})
+			->set_on_view_released([cur_lang] (View &view) { selected_base_lang = cur_lang.id; })
+		);
+	}
+	caption_left_view->views.push_back(base_languages_selector_view);
+	caption_left_view->set_draw_order({2, 0, 1});
+	
+	// translation languages
+	VerticalListView *caption_right_view = new VerticalListView(0, 0, 160);
+	ScrollView *translation_languages_selector_view = new ScrollView(0, 0, 160, 0); // dummy height
+	caption_right_view->views.push_back((new SelectorView(0, 0, 160, DEFAULT_FONT_INTERVAL * 2.5))
+		->set_texts({
+			(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+			(std::function<std::string ()>) []() { return LOCALIZED(ON); }
+		}, 0)
+		->set_title([](const SelectorView &) { return LOCALIZED(CAPTION_TRANSLATION); })
+		->set_on_change([translation_languages_selector_view](const SelectorView &view) {
+			translation_languages_selector_view->set_is_visible(view.selected_button)->set_is_touchable(view.selected_button);
+		})
+		->set_get_background_color([] (int) { return DEFAULT_BACK_COLOR; })
+	);
+	translation_languages_selector_view->set_height(language_selector_height - caption_right_view->get_height());
+	for (size_t i = 0; i < tmp_video_info.caption_translation_languages.size(); i++) {
+		auto &cur_lang = tmp_video_info.caption_translation_languages[i];
+		TextView *cur_option_view = (new TextView(0, 0, 160, DEFAULT_FONT_INTERVAL))
+			->set_text(cur_lang.name)
+			->set_text_offset(0.0, -1.0);
+		cur_option_view->set_get_background_color([cur_lang] (int holding_frames) {
+			if (cur_lang.id == selected_translation_lang) return COLOR_GRAY(0x80);
+			else {
+				int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - std::min(1.0, 0.15 * holding_frames)));
+				if (var_night_mode) darkness = 0xFF - darkness;
+				return COLOR_GRAY(darkness);
+			}
+		});
+		cur_option_view->set_on_view_released([cur_lang] (View &view) {
+			Util_log_save("debug", "trans : " + cur_lang.id);
+			selected_translation_lang = cur_lang.id;
+		});
+		translation_languages_selector_view->views.push_back(cur_option_view);
+	}
+	translation_languages_selector_view->set_is_visible(false)->set_is_touchable(false);
+	caption_right_view->views.push_back(translation_languages_selector_view);
+	caption_right_view->set_draw_order({1, 0});
+	
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	cur_video_info = tmp_video_info;
@@ -227,6 +330,13 @@ static void load_video_page(void *arg) {
 	}
 	comment_thumbnail_loaded_list.clear();
 	comments_main_view->recursive_delete_subviews();
+	caption_main_view->recursive_delete_subviews();
+	caption_overlay_view->set_caption_data({});
+	caption_language_select_view->recursive_delete_subviews();
+	caption_language_select_view->set_views({exit_button_view,
+		(new HorizontalListView(0, 0, CONTENT_Y_HIGH - exit_button_view->get_height()))->set_views({caption_left_view, caption_right_view})});
+	caption_language_select_view->set_draw_order({1, 0});
+	captions_tab_view = caption_language_select_view;
 	
 	update_bottom_view();
 	
@@ -360,6 +470,97 @@ static void load_more_replies(void *arg_) {
 	svcReleaseMutex(small_resource_lock);
 	var_need_reflesh = true;
 }
+static void load_caption(void *arg_) {
+	auto *arg = (std::pair<std::string *, std::string *> *) arg_;
+	auto &base_lang_id = *arg->first;
+	auto &translation_lang_id = *arg->second;
+	
+	add_cpu_limit(25);
+	auto new_video_info = youtube_video_page_load_caption(cur_video_info, base_lang_id, translation_lang_id);
+	remove_cpu_limit(25);
+	
+	std::vector<View *> caption_main_views;
+	
+	int top_button_height = DEFAULT_FONT_INTERVAL * 1.5;
+	int top_button_width = 140;
+	caption_main_views.push_back((new HorizontalListView(0, 0, top_button_height))
+		->set_views({
+			(new SelectorView(0, 0, 320 - top_button_width, top_button_height))
+				->set_texts({
+					(std::function<std::string ()>) [] () { return LOCALIZED(OFF); },
+					(std::function<std::string ()>) [] () { return LOCALIZED(ON); }
+				}, 1)
+				->set_on_change([] (const SelectorView &view) { caption_overlay_view->set_is_visible(view.selected_button); }),
+			(new TextView(0, 0, top_button_width, top_button_height))
+				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SELECT_LANGUAGE); })
+				->set_text_offset(0.0, -2.0)
+				->set_x_centered(true)
+				->set_on_view_released([] (View &view) {
+					captions_tab_view = caption_language_select_view;
+				})
+				->set_background_color(COLOR_GRAY(0x80))
+		})
+	);
+	if (!new_video_info.caption_data[{base_lang_id, translation_lang_id}].size()) {
+		caption_main_views.push_back((new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
+			->set_text((std::function<std::string ()>) [] () { return LOCALIZED(NO_CAPTION); })
+			->set_x_centered(true)
+		);
+	}
+	for (const auto &caption_piece : new_video_info.caption_data[{base_lang_id, translation_lang_id}]) {
+		const auto &cur_content = caption_piece.content;
+		
+		if (!cur_content.size() || cur_content == "\n") continue;
+		
+		std::vector<std::string> cur_lines;
+		auto itr = cur_content.begin();
+		while (itr != cur_content.end()) {
+			auto next_itr = std::find(itr, cur_content.end(), '\n');
+			auto tmp = truncate_str(std::string(itr, next_itr), CAPTION_CONTENT_MAX_WIDTH, 20, 0.5, 0.5);
+			cur_lines.insert(cur_lines.end(), tmp.begin(), tmp.end());
+			
+			if (next_itr != cur_content.end()) itr = std::next(next_itr);
+			else break;
+		}
+		
+		float start_time = caption_piece.start_time;
+		float end_time = caption_piece.end_time;
+		caption_main_views.push_back((new HorizontalListView(0, 0, DEFAULT_FONT_INTERVAL * cur_lines.size() + SMALL_MARGIN))
+			->set_views({
+				(new TextView(0, 0, CAPTION_TIMESTAMP_WIDTH, DEFAULT_FONT_INTERVAL))
+					->set_text(Util_convert_seconds_to_time(start_time))
+					->set_text_offset(0.0, -1.0)
+					->set_get_text_color([] () { return COLOR_LINK; })
+					->set_on_view_released([start_time] (View &view) {
+						if (network_decoder.ready) send_seek_request_wo_lock(start_time * 1000);
+					}),
+				(new TextView(0, 0, CAPTION_CONTENT_MAX_WIDTH, DEFAULT_FONT_INTERVAL * cur_lines.size()))
+					->set_text_lines(cur_lines)
+					->set_text_offset(0.0, -1.0)
+					->set_get_background_color([start_time, end_time] (int) {
+						return vid_current_pos >= start_time && vid_current_pos < end_time ? LIGHT1_BACK_COLOR : DEFAULT_BACK_COLOR;
+					})
+			})
+		);
+	}
+	caption_main_views.push_back(new EmptyView(0, 0, 320, SMALL_MARGIN));
+	
+	// caption overlay
+	CaptionOverlayView *new_caption_overlay_view = (new CaptionOverlayView(0, 0, 400, 240))
+		->set_caption_data(new_video_info.caption_data[{base_lang_id, translation_lang_id}]);
+	
+	
+	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	caption_main_view->recursive_delete_subviews();
+	caption_main_view->set_views(caption_main_views);
+	captions_tab_view = caption_main_view;
+	
+	delete caption_overlay_view;
+	caption_overlay_view = new_caption_overlay_view;
+	caption_overlay_view->set_is_visible(true);
+	
+	svcReleaseMutex(small_resource_lock);
+}
 
 /* -------------------------------------------------------------------------------------------------------------- */
 /* -------------------------------------------------------------------------------------------------------------- */
@@ -392,13 +593,16 @@ static void send_change_video_request(std::string url) {
 	svcReleaseMutex(small_resource_lock);
 }
 
-static void send_seek_request(double pos) {
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+static void send_seek_request_wo_lock(double pos) {
 	vid_seek_pos = pos;
 	vid_current_pos = pos / 1000;
 	vid_seek_request = true;
 	if (network_decoder.ready) // avoid locking while initing
 		network_decoder.interrupt = true;
+}
+static void send_seek_request(double pos) {
+	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	send_seek_request_wo_lock(pos);
 	svcReleaseMutex(small_resource_lock);
 }
 
@@ -984,6 +1188,9 @@ void VideoPlayer_init(void)
 	for (int i = 0; i < TAB_NUM; i++) scroller[i] = VerticalScroller(0, 320, 0, CONTENT_Y_HIGH);
 	tab_selector_scroller = VerticalScroller(0, 320, CONTENT_Y_HIGH, CONTENT_Y_HIGH + TAB_SELECTOR_HEIGHT);
 	comment_all_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH))->set_views({comments_top_view, comments_main_view, comments_bottom_view});
+	captions_tab_view = caption_language_select_view = new VerticalListView(0, 0, 320);
+	caption_main_view = new ScrollView(0, 0, 320, CONTENT_Y_HIGH);
+	caption_overlay_view = new CaptionOverlayView(0, 0, 400, 240);
 	
 	APT_CheckNew3DS(&new_3ds);
 	if(new_3ds)
@@ -1230,6 +1437,8 @@ static void draw_video_content(Hid_info key) {
 			} else Draw_x_centered(LOCALIZED(EMPTY), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		} else if (selected_tab == TAB_COMMENTS) {
 			comment_all_view->draw();
+		} else if (selected_tab == TAB_CAPTIONS) {
+			captions_tab_view->draw();
 		} else if (selected_tab == TAB_ADVANCED) {
 			Draw(vid_video_format, 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL;
@@ -1377,6 +1586,8 @@ Intent VideoPlayer_draw(void)
 			Util_log_draw();
 
 		Draw_top_ui();
+		caption_overlay_view->cur_timestamp = vid_current_pos;
+		caption_overlay_view->draw();
 
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 
@@ -1429,6 +1640,7 @@ Intent VideoPlayer_draw(void)
 			if (i == TAB_GENERAL) tab_string = LOCALIZED(GENERAL);
 			else if (i == TAB_SUGGESTIONS) tab_string = LOCALIZED(SUGGESTIONS);
 			else if (i == TAB_COMMENTS) tab_string = LOCALIZED(COMMENTS);
+			else if (i == TAB_CAPTIONS) tab_string = LOCALIZED(CAPTIONS);
 			else if (i == TAB_ADVANCED) tab_string = LOCALIZED(ADVANCED);
 			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEFAULT_TEXT_COLOR);
 		}
@@ -1541,7 +1753,7 @@ Intent VideoPlayer_draw(void)
 				intent.arg = channel_url_pressed;
 				channel_url_pressed = "";
 			}
-		}
+		} else if (selected_tab == TAB_CAPTIONS) captions_tab_view->update(key);
 		
 		// tab selector
 		{

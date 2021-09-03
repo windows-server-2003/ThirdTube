@@ -3,7 +3,7 @@
 #include "system/util/log.hpp"
 #include "variables.hpp"
 
-void CommentView::draw() const {
+void CommentView::draw_() const {
 	auto &comment = get_yt_comment_object();
 	
 	int cur_y = y0;
@@ -47,7 +47,7 @@ void CommentView::draw() const {
 		cur_y += DEFAULT_FONT_INTERVAL;
 	}
 }
-void CommentView::update(Hid_info key) {
+void CommentView::update_(Hid_info key) {
 	auto &comment = get_yt_comment_object();
 	
 	int cur_y = y0;

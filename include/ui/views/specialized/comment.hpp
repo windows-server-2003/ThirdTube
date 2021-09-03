@@ -111,6 +111,6 @@ public :
 		return this;
 	}
 	
-	void draw() const override;
-	void update(Hid_info key) override;
+	void draw_() const override;
+	void update_(Hid_info key) override;
 };
