@@ -1036,32 +1036,32 @@ static void convert_thread(void* arg)
 					if(vid_width > 1024 && vid_height > 1024)
 					{
 						vid_tex_width[vid_mvd_image_num * 4 + 0] = 1024;
-						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width - 1024;
+						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width_org - 1024;
 						vid_tex_width[vid_mvd_image_num * 4 + 2] = 1024;
-						vid_tex_width[vid_mvd_image_num * 4 + 3] = vid_width - 1024;
+						vid_tex_width[vid_mvd_image_num * 4 + 3] = vid_width_org - 1024;
 						vid_tex_height[vid_mvd_image_num * 4 + 0] = 1024;
 						vid_tex_height[vid_mvd_image_num * 4 + 1] = 1024;
-						vid_tex_height[vid_mvd_image_num * 4 + 2] = vid_height - 1024;
-						vid_tex_height[vid_mvd_image_num * 4 + 3] = vid_height - 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 2] = vid_height_org - 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 3] = vid_height_org - 1024;
 					}
 					else if(vid_width > 1024)
 					{
 						vid_tex_width[vid_mvd_image_num * 4 + 0] = 1024;
-						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width - 1024;
-						vid_tex_height[vid_mvd_image_num * 4 + 0] = vid_height;
-						vid_tex_height[vid_mvd_image_num * 4 + 1] = vid_height;
+						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width_org - 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 0] = vid_height_org;
+						vid_tex_height[vid_mvd_image_num * 4 + 1] = vid_height_org;
 					}
 					else if(vid_height > 1024)
 					{
-						vid_tex_width[vid_mvd_image_num * 4 + 0] = vid_width;
-						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width;
+						vid_tex_width[vid_mvd_image_num * 4 + 0] = vid_width_org;
+						vid_tex_width[vid_mvd_image_num * 4 + 1] = vid_width_org;
 						vid_tex_height[vid_mvd_image_num * 4 + 0] = 1024;
-						vid_tex_height[vid_mvd_image_num * 4 + 1] = vid_height - 1024;
+						vid_tex_height[vid_mvd_image_num * 4 + 1] = vid_height_org - 1024;
 					}
 					else
 					{
-						vid_tex_width[vid_mvd_image_num * 4 + 0] = vid_width;
-						vid_tex_height[vid_mvd_image_num * 4 + 0] = vid_height;
+						vid_tex_width[vid_mvd_image_num * 4 + 0] = vid_width_org;
+						vid_tex_height[vid_mvd_image_num * 4 + 0] = vid_height_org;
 					}
 					
 					// we don't want to include the sleep time in the performance profiling
@@ -1087,25 +1087,25 @@ static void convert_thread(void* arg)
 					osTickCounterUpdate(&counter0);
 					osTickCounterUpdate(&counter1);
 					
-					result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width_org, vid_height_org, 1024, 1024, GPU_RGB565);
+					result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width, vid_height, 1024, 1024, GPU_RGB565);
 					if(result.code != 0)
 						Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 
 					if(vid_width > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width_org, vid_height_org, 1024, 0, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width, vid_height, 1024, 0, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 					if(vid_height > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width_org, vid_height_org, 0, 1024, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width, vid_height, 0, 1024, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 					if(vid_width > 1024 && vid_height > 1024)
 					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width_org, vid_height_org, 1024, 1024, 1024, 1024, GPU_RGB565);
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width, vid_height, 1024, 1024, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
