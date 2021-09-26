@@ -35,7 +35,7 @@ TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
 SOURCES		:=	source source/system source/system/util source/system/draw source/youtube_parser source/youtube_parser/json11 source/scenes source/ui source/ui/views source/ui/views/specialized source/network
 DATA		:=	data
-INCLUDES	:=	include library library/FFmpeg/include library/libctru/include 
+INCLUDES	:=	include library library/FFmpeg/include library/libctru/include library/libcurl/include 
 GRAPHICS	:=	gfx
 ROMFS		:=	romfs
 GFXBUILD	:=	$(ROMFS)/gfx
@@ -62,20 +62,20 @@ CFLAGS	:= -Wall -Wextra -Wno-unused -Wno-psabi -O2 -mword-relocations \
 		-fomit-frame-pointer -ffunction-sections -fdata-sections \
 		$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS
+CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS -DCURL_STATICLIB
 
 CXXFLAGS	:= $(CFLAGS) -fno-exceptions -std=gnu++11
 
 ASFLAGS	:= $(ARCH)
 LDFLAGS	=	-specs=3dsx.specs $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lswresample -lavformat -lswscale -lavcodec -lavutil -lcitro2d -lcitro3d -lctru -lm
+LIBS	:= -lswresample -lavformat -lswscale -lavcodec -lavutil -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lz  -lcitro2d -lcitro3d -lctru -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS := library/FFmpeg/lib library/libctru/lib
+LIBDIRS := library/FFmpeg/lib library/libctru/lib library/libcurl/lib
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional

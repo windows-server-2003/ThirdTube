@@ -8,23 +8,9 @@
 // cannot handle multiple requests of the same type at the same time
 
 enum class LoadRequestType {
-	SEARCH,
-	SEARCH_CONTINUE,
 	CHANNEL,
 	CHANNEL_CONTINUE,
 	NONE // used internally
-};
-struct SearchRequestArg {
-	Handle lock;
-	YouTubeSearchResult *result;
-	std::string search_word; // not used for SEARCH_CONTINUE
-	// for truncating
-	int max_width;
-	float text_size_x;
-	float text_size_y;
-	std::vector<std::vector<std::string> > *wrapped_titles;
-	
-	void (*on_load_complete) (void);
 };
 struct ChannelLoadRequestArg {
 	Handle lock;

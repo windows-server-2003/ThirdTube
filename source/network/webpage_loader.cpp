@@ -18,9 +18,7 @@ static void release() {
 }
 
 static void delete_request(LoadRequestType request_type) {
-	if (request_type == LoadRequestType::SEARCH || request_type == LoadRequestType::SEARCH_CONTINUE) {
-		delete ((SearchRequestArg *) requests[(int) request_type]);
-	} else if (request_type == LoadRequestType::CHANNEL || request_type == LoadRequestType::CHANNEL_CONTINUE) {
+	if (request_type == LoadRequestType::CHANNEL || request_type == LoadRequestType::CHANNEL_CONTINUE) {
 		delete ((ChannelLoadRequestArg *) requests[(int) request_type]);
 	}
 	// add here
@@ -53,69 +51,6 @@ bool is_webpage_loading_requested(LoadRequestType request_type) {
 	--------------------------------------------------------------------------------
 	--------------------------------------------------------------------------------
 */
-
-static void load_search(SearchRequestArg arg) {
-	std::string search_url = "https://m.youtube.com/results?search_query=";
-	for (auto c : arg.search_word) {
-		search_url.push_back('%');
-		search_url.push_back("0123456789ABCDEF"[(u8) c / 16]);
-		search_url.push_back("0123456789ABCDEF"[(u8) c % 16]);
-	}
-	add_cpu_limit(25);
-	YouTubeSearchResult new_result = youtube_parse_search(search_url);
-	remove_cpu_limit(25);
-	
-	// wrap and truncate here
-	Util_log_save("wloader/search", "truncate start");
-	std::vector<std::vector<std::string> > new_wrapped_titles(new_result.results.size());
-	for (size_t i = 0; i < new_result.results.size(); i++) {
-		std::string cur_str = new_result.results[i].type == YouTubeSearchResult::Item::VIDEO ? new_result.results[i].video.title : new_result.results[i].channel.name;
-		new_wrapped_titles[i] = truncate_str(cur_str, arg.max_width, 2, arg.text_size_x, arg.text_size_y);
-	}
-	Util_log_save("wloader/search", "truncate end");
-	
-	
-	svcWaitSynchronization(arg.lock, std::numeric_limits<s64>::max());
-	*arg.result = new_result;
-	*arg.wrapped_titles = new_wrapped_titles;
-	if (arg.on_load_complete) arg.on_load_complete();
-	svcReleaseMutex(arg.lock);
-}
-static void load_search_continue(SearchRequestArg arg) {
-	lock();
-	if (requests[(int) LoadRequestType::SEARCH]) {
-		release();
-		return;
-	}
-	auto prev_result = *arg.result;
-	release();
-	
-	auto new_result = youtube_continue_search(prev_result);
-	
-	Util_log_save("wloader/search-c", "truncate start");
-	std::vector<std::vector<std::string> > wrapped_titles_add(new_result.results.size() - prev_result.results.size());
-	for (size_t i = prev_result.results.size(); i < new_result.results.size(); i++) {
-		std::string cur_str = new_result.results[i].type == YouTubeSearchResult::Item::VIDEO ? new_result.results[i].video.title : new_result.results[i].channel.name;
-		wrapped_titles_add[i - prev_result.results.size()] = truncate_str(cur_str, arg.max_width, 2, arg.text_size_x, arg.text_size_y);
-	}
-	Util_log_save("wloader/search-c", "truncate end");
-	
-	
-	lock();
-	if (requests[(int) LoadRequestType::SEARCH]) {
-		release();
-		return;
-	}
-	svcWaitSynchronization(arg.lock, std::numeric_limits<s64>::max());
-	if (new_result.error != "") arg.result->error = new_result.error;
-	else {
-		*arg.result = new_result;
-		arg.wrapped_titles->insert(arg.wrapped_titles->end(), wrapped_titles_add.begin(), wrapped_titles_add.end());
-	}
-	if (arg.on_load_complete) arg.on_load_complete();
-	svcReleaseMutex(arg.lock);
-	release();
-}
 
 static void load_search_channel(ChannelLoadRequestArg arg) {
 	add_cpu_limit(25);
@@ -188,8 +123,6 @@ void webpage_loader_thread_func(void* arg) {
 			continue;
 		}
 		
-		if (next_type == LoadRequestType::SEARCH) load_search(*((SearchRequestArg *) requests[(int) LoadRequestType::SEARCH]));
-		if (next_type == LoadRequestType::SEARCH_CONTINUE) load_search_continue(*((SearchRequestArg *) requests[(int) LoadRequestType::SEARCH_CONTINUE]));
 		if (next_type == LoadRequestType::CHANNEL) load_search_channel(*((ChannelLoadRequestArg *) requests[(int) LoadRequestType::CHANNEL]));
 		if (next_type == LoadRequestType::CHANNEL_CONTINUE) load_search_channel_continue(*((ChannelLoadRequestArg *) requests[(int) LoadRequestType::CHANNEL_CONTINUE]));
 		// add here

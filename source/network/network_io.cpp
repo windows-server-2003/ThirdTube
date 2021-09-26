@@ -422,6 +422,33 @@ static bool perform_http_request(NetworkSession &session, const std::string &req
 	session.fail = true;
 	return false;
 }
+
+static size_t curl_receive_data_callback_func(char *in_ptr, size_t, size_t len, void *user_data) {
+	std::vector<u8> *out = (std::vector<u8> *) user_data;
+	out->insert(out->end(), in_ptr, in_ptr + len);
+	
+	// Util_log_save("curl", "received : " + std::to_string(len));
+	return len;
+}
+size_t curl_receive_headers_callback_func(char* in_ptr, size_t, size_t len, void *user_data) {
+	std::map<std::string, std::string> *out = (std::map<std::string, std::string> *) user_data;
+	
+	std::string cur_line = std::string(in_ptr, in_ptr + len);
+	if (cur_line.size() && cur_line.back() == '\n') cur_line.pop_back();
+	if (cur_line.size() && cur_line.back() == '\r') cur_line.pop_back();
+	auto colon = std::find(cur_line.begin(), cur_line.end(), ':');
+	if (colon == cur_line.end()) {
+		// Util_log_save("curl", "unknown header line : " + cur_line);
+	} else {
+		std::string header_name = remove_leading_whitespaces(std::string(cur_line.begin(), colon));
+		std::string header_content = remove_leading_whitespaces(std::string(colon + 1, cur_line.end()));
+		// Util_log_save("curl", "header line : " + header_name + " : " + header_content);
+		for (auto &c : header_name) c = tolower(c);
+		(*out)[header_name] = header_content;
+	}
+    return len;
+}
+
 static NetworkResult access_http_internal(NetworkSessionList &session_list, const std::string &method, const std::string &url,
 	std::map<std::string, std::string> request_headers, const std::string &body) {
 	
@@ -447,11 +474,10 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 	};
 	for (auto header : default_headers) if (!request_headers.count(header.first)) request_headers[header.first] = header.second;
 	
-	if (var_use_experimental_sslc) {
+	if (var_network_framework == NETWORK_FRAMEWORK_SSLC) {
 		auto host_name = url_get_host_name(url);
 		request_headers["Host"] = host_name;
 		
-		bool is_onetime_session = false;
 		NetworkSession &session_using = session_list.sessions[host_name];
 		if (!session_using.inited || session_using.fail) {
 			// Util_log_save("net-io", "init : " + host_name);
@@ -484,7 +510,7 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 			res.error = "The app is about to exit";
 			return res;
 		}
-	} else {
+	} else if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) {
 		u32 status_code = 0;
 		Result libctru_res = 0;
 		libctru_res = httpcOpenContext(&res.context, method == "GET" ? HTTPC_METHOD_GET : HTTPC_METHOD_POST, url.c_str(), 0);
@@ -516,6 +542,37 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 			res.data.insert(res.data.end(), buffer.begin(), buffer.begin() + len_read);
 			if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
 		}
+	} else if (var_network_framework == NETWORK_FRAMEWORK_LIBCURL) {
+		CURL *&curl = session_list.curl;
+		if (!curl) {
+			curl = curl_easy_init();
+			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+			curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L);
+			curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
+			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_receive_data_callback_func);
+			curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_receive_headers_callback_func);
+			// curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
+		}
+		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &res.data);
+		curl_easy_setopt(curl, CURLOPT_HEADERDATA, &res.response_headers);
+		curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
+		if (method == "POST") curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+		else curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
+		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+		
+		struct curl_slist *request_headers_list = NULL;
+		for (auto i : request_headers) request_headers_list = curl_slist_append(request_headers_list, (i.first + ": " + i.second).c_str());
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, request_headers_list);
+		
+		CURLcode curl_code = curl_easy_perform(curl);
+		if (curl_code == CURLE_OK) {
+			long status_code;
+			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+			res.status_code = status_code;
+		} else Util_log_save("curl", "deep fail");
+		
+		curl_slist_free_all(request_headers_list);
 	}
 	return res;
 }
@@ -529,7 +586,7 @@ NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url,
 		}
 		Util_log_save("http", "redir");
 		auto new_url = result.get_header("Location");
-		if (var_use_experimental_sslc) {
+		if (var_network_framework == NETWORK_FRAMEWORK_SSLC) {
 			auto old_host = url_get_host_name(url);
 			auto new_host = url_get_host_name(new_url);
 			if (old_host != new_host) {
@@ -548,17 +605,17 @@ NetworkResult Access_http_post(NetworkSessionList &session_list, const std::stri
 	return result;
 }
 void NetworkResult::finalize () {
-	if (!var_use_experimental_sslc) httpcCloseContext(&context);
+	if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) httpcCloseContext(&context);
 }
 
 std::string NetworkResult::get_header(std::string key) {
-	if (var_use_experimental_sslc) {
-		for (auto &c : key) c = tolower(c);
-		return response_headers.count(key) ? response_headers[key] : "";
-	} else {
+	if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) {
 		char buffer[0x1000] = { 0 };
 		httpcGetResponseHeader(&context, key.c_str(), buffer, sizeof(buffer));
 		return buffer;
+	} else {
+		for (auto &c : key) c = tolower(c);
+		return response_headers.count(key) ? response_headers[key] : "";
 	}
 }
 

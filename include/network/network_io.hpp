@@ -3,6 +3,11 @@
 #include <map>
 #include <string>
 #include <3ds.h>
+#include <curl/curl.h>
+
+#define NETWORK_FRAMEWORK_HTTPC 0
+#define NETWORK_FRAMEWORK_SSLC 1
+#define NETWORK_FRAMEWORK_LIBCURL 2
 
 struct NetworkResult {
 	httpcContext context;
@@ -33,6 +38,7 @@ struct NetworkSessionList { // one instance per thread
 private :
 	void deinit(); // will be called for each instance when the app exits
 public :
+	CURL* curl = NULL;
 	// should not be used from outside network_io.cpp
 	std::map<std::string, NetworkSession> sessions; 
 	std::vector<u8> *buffer;

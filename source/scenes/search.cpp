@@ -12,7 +12,7 @@
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"
 #include "network/thumbnail_loader.hpp"
-#include "network/webpage_loader.hpp"
+#include "system/util/async_task.hpp"
 
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -53,60 +53,67 @@ static void reset_search_result() {
 	search_done = false;
 }
 
-static void on_search_complete() {
+
+static void load_search_results(void *) {
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	std::string search_word = cur_search_word;
+	svcReleaseMutex(resource_lock);
+	
+	std::string search_url = "https://m.youtube.com/results?search_query=";
+	for (auto c : search_word) {
+		search_url.push_back('%');
+		search_url.push_back("0123456789ABCDEF"[(u8) c / 16]);
+		search_url.push_back("0123456789ABCDEF"[(u8) c % 16]);
+	}
+	add_cpu_limit(25);
+	YouTubeSearchResult new_result = youtube_parse_search(search_url);
+	remove_cpu_limit(25);
+	
+	// wrap and truncate here
+	Util_log_save("search", "truncate start");
+	std::vector<std::vector<std::string> > new_wrapped_titles(new_result.results.size());
+	for (size_t i = 0; i < new_result.results.size(); i++) {
+		std::string cur_str = new_result.results[i].type == YouTubeSearchResult::Item::VIDEO ? new_result.results[i].video.title : new_result.results[i].channel.name;
+		new_wrapped_titles[i] = truncate_str(cur_str, 320 - (THUMBNAIL_WIDTH + 3), 2, 0.5, 0.5);
+	}
+	Util_log_save("search", "truncate end");
+	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	search_result = new_result;
+	wrapped_titles = new_wrapped_titles;
+	
 	thumbnail_handles.assign(search_result.results.size(), -1);
 	results_scroller.reset();
 	search_done = true;
 	var_need_reflesh = true;
+	svcReleaseMutex(resource_lock);
 }
-static void on_search_more_complete() {
+static void load_more_search_results(void *) {
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	auto prev_result = search_result;
+	svcReleaseMutex(resource_lock);
+	
+	auto new_result = youtube_continue_search(prev_result);
+	
+	Util_log_save("search-c", "truncate start");
+	std::vector<std::vector<std::string> > wrapped_titles_add(new_result.results.size() - prev_result.results.size());
+	for (size_t i = prev_result.results.size(); i < new_result.results.size(); i++) {
+		std::string cur_str = new_result.results[i].type == YouTubeSearchResult::Item::VIDEO ? new_result.results[i].video.title : new_result.results[i].channel.name;
+		wrapped_titles_add[i - prev_result.results.size()] = truncate_str(cur_str, 320 - (THUMBNAIL_WIDTH + 3), 2, 0.5, 0.5);
+	}
+	Util_log_save("search-c", "truncate end");
+	
+	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (new_result.error != "") search_result.error = new_result.error;
+	else {
+		search_result = new_result;
+		wrapped_titles.insert(wrapped_titles.end(), wrapped_titles_add.begin(), wrapped_titles_add.end());
+	}
 	thumbnail_handles.resize(search_result.results.size(), -1);
 	var_need_reflesh = true;
-}
-
-static bool send_search_request(std::string search_word) {
-	if (!is_webpage_loading_requested(LoadRequestType::SEARCH)) {
-		cancel_webpage_loading(LoadRequestType::SEARCH_CONTINUE);
-		
-		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-		cur_search_word = search_word;
-		reset_search_result();
-		results_scroller.reset();
-		
-		SearchRequestArg *request = new SearchRequestArg;
-		request->lock = resource_lock;
-		request->result = &search_result;
-		request->search_word = search_word;
-		request->max_width = 320 - (THUMBNAIL_WIDTH + 3);
-		request->text_size_x = 0.5;
-		request->text_size_y = 0.5;
-		request->wrapped_titles = &wrapped_titles;
-		request->on_load_complete = on_search_complete;
-		request_webpage_loading(LoadRequestType::SEARCH, request);
-		
-		svcReleaseMutex(resource_lock);
-		return true;
-	} else return false;
-}
-static bool send_load_more_request() {
-	bool res = false;
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-	if (search_result.results.size() && search_result.has_continue()) {
-		SearchRequestArg *request = new SearchRequestArg;
-		request->lock = resource_lock;
-		request->result = &search_result;
-		request->max_width = 320 - (THUMBNAIL_WIDTH + 3);
-		request->text_size_x = 0.5;
-		request->text_size_y = 0.5;
-		request->wrapped_titles = &wrapped_titles;
-		request->on_load_complete = on_search_more_complete;
-		request_webpage_loading(LoadRequestType::SEARCH_CONTINUE, request);
-		res = true;
-	}
 	svcReleaseMutex(resource_lock);
-	return res;
 }
-
 
 
 bool Search_query_init_flag(void) {
@@ -216,21 +223,21 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 		// draw load-more margin
 		if (search_result.error != "" || search_result.has_continue()) {
 			std::string draw_str = "";
-			if (is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE)) draw_str = LOCALIZED(LOADING);
+			if (is_async_task_running(load_more_search_results)) draw_str = LOCALIZED(LOADING);
 			else if (result.error != "") draw_str = result.error;
 			
 			int y = RESULT_Y_LOW + result.result_num * RESULTS_VERTICAL_INTERVAL + RESULTS_MARGIN - results_scroller.get_offset();
 			if (y < RESULT_Y_HIGH) Draw_x_centered(draw_str, 0, 320, y, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		}
 	} else {
-		std::string draw_str = is_webpage_loading_requested(LoadRequestType::SEARCH) ? LOCALIZED(LOADING) : (search_done ? LOCALIZED(NO_RESULTS) : "");
+		std::string draw_str = is_async_task_running(load_search_results) ? LOCALIZED(LOADING) : (search_done ? LOCALIZED(NO_RESULTS) : "");
 		Draw_x_centered(draw_str, 0, 320, RESULT_Y_LOW, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 	}
 	results_scroller.draw_slider_bar();
 }
 
 static void search() {
-	if (!is_webpage_loading_requested(LoadRequestType::SEARCH)) {
+	if (!is_async_task_running(load_search_results)) {
 		SwkbdState keyboard;
 		swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 32);
 		swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY | SWKBD_PREDICTIVE_INPUT);
@@ -242,7 +249,15 @@ static void search() {
 		add_cpu_limit(40);
 		auto button_pressed = swkbdInputText(&keyboard, search_word, 64);
 		remove_cpu_limit(40);
-		if (button_pressed == SWKBD_BUTTON_RIGHT) send_search_request(search_word);
+		
+		cur_search_word = search_word;
+		if (button_pressed == SWKBD_BUTTON_RIGHT) {
+			remove_all_async_tasks_with_type(load_search_results);
+			remove_all_async_tasks_with_type(load_more_search_results);
+			reset_search_result();
+			results_scroller.reset();
+			queue_async_task(load_search_results, NULL);
+		}
 	}
 }
 
@@ -390,9 +405,9 @@ Intent Search_draw(void)
 		if (key.p_a) {
 			search();
 		} else if (RESULT_Y_LOW + search_result_bak.result_num * RESULTS_VERTICAL_INTERVAL - results_scroller.get_offset() < RESULT_Y_HIGH &&
-			!is_webpage_loading_requested(LoadRequestType::SEARCH_CONTINUE) && search_result_bak.result_num && search_result_bak.error == "") {
+			!is_async_task_running(load_more_search_results) && search_result_bak.result_num && search_result_bak.error == "") {
 			
-			send_load_more_request();
+			queue_async_task(load_more_search_results, NULL);
 		} else if(key.h_touch || key.p_touch)
 			var_need_reflesh = true;
 		
