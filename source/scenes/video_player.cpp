@@ -48,6 +48,7 @@ namespace VideoPlayer {
 	bool vid_detail_mode = false;
 	volatile bool vid_pausing = false;
 	volatile bool vid_pausing_seek = false;
+	volatile bool eof_reached = false;
 	bool vid_linear_filter = true;
 	bool vid_show_controls = false;
 	bool vid_allow_skip_frames = false;
@@ -709,6 +710,7 @@ namespace Bar {
 			if (vid_play_request) {
 				if (vid_pausing) {
 					vid_pausing = false;
+					if (eof_reached) send_seek_request_wo_lock(0);
 					Util_speaker_resume(0);
 				} else {
 					vid_pausing = true;
@@ -766,6 +768,7 @@ static void decode_thread(void* arg)
 			vid_audio_format = "n/a";
 			vid_change_video_request = false;
 			vid_seek_request = false;
+			eof_reached = false;
 			vid_play_request = true;
 			vid_total_time = 0;
 			vid_total_frames = 0;
@@ -861,9 +864,9 @@ static void decode_thread(void* arg)
 			{
 				if (vid_seek_request && !vid_change_video_request) {
 					network_waiting_status = "Seeking";
-					vid_current_pos = vid_seek_pos / 1000;
 					Util_speaker_clear_buffer(0);
 					svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
+					vid_current_pos = vid_seek_pos / 1000;
 					while (vid_seek_request && !vid_change_video_request && vid_play_request) {
 						svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 						double seek_pos_bak = vid_seek_pos;
@@ -882,12 +885,21 @@ static void decode_thread(void* arg)
 						break;
 					}
 					svcReleaseMutex(network_decoder_critical_lock);
+					if (eof_reached) vid_pausing = false;
 					network_waiting_status = NULL;
 				}
 				if (vid_change_video_request || !vid_play_request) break;
 				vid_duration = network_decoder.get_duration();
 				
 				auto type = network_decoder.next_decode_type();
+				
+				if (type == NetworkMultipleDecoder::DecodeType::EoF) {
+					vid_pausing = true;
+					eof_reached = true;
+					usleep(10000);
+					continue;
+				} else eof_reached = false;
+				
 				if (type == NetworkMultipleDecoder::DecodeType::AUDIO) {
 					osTickCounterUpdate(&counter0);
 					result = network_decoder.decode_audio(&audio_size, &audio, &pos);
@@ -944,8 +956,7 @@ static void decode_thread(void* arg)
 						if (result.code != 0)
 							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
 					}
-				} else if (type == NetworkMultipleDecoder::DecodeType::EoF) break;
-				else if (type == NetworkMultipleDecoder::DecodeType::INTERRUPTED) continue;
+				} else if (type == NetworkMultipleDecoder::DecodeType::INTERRUPTED) continue;
 				else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "unknown type of packet");
 			}
 			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
@@ -1865,6 +1876,7 @@ Intent VideoPlayer_draw(void)
 			if(vid_play_request) {
 				if (vid_pausing) {
 					if (!vid_pausing_seek) Util_speaker_resume(0);
+					if (eof_reached) send_seek_request_wo_lock(0);
 					vid_pausing = false;
 				} else {
 					if (!vid_pausing_seek) Util_speaker_pause(0);
