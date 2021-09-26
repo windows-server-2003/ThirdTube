@@ -1433,8 +1433,8 @@ static void draw_video_content(Hid_info key) {
 					// thumbnail
 					thumbnail_draw(suggestion_thumbnail_handles[i], 0, cur_y, SUGGESTION_THUMBNAIL_WIDTH, SUGGESTION_THUMBNAIL_HEIGHT);
 					float duration_width = Draw_get_width(cur_video.duration_text, DURATION_FONT_SIZE, DURATION_FONT_SIZE);
-					Draw_texture(var_square_image[0], 0xBB000000, SUGGESTION_THUMBNAIL_WIDTH - duration_width, cur_y + SUGGESTION_THUMBNAIL_HEIGHT - 10, duration_width, 10);
-					Draw(cur_video.duration_text, SUGGESTION_THUMBNAIL_WIDTH - duration_width, cur_y + SUGGESTION_THUMBNAIL_HEIGHT - 11,
+					Draw_texture(var_square_image[0], 0xBB000000, SUGGESTION_THUMBNAIL_WIDTH - duration_width - 2, cur_y + SUGGESTION_THUMBNAIL_HEIGHT - 10, duration_width + 2, 10);
+					Draw(cur_video.duration_text, SUGGESTION_THUMBNAIL_WIDTH - duration_width - 1, cur_y + SUGGESTION_THUMBNAIL_HEIGHT - 11,
 						DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);
 					
 					// title

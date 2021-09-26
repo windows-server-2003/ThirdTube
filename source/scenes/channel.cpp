@@ -198,6 +198,8 @@ struct TemporaryCopyOfChannelInfo {
 	std::map<int, std::vector<std::string> > wrapped_titles;
 	bool has_continue;
 };
+
+#define DURATION_FONT_SIZE 0.4
 static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_info key) {
 	if (is_async_task_running(load_channel)) {
 		Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
@@ -250,6 +252,10 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 					int cur_y = y_l;
 					// thumbnail
 					thumbnail_draw(thumbnail_handles[i], 0, cur_y, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
+					// duration text
+					float duration_width = Draw_get_width(cur_video.duration_text, DURATION_FONT_SIZE, DURATION_FONT_SIZE);
+					Draw_texture(var_square_image[0], 0xBB000000, THUMBNAIL_WIDTH - duration_width - 2, cur_y + THUMBNAIL_HEIGHT - 10, duration_width + 2, 10);
+					Draw(cur_video.duration_text, THUMBNAIL_WIDTH - duration_width - 1, cur_y + THUMBNAIL_HEIGHT - 11, DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);
 					// title
 					auto title_lines = channel_info.wrapped_titles[i];
 					for (size_t line = 0; line < title_lines.size(); line++) {

@@ -192,8 +192,8 @@ static void draw_search_result(TemporaryCopyOfSearchResult &result, Hid_info key
 				// thumbnail
 				thumbnail_draw(thumbnail_handles[i], 0, cur_y, THUMBNAIL_WIDTH, THUMBNAIL_HEIGHT);
 				float duration_width = Draw_get_width(cur_video.duration_text, DURATION_FONT_SIZE, DURATION_FONT_SIZE);
-				Draw_texture(var_square_image[0], 0xBB000000, THUMBNAIL_WIDTH - duration_width, cur_y + THUMBNAIL_HEIGHT - 10, duration_width, 10);
-				Draw(cur_video.duration_text, THUMBNAIL_WIDTH - duration_width, cur_y + THUMBNAIL_HEIGHT - 11, DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);
+				Draw_texture(var_square_image[0], 0xBB000000, THUMBNAIL_WIDTH - duration_width - 2, cur_y + THUMBNAIL_HEIGHT - 10, duration_width + 2, 10);
+				Draw(cur_video.duration_text, THUMBNAIL_WIDTH - duration_width - 1, cur_y + THUMBNAIL_HEIGHT - 11, DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);
 				// title
 				auto title_lines = result.wrapped_titles[i];
 				for (size_t line = 0; line < title_lines.size(); line++) {
