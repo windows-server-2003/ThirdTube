@@ -321,6 +321,7 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	
 	url = convert_url_to_mobile(url);
 	
+	res.url = url;
 	std::string html = http_get(url);
 	if (!html.size()) {
 		res.error = "failed to download video page";
@@ -564,6 +565,7 @@ YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &pre
 	
 	std::vector<YouTubeVideoDetail::CaptionPiece> cur_caption;
 	for (auto caption_piece : caption_json["events"].array_items()) {
+		if (caption_piece["segs"] == Json()) continue;
 		YouTubeVideoDetail::CaptionPiece cur_caption_piece;
 		cur_caption_piece.start_time = caption_piece["tStartMs"].int_value() / 1000.0;
 		cur_caption_piece.end_time = cur_caption_piece.start_time + caption_piece["dDurationMs"].int_value() / 1000.0;

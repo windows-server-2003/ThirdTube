@@ -16,6 +16,8 @@ static Json get_initial_data(const std::string &html) {
 YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 	YouTubeChannelDetail res;
 	
+	res.url_original = url;
+	
 	url = convert_url_to_mobile(url);
 	
 	// append "/videos" at the end of the url

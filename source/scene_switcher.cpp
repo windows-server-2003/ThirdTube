@@ -7,7 +7,6 @@
 #include "scenes/setting_menu.hpp"
 #include "network/network_io.hpp"
 #include "network/thumbnail_loader.hpp"
-#include "network/webpage_loader.hpp"
 #include "system/util/async_task.hpp"
 #include "ui/colors.hpp"
 // add here
@@ -15,7 +14,7 @@
 bool menu_thread_run = false;
 bool menu_check_exit_request = false;
 bool menu_update_available = false;
-Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread, webpage_loader_thread, async_task_thread;
+Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread, async_task_thread;
 C2D_Image menu_app_icon[4];
 
 static SceneType current_scene;
@@ -72,7 +71,6 @@ void Menu_init(void)
 	current_scene = SceneType::SEARCH;
 	
 	thumbnail_downloader_thread = threadCreate(thumbnail_downloader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
-	webpage_loader_thread = threadCreate(webpage_loader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	async_task_thread = threadCreate(async_task_thread_func, NULL, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
 	
@@ -132,21 +130,18 @@ void Menu_exit(void)
 	Exfont_exit();
 
 	thumbnail_downloader_thread_exit_request();
-	webpage_loader_thread_exit_request();
 	async_task_thread_exit_request();
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_check_connectivity_thread, time_out));
 	// Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_send_app_info_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_update_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(thumbnail_downloader_thread, time_out));
-	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(webpage_loader_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(async_task_thread, time_out));
 	threadFree(menu_worker_thread);
 	threadFree(menu_check_connectivity_thread);
 	// threadFree(menu_send_app_info_thread);
 	threadFree(menu_update_thread);
 	threadFree(thumbnail_downloader_thread);
-	threadFree(webpage_loader_thread);
 	threadFree(async_task_thread);
 	
 	NetworkSessionList::at_exit();

@@ -104,6 +104,7 @@ namespace VideoPlayer {
 	
 	Handle small_resource_lock; // locking basically all std::vector, std::string, etc
 	YouTubeVideoDetail cur_video_info;
+	std::map<std::string, YouTubeVideoDetail> video_info_cache;
 	int video_retry_left = 0;
 	int suggestion_thumbnail_request_l = 0;
 	int suggestion_thumbnail_request_r = 0;
@@ -186,17 +187,45 @@ static void update_bottom_view() {
 	} else comments_bottom_view = new EmptyView(0, 0, 320, 0);
 	comment_all_view->views[2] = comments_bottom_view;
 }
+#define COMMENT_MAX_LINE_NUM 1000 // this limit exists due to performance reason (TODO : more efficient truncating)
+static CommentView *comment_to_view(const YouTubeVideoDetail::Comment &comment, int comment_index) {
+	auto &cur_content = comment.content;
+	std::vector<std::string> cur_lines;
+	auto itr = cur_content.begin();
+	while (itr != cur_content.end()) {
+		if (cur_lines.size() >= COMMENT_MAX_LINE_NUM) break;
+		auto next_itr = std::find(itr, cur_content.end(), '\n');
+		auto tmp = truncate_str(std::string(itr, next_itr), COMMENT_MAX_WIDTH, COMMENT_MAX_LINE_NUM - cur_lines.size(), 0.5, 0.5);
+		cur_lines.insert(cur_lines.end(), tmp.begin(), tmp.end());
+		
+		if (next_itr != cur_content.end()) itr = std::next(next_itr);
+		else break;
+	}
+	return (new CommentView(0, 0, 320))
+		->set_content_lines(cur_lines)
+		->set_get_yt_comment_object([comment_index](const CommentView &) -> YouTubeVideoDetail::Comment & { return cur_video_info.comments[comment_index]; })
+		->set_on_author_icon_pressed([] (const CommentView &view) { channel_url_pressed = view.get_yt_comment_object().author.url; })
+		->set_on_load_more_replies_pressed([] (CommentView &view) {
+			queue_async_task(load_more_replies, &view);
+			view.is_loading_replies = true;
+		});
+}
 
 static void load_video_page(void *arg) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	std::string url = *(const std::string *) arg;
+	YouTubeVideoDetail tmp_video_info;
+	bool need_loading = false;
+	if (video_info_cache.count(url)) tmp_video_info = video_info_cache[url];
+	else need_loading = true;
 	svcReleaseMutex(small_resource_lock);
 	
-	Util_log_save("player/load-v", "request : " + url);
-	
-	add_cpu_limit(25);
-	YouTubeVideoDetail tmp_video_info = youtube_parse_video_page(url);
-	remove_cpu_limit(25);
+	if (need_loading) {
+		Util_log_save("player/load-v", "request : " + url);
+		add_cpu_limit(25);
+		tmp_video_info = youtube_parse_video_page(url);
+		remove_cpu_limit(25);
+	}
 	
 	Util_log_save("player/load-v", "truncate start");
 	// wrap main title
@@ -224,6 +253,9 @@ static void load_video_page(void *arg) {
 	for (size_t i = 0; i < tmp_video_info.suggestions.size(); i++)
 		suggestion_titles_lines_tmp[i] = truncate_str(tmp_video_info.suggestions[i].title, SUGGESTION_TITLE_MAX_WIDTH, 2, 0.5, 0.5);
 	Util_log_save("player/load-v", "truncate end");
+	// prepare comment views (comments exist from the first if it's loaded from cache)
+	std::vector<CommentView *> new_comment_views;
+	for (size_t i = 0; i < tmp_video_info.comments.size(); i++) new_comment_views.push_back(comment_to_view(tmp_video_info.comments[i], i));
 	
 	// prepare captions view
 	static std::string selected_base_lang = "";
@@ -319,6 +351,7 @@ static void load_video_page(void *arg) {
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	cur_video_info = tmp_video_info;
+	video_info_cache[url] = tmp_video_info;
 	description_lines = description_lines_tmp;
 	suggestion_titles_lines = suggestion_titles_lines_tmp;
 	title_lines = title_lines_tmp;
@@ -331,6 +364,7 @@ static void load_video_page(void *arg) {
 	}
 	comment_thumbnail_loaded_list.clear();
 	comments_main_view->recursive_delete_subviews();
+	comments_main_view->views.insert(comments_main_view->views.end(), new_comment_views.begin(), new_comment_views.end());
 	caption_main_view->recursive_delete_subviews();
 	caption_overlay_view->set_caption_data({});
 	caption_language_select_view->recursive_delete_subviews();
@@ -375,14 +409,13 @@ static void load_more_suggestions(void *arg_) {
 	if (new_result.error != "") cur_video_info.error = new_result.error;
 	else {
 		cur_video_info = new_result;
+		video_info_cache[cur_video_info.url] = new_result;
 		suggestion_titles_lines.insert(suggestion_titles_lines.end(), suggestion_titles_lines_add.begin(), suggestion_titles_lines_add.end());
 	}
 	suggestion_thumbnail_handles.resize(cur_video_info.suggestions.size(), -1);
 	var_need_reflesh = true;
 	svcReleaseMutex(small_resource_lock);
 }
-
-#define COMMENT_MAX_LINE_NUM 1000 // this limit exists due to performance reason (TODO : more efficient truncating)
 
 static void load_more_comments(void *arg_) {
 	YouTubeVideoDetail *arg = (YouTubeVideoDetail *) arg_;
@@ -393,35 +426,13 @@ static void load_more_comments(void *arg_) {
 	
 	std::vector<View *> new_comment_views;
 	// wrap comments
-	Util_log_save("player/load-c", "truncate start");
-	for (size_t i = arg->comments.size(); i < new_result.comments.size(); i++) {
-		auto &cur_comment = new_result.comments[i];
-		auto &cur_content = cur_comment.content;
-		std::vector<std::string> cur_lines;
-		auto itr = cur_content.begin();
-		while (itr != cur_content.end()) {
-			if (cur_lines.size() >= COMMENT_MAX_LINE_NUM) break;
-			auto next_itr = std::find(itr, cur_content.end(), '\n');
-			auto tmp = truncate_str(std::string(itr, next_itr), COMMENT_MAX_WIDTH, COMMENT_MAX_LINE_NUM - cur_lines.size(), 0.5, 0.5);
-			cur_lines.insert(cur_lines.end(), tmp.begin(), tmp.end());
-			
-			if (next_itr != cur_content.end()) itr = std::next(next_itr);
-			else break;
-		}
-		new_comment_views.push_back((new CommentView(0, 0, 320))
-			->set_content_lines(cur_lines)
-			->set_get_yt_comment_object([i](const CommentView &) -> YouTubeVideoDetail::Comment & { return cur_video_info.comments[i]; })
-			->set_on_author_icon_pressed([] (const CommentView &view) { channel_url_pressed = view.get_yt_comment_object().author.url; })
-			->set_on_load_more_replies_pressed([i] (CommentView &view) {
-				queue_async_task(load_more_replies, &view);
-				view.is_loading_replies = true;
-			})
-		);
-	}
-	Util_log_save("player/load-c", "truncate end");
+	Util_log_save("player/load-c", "truncate/views creation start");
+	for (size_t i = arg->comments.size(); i < new_result.comments.size(); i++) new_comment_views.push_back(comment_to_view(new_result.comments[i], i));
+	Util_log_save("player/load-c", "truncate/views creation end");
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	cur_video_info = new_result;
+	video_info_cache[cur_video_info.url] = new_result;
 	comments_main_view->views.insert(comments_main_view->views.end(), new_comment_views.begin(), new_comment_views.end());
 	update_bottom_view();
 	var_need_reflesh = true;
@@ -464,7 +475,7 @@ static void load_more_replies(void *arg_) {
 	Util_log_save("player/load-r", "truncate end");
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-	comment = new_comment;
+	comment = new_comment; // do not apply to the cache because it's a mess to also save the folding status
 	comment_view->replies.insert(comment_view->replies.end(), new_reply_views.begin(), new_reply_views.end());
 	comment_view->replies_shown = comment_view->replies.size();
 	comment_view->is_loading_replies = false;
@@ -575,10 +586,13 @@ static bool send_load_more_suggestions_request() {
 	return true;
 }
 
-static void send_change_video_request_wo_lock(std::string url) {
+// should be called while `small_resource_lock` is locked
+static void send_change_video_request_wo_lock(std::string url, bool force_load) {
 	remove_all_async_tasks_with_type(load_video_page);
 	remove_all_async_tasks_with_type(load_more_suggestions);
 	remove_all_async_tasks_with_type(load_more_comments);
+	
+	if (force_load) video_info_cache.erase(url);
 	
 	vid_play_request = false;
 	if (vid_url != url) {
@@ -588,9 +602,9 @@ static void send_change_video_request_wo_lock(std::string url) {
 	queue_async_task(load_video_page, &vid_url);
 	var_need_reflesh = true;
 }
-static void send_change_video_request(std::string url) {
+static void send_change_video_request(std::string url, bool force_load) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-	send_change_video_request_wo_lock(url);
+	send_change_video_request_wo_lock(url, force_load);
 	svcReleaseMutex(small_resource_lock);
 }
 
@@ -821,7 +835,7 @@ static void decode_thread(void* arg)
 				if (video_retry_left > 0) {
 					video_retry_left--;
 					Util_log_save("dec", "failed, retrying. retry cnt left:" + std::to_string(video_retry_left));
-					send_change_video_request(vid_url);
+					send_change_video_request(vid_url, true);
 				} else {
 					Util_err_set_error_message(result.string, result.error_description, DEF_SAPP0_DECODE_THREAD_STR, result.code);
 					Util_err_set_error_show_flag(true);
@@ -1158,7 +1172,7 @@ void VideoPlayer_resume(std::string arg)
 {
 	if (arg != "") {
 		if (arg != vid_url) {
-			send_change_video_request(arg);
+			send_change_video_request(arg, false);
 			video_retry_left = MAX_RETRY_CNT;
 		} else if (!vid_play_request && cur_video_info.is_playable()) vid_play_request = true;
 	}
@@ -1861,7 +1875,7 @@ Intent VideoPlayer_draw(void)
 				// reload
 				if (released_x >= 170 && released_x < 305 && released_y >= y_offset && released_y < y_offset + DEFAULT_FONT_INTERVAL) {
 					if (!is_async_task_running(load_video_page)) {
-						send_change_video_request(vid_url);
+						send_change_video_request(vid_url, true);
 						video_retry_left = MAX_RETRY_CNT;
 					}
 				}

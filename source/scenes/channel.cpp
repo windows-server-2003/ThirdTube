@@ -8,11 +8,12 @@
 #include "scenes/channel.hpp"
 #include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
+#include "ui/ui_common.hpp"
 #include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"
 #include "network/thumbnail_loader.hpp"
-#include "network/webpage_loader.hpp"
+#include "system/util/async_task.hpp"
 
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -41,6 +42,7 @@ namespace Channel {
 	Handle resource_lock;
 	std::string cur_channel_url;
 	YouTubeChannelDetail channel_info;
+	std::map<std::string, YouTubeChannelDetail> channel_info_cache;
 	int thumbnail_request_l = 0;
 	int thumbnail_request_r = 0;
 	std::vector<int> thumbnail_handles;
@@ -58,38 +60,76 @@ static void reset_channel_info() {
 	if (banner_thumbnail_handle != -1) thumbnail_cancel_request(banner_thumbnail_handle), banner_thumbnail_handle = -1;
 	channel_info = YouTubeChannelDetail();
 }
-static void on_channel_load() { // this will be called while resource_lock is locked
+
+void load_channel(void *) {
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	auto url = cur_channel_url;
+	YouTubeChannelDetail result;
+	bool need_loading = false;
+	if (channel_info_cache.count(url)) result = channel_info_cache[url];
+	else need_loading = true;
+	svcReleaseMutex(resource_lock);
+	
+	if (need_loading) {
+		add_cpu_limit(25);
+		result = youtube_parse_channel_page(url);
+		remove_cpu_limit(25);
+	}
+	
+	// wrap and truncate here
+	Util_log_save("channel", "truncate start");
+	std::vector<std::vector<std::string> > new_wrapped_titles(result.videos.size());
+	for (size_t i = 0; i < result.videos.size(); i++)
+		new_wrapped_titles[i] = truncate_str(result.videos[i].title, 320 - (THUMBNAIL_WIDTH + 3), 2, 0.5, 0.5);
+	Util_log_save("channel", "truncate end");
+	
+	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	channel_info = result;
+	wrapped_titles = new_wrapped_titles;
+	channel_info_cache[url] = result;
+	
 	thumbnail_handles.assign(channel_info.videos.size(), -1);
 	if (channel_info.icon_url != "") icon_thumbnail_handle = thumbnail_request(channel_info.icon_url, SceneType::CHANNEL, 1001, ThumbnailType::ICON);
 	if (channel_info.banner_url != "") banner_thumbnail_handle = thumbnail_request(channel_info.banner_url, SceneType::CHANNEL, 1000, ThumbnailType::VIDEO_BANNER);
 	var_need_reflesh = true;
+	svcReleaseMutex(resource_lock);
 }
-static void on_channel_load_more() {
+void load_channel_more(void *) {
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	auto prev_result = channel_info;
+	svcReleaseMutex(resource_lock);
+	
+	auto new_result = youtube_channel_page_continue(prev_result);
+	
+	Util_log_save("channel-c", "truncate start");
+	std::vector<std::vector<std::string> > wrapped_titles_add(new_result.videos.size() - prev_result.videos.size());
+	for (size_t i = prev_result.videos.size(); i < new_result.videos.size(); i++)
+		wrapped_titles_add[i - prev_result.videos.size()] = truncate_str(new_result.videos[i].title, 320 - (THUMBNAIL_WIDTH + 3), 2, 0.5, 0.5);
+	Util_log_save("channel-c", "truncate end");
+	
+	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (new_result.error != "") channel_info.error = new_result.error;
+	else {
+		channel_info = new_result;
+		channel_info_cache[channel_info.url_original] = channel_info;
+		wrapped_titles.insert(wrapped_titles.end(), wrapped_titles_add.begin(), wrapped_titles_add.end());
+	}
 	thumbnail_handles.resize(channel_info.videos.size(), -1);
 	var_need_reflesh = true;
+	svcReleaseMutex(resource_lock);
 }
-
 static bool send_load_request(std::string url) {
-	if (!is_webpage_loading_requested(LoadRequestType::CHANNEL)) {
-		cancel_webpage_loading(LoadRequestType::CHANNEL_CONTINUE);
+	if (!is_async_task_running(load_channel)) {
+		remove_all_async_tasks_with_type(load_channel_more);
 		
 		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-		
 		cur_channel_url = url;
 		reset_channel_info();
-		
-		ChannelLoadRequestArg *request = new ChannelLoadRequestArg;
-		request->lock = resource_lock;
-		request->result = &channel_info;
-		request->url = url;
-		request->max_width = 320 - (THUMBNAIL_WIDTH + 3);
-		request->text_size_x = 0.5;
-		request->text_size_y = 0.5;
-		request->wrapped_titles = &wrapped_titles;
-		request->on_load_complete = on_channel_load;
-		request_webpage_loading(LoadRequestType::CHANNEL, request);
-		
 		svcReleaseMutex(resource_lock);
+		
+		queue_async_task(load_channel, NULL);
 		return true;
 	} else return false;
 }
@@ -97,15 +137,7 @@ static bool send_load_more_request() {
 	bool res = false;
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	if (channel_info.videos.size() && channel_info.has_continue()) {
-		ChannelLoadRequestArg *request = new ChannelLoadRequestArg;
-		request->lock = resource_lock;
-		request->result = &channel_info;
-		request->max_width = 320 - (THUMBNAIL_WIDTH + 3);
-		request->text_size_x = 0.5;
-		request->text_size_y = 0.5;
-		request->wrapped_titles = &wrapped_titles;
-		request->on_load_complete = on_channel_load_more;
-		request_webpage_loading(LoadRequestType::CHANNEL_CONTINUE, request);
+		queue_async_task(load_channel_more, NULL);
 		res = true;
 	}
 	svcReleaseMutex(resource_lock);
@@ -167,7 +199,7 @@ struct TemporaryCopyOfChannelInfo {
 	bool has_continue;
 };
 static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_info key) {
-	if (is_webpage_loading_requested(LoadRequestType::CHANNEL)) {
+	if (is_async_task_running(load_channel)) {
 		Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 	} else  {
 		int y_offset = -videos_scroller.get_offset();
@@ -232,7 +264,7 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 				y_offset += channel_info.video_num * VIDEOS_VERTICAL_INTERVAL;
 				if (channel_info.error != "" || channel_info.has_continue) {
 					std::string draw_string = "";
-					if (is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE)) draw_string = "Loading...";
+					if (is_async_task_running(load_channel_more)) draw_string = "Loading...";
 					else if (channel_info.error != "") draw_string = channel_info.error;
 					
 					if (y_offset < VIDEO_LIST_Y_HIGH) Draw_x_centered(draw_string, 0, 320, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
@@ -365,7 +397,7 @@ Intent Channel_draw(void)
 		if (selected_tab == 0) {
 			content_height += channel_info_bak.video_num * VIDEOS_VERTICAL_INTERVAL;
 			// load more
-			if (content_height - videos_scroller.get_offset() < VIDEO_LIST_Y_HIGH && !is_webpage_loading_requested(LoadRequestType::CHANNEL_CONTINUE) &&
+			if (content_height - videos_scroller.get_offset() < VIDEO_LIST_Y_HIGH && !is_async_task_running(load_channel_more) &&
 				channel_info_bak.video_num) {
 				send_load_more_request();
 			}

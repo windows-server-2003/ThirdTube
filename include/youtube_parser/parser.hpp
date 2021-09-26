@@ -51,6 +51,7 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 
 struct YouTubeVideoDetail {
 	std::string error;
+	std::string url;
 	std::string title;
 	std::string description;
 	YouTubeChannelSuccinct author;
@@ -133,6 +134,7 @@ struct YouTubeChannelDetail {
 	std::string error;
 	std::string name;
 	std::string url;
+	std::string url_original;
 	std::string icon_url;
 	std::string banner_url;
 	std::string description;
