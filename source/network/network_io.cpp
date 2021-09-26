@@ -446,8 +446,17 @@ size_t curl_receive_headers_callback_func(char* in_ptr, size_t, size_t len, void
 		for (auto &c : header_name) c = tolower(c);
 		(*out)[header_name] = header_content;
 	}
-    return len;
+	return len;
 }
+int curl_set_socket_options(void *, curl_socket_t sockfd, curlsocktype purpose) {
+	static const int SOCKET_BUFFER_MAX_SIZE = 0x8000;
+	
+	// expand socket buffer size
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, &SOCKET_BUFFER_MAX_SIZE, sizeof(int));
+	
+	return CURL_SOCKOPT_OK;
+}
+ 
 
 static NetworkResult access_http_internal(NetworkSessionList &session_list, const std::string &method, const std::string &url,
 	std::map<std::string, std::string> request_headers, const std::string &body) {
@@ -552,6 +561,7 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 			curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
 			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_receive_data_callback_func);
 			curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_receive_headers_callback_func);
+			curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, curl_set_socket_options);
 			// curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
 		}
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &res.data);
@@ -570,6 +580,11 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 			long status_code;
 			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
 			res.status_code = status_code;
+			
+			char *redirected_url;
+			curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &redirected_url);
+			res.redirected_url = redirected_url;
+			if (res.redirected_url != url) Util_log_save("curl", "redir : " + res.redirected_url);
 		} else Util_log_save("curl", "deep fail");
 		
 		curl_slist_free_all(request_headers_list);
