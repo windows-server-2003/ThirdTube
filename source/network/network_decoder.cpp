@@ -269,7 +269,7 @@ void NetworkDecoder::deinit() {
 	}
 	// for HW decoder
 	for (auto i : video_mvd_tmp_frames.deinit()) free(i);
-	linearFree(mvd_frame);
+	linearFree_concurrent(mvd_frame);
 	mvd_frame = NULL;
 	buffered_pts_list.clear();
 	// for SW decoder
@@ -309,7 +309,7 @@ Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
 		}
 		video_mvd_tmp_frames.init(init);
 		
-		mvd_frame = (u8 *) linearAlloc(width * height * 2);
+		mvd_frame = (u8 *) linearAlloc_concurrent(width * height * 2);
 		if (!mvd_frame) {
 			result.error_description = "malloc() failed while preallocating ";
 			goto fail;
@@ -484,7 +484,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 	int source_offset = 0;
 
 	AVPacket *packet_read = packet_buffer[VIDEO][0];
-	u8 *mvd_packet = (u8 *) linearAlloc(packet_read->size);
+	u8 *mvd_packet = (u8 *) linearAlloc_concurrent(packet_read->size);
 	if(mvd_first)
 	{
 		//set extra data
@@ -600,7 +600,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 	} else Util_log_save("", "mvdstdProcessVideoFrame()...", result.code);
 	
 	mvd_first = false;
-	linearFree(mvd_packet);
+	linearFree_concurrent(mvd_packet);
 	mvd_packet = NULL;
 	av_packet_free(&packet_read);
 	packet_buffer[VIDEO].pop_front();
