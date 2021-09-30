@@ -5,16 +5,18 @@
 #include "scenes/channel.hpp"
 #include "scenes/about.hpp"
 #include "scenes/setting_menu.hpp"
+#include "scenes/watch_history.hpp"
 #include "network/network_io.hpp"
 #include "network/thumbnail_loader.hpp"
 #include "system/util/async_task.hpp"
+#include "system/util/misc_tasks.hpp"
 #include "ui/colors.hpp"
 // add here
 
 bool menu_thread_run = false;
 bool menu_check_exit_request = false;
 bool menu_update_available = false;
-Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread, async_task_thread;
+Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread, async_task_thread, misc_tasks_thread;
 C2D_Image menu_app_icon[4];
 
 static SceneType current_scene;
@@ -66,12 +68,15 @@ void Menu_init(void)
 	Channel_suspend();
 	About_init();
 	About_suspend();
+	History_init();
+	History_suspend();
 	// add here
 	Search_init(); // first running
 	current_scene = SceneType::SEARCH;
 	
 	thumbnail_downloader_thread = threadCreate(thumbnail_downloader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	async_task_thread = threadCreate(async_task_thread_func, NULL, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+	misc_tasks_thread = threadCreate(misc_tasks_thread_func, NULL, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
 	
 	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_high_resolution_mode).code);
@@ -123,6 +128,7 @@ void Menu_exit(void)
 	Search_exit();
 	Sem_exit();
 	About_exit();
+	History_exit();
 	// add here
 
 	Util_hid_exit();
@@ -131,18 +137,21 @@ void Menu_exit(void)
 
 	thumbnail_downloader_thread_exit_request();
 	async_task_thread_exit_request();
+	misc_tasks_thread_exit_request();
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_check_connectivity_thread, time_out));
 	// Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_send_app_info_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_update_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(thumbnail_downloader_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(async_task_thread, time_out));
+	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(misc_tasks_thread, time_out));
 	threadFree(menu_worker_thread);
 	threadFree(menu_check_connectivity_thread);
 	// threadFree(menu_send_app_info_thread);
 	threadFree(menu_update_thread);
 	threadFree(thumbnail_downloader_thread);
 	threadFree(async_task_thread);
+	threadFree(misc_tasks_thread);
 	
 	NetworkSessionList::at_exit();
 
@@ -218,6 +227,9 @@ bool Menu_main(void)
 	} else if (current_scene == SceneType::ABOUT) {
 		intent = About_draw();
 		if (intent.next_scene != SceneType::NO_CHANGE) About_suspend();
+	} else if (current_scene == SceneType::HISTORY) {
+		intent = History_draw();
+		if (intent.next_scene != SceneType::NO_CHANGE) History_suspend();
 	}
 	// add here
 	
@@ -236,6 +248,7 @@ bool Menu_main(void)
 		else if (current_scene == SceneType::CHANNEL) Channel_resume(arg);
 		else if (current_scene == SceneType::SETTINGS) Sem_resume(arg);
 		else if (current_scene == SceneType::ABOUT) About_resume(arg);
+		else if (current_scene == SceneType::HISTORY) History_resume(arg);
 		// add here
 	}
 	

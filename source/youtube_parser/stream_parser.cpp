@@ -331,9 +331,28 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	extract_stream(res, html);
 	extract_metadata(res, html);
 	
+	
+#	ifndef _WIN32
+	if (res.title != "") {
+		std::string video_id;
+		auto pos = url.find("?v=");
+		if (pos == std::string::npos) pos = url.find("&v=");
+		if (pos != std::string::npos) {
+			video_id = url.substr(pos + 3, 11);
+			HistoryVideo video;
+			video.id = video_id;
+			video.title = res.title;
+			video.author_name = res.author.name;
+			video.length_text = Util_convert_seconds_to_time((double) res.duration_ms / 1000);
+			video.my_view_count = 1;
+			video.last_watch_time = time(NULL);
+			add_watched_video(video);
+			misc_tasks_request(TASK_SAVE_HISTORY);
+		}
+	}
+#	endif
+	
 	debug(res.title);
-	// debug(res.author.name);
-	// debug(res.description);
 	return res;
 }
 
@@ -576,4 +595,12 @@ YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &pre
 	res.caption_data[{base_lang_id, translation_lang_id}] = cur_caption;
 	
 	return res;
+}
+
+
+std::string youtube_get_video_thumbnail_url_by_id(const std::string &id) {
+	return "https://i.ytimg.com/vi/" + id + "/default.jpg";
+}
+std::string youtube_get_video_url_by_id(const std::string &id) {
+	return "https://m.youtube.com/watch?v=" + id;
 }

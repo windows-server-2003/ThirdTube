@@ -6,6 +6,8 @@
 #include "variables.hpp"
 
 struct View {
+private :
+	static constexpr double TOUCH_DARKNESS_SPEED = 0.1;
 protected :
 	double x0 = 0;
 	double y0 = 0;
@@ -16,6 +18,8 @@ public :
 	virtual ~View () {}
 	
 	u32 background_color = 0;
+	bool scrolled = false;
+	double touch_darkness = 0;
 	std::function<u32 (int)> get_background_color;
 	bool is_visible = true;
 	bool is_touchable = true;
@@ -41,7 +45,10 @@ public :
 		return this;
 	}
 	
-	virtual void on_scroll() { view_holding_time = 0; }
+	virtual void on_scroll() {
+		view_holding_time = 0;
+		scrolled = true;
+	}
 	virtual void recursive_delete_subviews() {}
 	virtual void add_offset(double x_offset, double y_offset) {
 		x0 += x_offset;
@@ -70,11 +77,16 @@ public :
 		if (is_touchable) {
 			bool inside_view = key.touch_x >= x0 && key.touch_x < x0 + get_width() &&
 				key.touch_y >= y0 && key.touch_y < y0 + get_height();
-			if (inside_view && (key.p_touch || view_holding_time)) view_holding_time++;
+			if (inside_view && (key.p_touch || view_holding_time)) {
+				view_holding_time++;
+				if (!scrolled) touch_darkness = std::min(1.0, touch_darkness + TOUCH_DARKNESS_SPEED);
+				else touch_darkness = std::max(0.0, touch_darkness - TOUCH_DARKNESS_SPEED);
+			} else touch_darkness = std::max(0.0, touch_darkness - TOUCH_DARKNESS_SPEED);
 			if (key.touch_x == -1 && view_holding_time && on_view_released) on_view_released(*this);
 			if (!inside_view) view_holding_time = 0;
 			update_(key);
 		}
+		scrolled = false;
 	}
 	void update(Hid_info key, double x_offset, double y_offset) {
 		add_offset(x_offset, y_offset);

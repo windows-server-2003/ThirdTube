@@ -22,6 +22,9 @@
 #	include "types.hpp"
 #	include "system/util/log.hpp"
 #	include "system/util/file.hpp"
+#	include "system/util/util.hpp"
+#	include "system/util/history.hpp"
+#	include "system/util/misc_tasks.hpp"
 #	include "system/cpu_limit.hpp"
 #	include "definitions.hpp"
 #	define debug(s) Util_log_save("yt-parser", (s))

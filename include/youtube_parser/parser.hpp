@@ -149,5 +149,10 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url);
 // takes the previous result, returns the new result with both old items and new items
 YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result);
 
-
 void youtube_change_content_language(std::string language_code);
+
+// util function
+std::string youtube_get_video_thumbnail_url_by_id(const std::string &id);
+std::string youtube_get_video_url_by_id(const std::string &id);
+
+

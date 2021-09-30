@@ -12,6 +12,7 @@
 #include "network/network_decoder_multiple.hpp"
 #include "network/thumbnail_loader.hpp"
 #include "system/util/async_task.hpp"
+#include "system/util/misc_tasks.hpp"
 #include "system/util/util.hpp"
 
 #define NEW_3DS_CPU_LIMIT 50

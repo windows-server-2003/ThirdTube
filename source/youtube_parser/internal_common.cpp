@@ -62,23 +62,19 @@ namespace youtube_parser {
 		confirm_thread_network_session_list_inited();
 		if (!header.count("Accept-Language")) header["Accept-Language"] = language_code + ";q=0.9";
 		
-		add_cpu_limit(25);
 		debug("accessing...");
 		auto result = Access_http_get(thread_network_session_list, url, header);
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
-		remove_cpu_limit(25);
 		result.finalize();
 		return std::string(result.data.begin(), result.data.end());
 	}
 	std::string http_post_json(const std::string &url, const std::string &json) {
 		confirm_thread_network_session_list_inited();
-		add_cpu_limit(25);
 		debug("accessing(POST)...");
 		auto result = Access_http_post(thread_network_session_list, url, {{"Content-Type", "application/json"}}, json);
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
-		remove_cpu_limit(25);
 		result.finalize();
 		return std::string(result.data.begin(), result.data.end());
 	}

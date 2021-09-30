@@ -1,4 +1,5 @@
 #pragma once
+#include "types.hpp"
 
 Result_with_string Util_cset_set_screen_brightness(bool top_screen, bool bottom_screen, int brightness);
 

@@ -6,6 +6,7 @@ enum class SceneType {
 	SETTINGS,
 	CHANNEL,
 	ABOUT,
+	HISTORY,
 	// used for intent
 	NO_CHANGE,
 	BACK,

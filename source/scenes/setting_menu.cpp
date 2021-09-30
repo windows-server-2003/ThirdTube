@@ -8,6 +8,7 @@
 #include "ui/overlay.hpp"
 #include "ui/ui.hpp"
 #include "youtube_parser/parser.hpp"
+#include "system/util/misc_tasks.hpp"
 #include "network/thumbnail_loader.hpp"
 
 namespace Settings {
@@ -15,37 +16,14 @@ namespace Settings {
 	bool already_init = false;
 	bool exiting = false;
 	
-	int CONTENT_Y_HIGH = 240;
+	ScrollView *main_view;
 	
-	volatile bool save_settings_request = false;
-	volatile bool change_brightness_request = false;
-	volatile bool string_resource_reload_request = false;
+	int CONTENT_Y_HIGH = 240;
 	
 	Thread settings_misc_thread;
 };
 using namespace Settings;
 
-
-
-static void settings_misc_thread_func(void *arg) {
-	while (!exiting) {
-		if (save_settings_request) {
-			save_settings_request = false;
-			save_settings();
-		} else if (change_brightness_request) {
-			change_brightness_request = false;
-			Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
-		} else if (string_resource_reload_request) {
-			string_resource_reload_request = false;
-			load_string_resources(var_lang);
-		} else usleep(50000);
-	}
-	
-	Util_log_save("settings/save", "Thread exit.");
-	threadExit(0);
-}
-
-ScrollView *main_view;
 
 bool Sem_query_init_flag(void) {
 	return already_init;
@@ -72,8 +50,6 @@ void Sem_init(void)
 	load_settings();
 	load_string_resources(var_lang);
 	
-	settings_misc_thread = threadCreate(settings_misc_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
-	
 	main_view = (new ScrollView(0, MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2, 320, 240 - MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2))
 		->set_views({
 			// 'Settings'
@@ -94,8 +70,8 @@ void Sem_init(void)
 					auto next_lang = std::vector<std::string>{"en", "ja"}[view.selected_button];
 					if (var_lang != next_lang) {
 						var_lang = next_lang;
-						save_settings_request = true;
-						string_resource_reload_request = true;
+						misc_tasks_request(TASK_RELOAD_STRING_RESOURCE);
+						misc_tasks_request(TASK_SAVE_SETTINGS);
 					}
 				}),
 			// Content language
@@ -109,7 +85,7 @@ void Sem_init(void)
 					auto next_lang = std::vector<std::string>{"en", "ja"}[view.selected_button];
 					if (var_lang_content != next_lang) {
 						var_lang_content = next_lang;
-						save_settings_request = true;
+						misc_tasks_request(TASK_SAVE_SETTINGS);
 						youtube_change_content_language(var_lang_content);
 					}
 				}),
@@ -119,9 +95,9 @@ void Sem_init(void)
 				->set_title([] (const BarView &view) { return LOCALIZED(LCD_BRIGHTNESS); })
 				->set_while_holding([] (const BarView &view) {
 					var_lcd_brightness = view.value;
-					change_brightness_request = true;
+					misc_tasks_request(TASK_CHANGE_BRIGHTNESS);
 				})
-				->set_on_release([] (const BarView &view) { save_settings_request = true; }),
+				->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
 			// Time to turn off LCD
 			(new BarView(0, 0, 320, 40))
 				->set_values(10, 310, var_time_to_turn_off_lcd <= 309 ? var_time_to_turn_off_lcd : 310)
@@ -129,7 +105,7 @@ void Sem_init(void)
 					(view.value <= 309 ? std::to_string((int) view.value) + " " + LOCALIZED(SECONDS) : LOCALIZED(NEVER_TURN_OFF)); })
 				->set_on_release([] (const BarView &view) {
 					var_time_to_turn_off_lcd = view.value <= 309 ? view.value : 1000000000;
-					save_settings_request = true;
+					misc_tasks_request(TASK_SAVE_SETTINGS);
 				}),
 			// Eco mode
 			(new SelectorView(0, 0, 320, 35))
@@ -141,7 +117,7 @@ void Sem_init(void)
 				->set_on_change([](const SelectorView &view) {
 					if (var_eco_mode != view.selected_button) {
 						var_eco_mode = view.selected_button;
-						save_settings_request = true;
+						misc_tasks_request(TASK_SAVE_SETTINGS);
 					}
 				}),
 			// full screen mode
@@ -154,7 +130,7 @@ void Sem_init(void)
 				->set_on_change([](const SelectorView &view) {
 					if (var_full_screen_mode != view.selected_button) {
 						var_full_screen_mode = view.selected_button;
-						save_settings_request = true;
+						misc_tasks_request(TASK_SAVE_SETTINGS);
 					}
 				}),
 			// Dark theme (plus flash)
@@ -168,11 +144,11 @@ void Sem_init(void)
 				->set_on_change([](const SelectorView &view) {
 					if (var_flash_mode != (view.selected_button == 2)) {
 						var_flash_mode = (view.selected_button == 2);
-						save_settings_request = true;
+						misc_tasks_request(TASK_SAVE_SETTINGS);
 					}
 					if (!var_flash_mode && var_night_mode != view.selected_button) {
 						var_night_mode = view.selected_button;
-						save_settings_request = true;
+						misc_tasks_request(TASK_SAVE_SETTINGS);
 					}
 				}),
 			// Network framework
@@ -182,7 +158,7 @@ void Sem_init(void)
 					(var_network_framework != var_network_framework_changed ? " (" + LOCALIZED(RESTART_TO_APPLY) + ")" : ""); })
 				->set_on_change([](const SelectorView &view) {
 					var_network_framework_changed = view.selected_button;
-					save_settings_request = true;
+					misc_tasks_request(TASK_SAVE_SETTINGS);
 				}),
 			// margin at the end of the list
 			(new EmptyView(0, 0, 320, 4))
@@ -200,10 +176,6 @@ void Sem_exit(void)
 	already_init = false;
 	thread_suspend = false;
 	exiting = true;
-	
-	u64 time_out = 10000000000;
-	Util_log_save("settings", "threadJoin()...", threadJoin(settings_misc_thread, time_out));
-	threadFree(settings_misc_thread);
 	
 	save_settings();
 	
