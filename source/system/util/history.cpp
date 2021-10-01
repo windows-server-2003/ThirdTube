@@ -98,27 +98,34 @@ void save_watch_history() {
 	Util_log_save("history/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
 }
 void add_watched_video(HistoryVideo video) {
-	lock();
-	bool found = false;
-	for (auto &i : watch_history) if (i.id == video.id) {
-		i.my_view_count++;
-		i.last_watch_time = video.last_watch_time;
-		found = true;
+	if (var_history_enabled) {
+		lock();
+		bool found = false;
+		for (auto &i : watch_history) if (i.id == video.id) {
+			i.my_view_count++;
+			i.last_watch_time = video.last_watch_time;
+			found = true;
+		}
+		if (!found) {
+			video.title_lines = truncate_str(video.title, 320 - VIDEO_LIST_THUMBNAIL_WIDTH - 6, 2, 0.5, 0.5);
+			watch_history.push_back(video);
+		}
+		std::sort(watch_history.begin(), watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
+			return i.last_watch_time > j.last_watch_time;
+		});
+		release();
 	}
-	if (!found) {
-		video.title_lines = truncate_str(video.title, 320 - VIDEO_LIST_THUMBNAIL_WIDTH - 6, 2, 0.5, 0.5);
-		watch_history.push_back(video);
-	}
-	std::sort(watch_history.begin(), watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
-		return i.last_watch_time > j.last_watch_time;
-	});
-	release();
 }
 void history_erase_by_id(const std::string &id) {
 	lock();
 	std::vector<HistoryVideo> tmp_watch_history;
 	for (auto video : watch_history) if (video.id != id) tmp_watch_history.push_back(video);
 	watch_history = tmp_watch_history;
+	release();
+}
+void history_erase_all() {
+	lock();
+	watch_history.clear();
 	release();
 }
 std::vector<HistoryVideo> get_watch_history() {

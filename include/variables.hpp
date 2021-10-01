@@ -9,6 +9,7 @@ extern bool var_debug_mode;
 extern bool var_flash_mode;
 extern bool var_wifi_enabled;
 extern bool var_high_resolution_mode;
+extern bool var_history_enabled;
 extern int var_network_framework;
 extern int var_network_framework_changed;
 extern bool var_show_fps;

@@ -104,9 +104,9 @@ static void update_watch_history(const std::vector<HistoryVideo> &new_watch_hist
 						return COLOR_GRAY(darkness);
 					})
 				)
-				->set_on_cancel([] (const OverlayView &view) {
+				->set_on_cancel([] (OverlayView &view) {
 					main_view->reset_holding_status();
-					on_long_tap_dialog->set_is_visible(false);
+					view.set_is_visible(false);
 					var_need_reflesh = true;
 				})
 				->set_is_visible(true);

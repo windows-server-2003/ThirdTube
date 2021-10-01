@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 #include <functional>
 #include <utility>
 #include "types.hpp"
@@ -25,6 +26,8 @@ public :
 	bool is_visible = true;
 	bool is_touchable = true;
 	std::vector<std::pair<int, std::function<void (View &view)> > > on_long_holds;
+	
+	const static std::function<u32 (const View &)> STANDARD_BACKGROUND;
 	
 	virtual View *set_on_view_released(std::function<void (View &view)> on_view_released) {
 		this->on_view_released = on_view_released;
@@ -120,7 +123,12 @@ public :
 		View::add_offset(x_offset, y_offset);
 		x1 += x_offset;
 	}
-	void update_x_range(double x0, double x1) { this->x0 = x0; this->x1 = x1; this->width = x1 - x0; }
+	FixedWidthView *update_x_range(double x0, double x1) {
+		this->x0 = x0;
+		this->x1 = x1;
+		this->width = x1 - x0;
+		return this;
+	}
 	float get_width() const override { return width; }
 	void set_width(float width) { this->width = width; this->x1 = this->x0 + width; }
 };
@@ -137,7 +145,12 @@ public :
 		View::add_offset(x_offset, y_offset);
 		y1 += y_offset;
 	}
-	void update_y_range(double y0, double y1) { this->y0 = y0; this->y1 = y1; this->height = y1 - y0; }
+	FixedHeightView *update_y_range(double y0, double y1) {
+		this->y0 = y0;
+		this->y1 = y1;
+		this->height = y1 - y0;
+		return this;
+	}
 	float get_height() const override { return height; }
 	void set_height(float height) { this->height = height; this->y1 = this->y0 + height; }
 };

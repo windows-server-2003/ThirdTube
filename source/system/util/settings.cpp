@@ -37,6 +37,7 @@ void load_settings() {
 	var_network_framework = var_network_framework_changed = load_int("use_experimental_sslc", -1); // for back compability
 	if (var_network_framework < 0 || var_network_framework >= 3) var_network_framework = var_network_framework_changed = load_int("network_framework", -1);
 	if (var_network_framework < 0 || var_network_framework >= 3) var_network_framework = var_network_framework_changed = 2;
+	var_history_enabled = load_int("history_enabled", 1);
 	
 	Util_cset_set_wifi_state(true);
 	Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
@@ -52,7 +53,8 @@ void save_settings() {
 		"<full_screen_mode>" + std::to_string(var_full_screen_mode) + "</full_screen_mode>\n" +
 		"<dark_theme>" + std::to_string(var_night_mode) + "</dark_theme>\n" + 
 		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n" + 
-		"<network_framework>" + std::to_string(var_network_framework_changed) + "</network_framework>\n";
+		"<network_framework>" + std::to_string(var_network_framework_changed) + "</network_framework>\n" +
+		"<var_history_enabled>" + std::to_string(var_history_enabled) + "</var_history_enabled>\n";
 	
 	Result_with_string result = Util_file_save_to_file("settings.txt", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
 	Util_log_save("settings/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);

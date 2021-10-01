@@ -8,6 +8,7 @@
 #include "ui/overlay.hpp"
 #include "ui/ui.hpp"
 #include "youtube_parser/parser.hpp"
+#include "system/util/history.hpp"
 #include "system/util/misc_tasks.hpp"
 #include "network/thumbnail_loader.hpp"
 
@@ -16,6 +17,10 @@ namespace Settings {
 	bool already_init = false;
 	bool exiting = false;
 	
+	TextView *toast_view;
+	int toast_frames_left = 0;
+	
+	OverlayView *popup_view;
 	VerticalListView *main_view;
 	TabView *main_tab_view;
 	
@@ -51,9 +56,15 @@ void Sem_init(void)
 	load_settings();
 	load_string_resources(var_lang);
 	
+	popup_view = new OverlayView(0, 0, 320, 240);
+	popup_view->set_is_visible(false);
+	toast_view = new TextView((320 - 150) / 2, 190, 150, DEFAULT_FONT_INTERVAL + SMALL_MARGIN);
+	toast_view->set_is_visible(false);
+	
 	main_tab_view = (new TabView(0, 0, 320, CONTENT_Y_HIGH - TOP_HEIGHT))
 		->set_stretch_subview(true)
 		->set_views({
+			// Tab #1 : UI/Display
 			(new ScrollView(0, 0, 320, 0))
 				->set_views({
 					// UI language
@@ -137,6 +148,88 @@ void Sem_init(void)
 						}),
 					(new EmptyView(0, 0, 320, 10))
 				}),
+			// Tab #2 : Data
+			(new ScrollView(0, 0, 320, 0))
+				->set_views({
+					// History recording
+					(new SelectorView(0, 0, 320, 35))
+						->set_texts({
+							(std::function<std::string ()>) []() { return LOCALIZED(DISABLED); },
+							(std::function<std::string ()>) []() { return LOCALIZED(ENABLED); }
+						}, var_history_enabled)
+						->set_title([](const SelectorView &) { return LOCALIZED(WATCH_HISTORY); })
+						->set_on_change([](const SelectorView &view) {
+							if (var_history_enabled != view.selected_button) {
+								var_history_enabled = view.selected_button;
+								misc_tasks_request(TASK_SAVE_SETTINGS);
+							}
+						}),
+					(new EmptyView(0, 0, 320, 10)),
+					// Erase history
+					(new TextView(10, 0, 120, DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 2))
+						->set_text((std::function<std::string ()>) [] () { return LOCALIZED(REMOVE_ALL_HISTORY); })
+						->set_x_centered(true)
+						->set_text_offset(0, -2)
+						->set_get_background_color([] (const View &view) {
+							int red = std::min<int>(0xFF, 0xD0 + 0x30 * view.touch_darkness);
+							int other = 0x30 * (1 - view.touch_darkness);
+							return 0xFF000000 | other << 8 | other << 16 | red;
+						})
+						->set_on_view_released([] (View &view) {
+							popup_view->recursive_delete_subviews();
+							popup_view->set_subview((new VerticalListView(0, 0, 200))
+								->set_views({
+									(new TextView(0, 0, 200, 30))
+										->set_text_lines(split_string(LOCALIZED(REMOVE_ALL_HISTORY_CONFIRM), '\n'))
+										->set_x_centered(true)
+										->set_text_offset(0, -1),
+									(new HorizontalRuleView(0, 0, 200, 1)),
+									(new HorizontalListView(0, 0, 25))->set_views({
+										(new TextView(0, 0, 100, 25))
+											->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CANCEL); })
+											->set_text_offset(0, -1)
+											->set_x_centered(true)
+											->set_get_background_color(View::STANDARD_BACKGROUND)
+											->set_on_view_released([] (View &view) {
+												popup_view->set_is_visible(false);
+												var_need_reflesh = true;
+											}),
+										(new TextView(0, 0, 100, 25))
+											->set_text((std::function<std::string ()>) [] () { return LOCALIZED(OK); })
+											->set_text_offset(0, -1)
+											->set_x_centered(true)
+											->set_get_background_color(View::STANDARD_BACKGROUND)
+											->set_on_view_released([] (View &view) {
+												history_erase_all();
+												misc_tasks_request(TASK_SAVE_HISTORY);
+												popup_view->set_is_visible(false);
+												var_need_reflesh = true;
+												
+												float tabbed_content_y_high = CONTENT_Y_HIGH - main_tab_view->tab_selector_height;
+												toast_view
+													->set_text((std::function<std::string ()>) [] () { return LOCALIZED(ALL_HISTORY_REMOVED); })
+													->set_x_centered(true)
+													->set_text_offset(0, -1)
+													->set_get_text_color([] () { return (u32) -1; })
+													->update_y_range(tabbed_content_y_high - 20, tabbed_content_y_high - 5)
+													->set_get_background_color([] (const View &) { return 0x50000000; })
+													->set_is_visible(true);
+												toast_frames_left = 120;
+											})
+									})
+								})
+								->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; })
+							);
+							popup_view->set_is_visible(true);
+							popup_view->set_on_cancel([] (OverlayView &view) {
+								view.set_is_visible(false);
+								var_need_reflesh = true;
+							});
+							var_need_reflesh = true;
+						}),
+					(new EmptyView(0, 0, 320, 10))
+				}),
+			// Tab #3 : History
 			(new ScrollView(0, 0, 320, 0))
 				->set_views({
 					// Eco mode
@@ -166,6 +259,7 @@ void Sem_init(void)
 		}, 0)
 		->set_tab_texts({
 			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_DISPLAY_UI); },
+			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_DATA); },
 			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_ADVANCED); }
 		});
 	main_view = (new VerticalListView(0, 0, 320))
@@ -218,7 +312,8 @@ Intent Sem_draw(void)
 	thumbnail_set_active_scene(SceneType::SETTINGS);
 	
 	bool video_playing_bar_show = video_is_playing();
-	CONTENT_Y_HIGH = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
+	CONTENT_Y_HIGH = 240;
+	if (video_playing_bar_show) CONTENT_Y_HIGH -= VIDEO_PLAYING_BAR_HEIGHT;
 	main_tab_view->update_y_range(0, CONTENT_Y_HIGH - TOP_HEIGHT);
 	
 	if(var_need_reflesh || !var_eco_mode)
@@ -235,12 +330,11 @@ Intent Sem_draw(void)
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
 		main_view->draw();
+		popup_view->draw();
+		toast_view->draw();
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
-		float overlay_menu_y = 240 - OVERLAY_MENU_ICON_SIZE;
-		if (video_playing_bar_show) overlay_menu_y -= VIDEO_PLAYING_BAR_HEIGHT;
-		overlay_menu_y -= main_tab_view->tab_selector_height;
-		draw_overlay_menu(overlay_menu_y);
+		draw_overlay_menu(CONTENT_Y_HIGH - main_tab_view->tab_selector_height - OVERLAY_MENU_ICON_SIZE);
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
@@ -255,6 +349,7 @@ Intent Sem_draw(void)
 	else
 		gspWaitForVBlank();
 	
+	if (--toast_frames_left <= 0) toast_view->set_is_visible(false);
 
 	if (Util_err_query_error_show_flag()) {
 		Util_err_main(key);
@@ -263,7 +358,9 @@ Intent Sem_draw(void)
 	} else {
 		update_overlay_menu(&key, &intent, SceneType::SETTINGS);
 		
-		main_view->update(key);
+		// toast_view is never 'updated'
+		if (popup_view->is_visible) popup_view->update(key);
+		else main_view->update(key);
 		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		

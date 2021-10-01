@@ -88,6 +88,15 @@ std::string Util_encode_to_escape(std::string in_data)
 	return return_data;
 }
 
+std::vector<std::string> split_string(const std::string &str, char splitter) {
+	std::vector<std::string> res = {""};
+	for (auto c : str) {
+		if (c == splitter) res.push_back("");
+		else res.back().push_back(c);
+	}
+	return res;
+}
+
 std::map<std::string, std::string> parse_xml_like_text(std::string data) {
 	int head = 0;
 	int n = data.size();

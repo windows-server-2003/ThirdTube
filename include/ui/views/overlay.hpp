@@ -5,7 +5,7 @@
 // for margin
 struct OverlayView : public FixedSizeView {
 public :
-	using CallBackFuncType = std::function<void (const OverlayView &)>;
+	using CallBackFuncType = std::function<void (OverlayView &)>;
 	
 	OverlayView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~OverlayView () {}
@@ -47,7 +47,7 @@ public :
 			!(key.touch_x >= content_x() && key.touch_x < content_x() + subview->get_width() &&
 				key.touch_y >= content_y() && key.touch_y < content_y() + subview->get_height());
 		if (key.p_touch && in_outside) holding_outside = true;
-		if (key.touch_x == -1 && holding_outside) on_cancel_func(*this);
+		if (key.touch_x == -1 && holding_outside && on_cancel_func) on_cancel_func(*this);
 		if (!in_outside) holding_outside = false;
 		
 		subview->update(key, content_x(), content_y());
