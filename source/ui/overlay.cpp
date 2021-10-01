@@ -95,7 +95,7 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 	if (current_scene != SceneType::SEARCH) contents.push_back({LOCALIZED(GOTO_SEARCH), Content::Type::SEARCH});
 	if (current_scene != SceneType::HISTORY) contents.push_back({LOCALIZED(WATCH_HISTORY), Content::Type::HISTORY});
 	contents.push_back({LOCALIZED(EXIT_APP), Content::Type::EXIT});
-	contents.push_back({LOCALIZED(SETTINGS), Content::Type::SETTINGS});
+	if (current_scene != SceneType::SETTINGS) contents.push_back({LOCALIZED(SETTINGS), Content::Type::SETTINGS});
 	if (current_scene != SceneType::ABOUT) contents.push_back({LOCALIZED(ABOUT), Content::Type::ABOUT});
 	
 	if (menu_status == CONFIRMING_CLOSE) {
