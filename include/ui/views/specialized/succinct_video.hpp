@@ -17,6 +17,7 @@ private :
 	std::string bottom_right_overlay;
 public :
 	int thumbnail_handle = -1;
+	std::string video_id;
 	
 	SuccinctVideoView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~SuccinctVideoView () {}
@@ -31,6 +32,10 @@ public :
 	}
 	SuccinctVideoView *set_bottom_right_overlay(const std::string &bottom_right_overlay) {
 		this->bottom_right_overlay = bottom_right_overlay;
+		return this;
+	}
+	SuccinctVideoView *set_video_id(const std::string &video_id) {
+		this->video_id = video_id;
 		return this;
 	}
 	
