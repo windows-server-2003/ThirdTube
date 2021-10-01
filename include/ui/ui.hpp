@@ -5,6 +5,7 @@
 #include "views/scroll.hpp"
 #include "views/vertical_list.hpp"
 #include "views/horizontal_list.hpp"
+#include "views/tab.hpp"
 #include "views/horizontal_rule.hpp"
 #include "views/text.hpp"
 #include "views/empty.hpp"
