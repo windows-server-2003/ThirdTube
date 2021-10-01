@@ -37,6 +37,9 @@ public :
 	void on_scroll() override {
 		tab_holding = -1;
 	}
+	void reset_holding_status_() override {
+		tab_holding = -1;
+	}
 	void recursive_delete_subviews() override {
 		for (auto view : views) {
 			view->recursive_delete_subviews();

@@ -12,6 +12,7 @@
 #include "ui/overlay.hpp"
 #include "network/thumbnail_loader.hpp"
 #include "system/util/history.hpp"
+#include "system/util/misc_tasks.hpp"
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 30
 
@@ -22,6 +23,7 @@ namespace WatchHistory {
 	
 	std::vector<HistoryVideo> watch_history;
 	std::string clicked_url;
+	std::string erase_request;
 	int thumbnail_request_l = 0;
 	int thumbnail_request_r = 0;
 	
@@ -30,6 +32,7 @@ namespace WatchHistory {
 	
 	int CONTENT_Y_HIGHT = 240; // changes according to whether the video playing bar is drawn or not
 	
+	OverlayView *on_long_tap_dialog;
 	ScrollView *main_view = NULL;
 	VerticalListView *video_list_view = NULL;
 };
@@ -75,12 +78,39 @@ static void update_watch_history(const std::vector<HistoryVideo> &new_watch_hist
 			->set_bottom_right_overlay(i.length_text)
 			->set_video_id(i.id);
 		
-		cur_view->set_get_background_color([cur_view] (int) {
-			int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - cur_view->touch_darkness));
+		cur_view->set_get_background_color([] (const View &view) {
+			int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - view.touch_darkness));
 			if (var_night_mode) darkness = 0xFF - darkness;
 			return COLOR_GRAY(darkness);
 		})->set_on_view_released([i] (View &view) {
 			clicked_url = youtube_get_video_url_by_id(i.id);
+		})->add_on_long_hold(40, [i] (View &view) {
+			on_long_tap_dialog->recursive_delete_subviews();
+			on_long_tap_dialog
+				->set_subview((new TextView(0, 0, 160, DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 2))
+					->set_text((std::function<std::string ()>) [] () { return LOCALIZED(REMOVE_HISTORY_ITEM); })
+					->set_x_centered(true)
+					->set_y_centered(true)
+					->set_text_offset(0, -1)
+					->set_on_view_released([i] (View &view) {
+						erase_request = i.id;
+						main_view->reset_holding_status();
+						on_long_tap_dialog->set_is_visible(false);
+						var_need_reflesh = true;
+					})
+					->set_get_background_color([] (const View &view) {
+						int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - view.touch_darkness));
+						if (var_night_mode) darkness = 0xFF - darkness;
+						return COLOR_GRAY(darkness);
+					})
+				)
+				->set_on_cancel([] (const OverlayView &view) {
+					main_view->reset_holding_status();
+					on_long_tap_dialog->set_is_visible(false);
+					var_need_reflesh = true;
+				})
+				->set_is_visible(true);
+			var_need_reflesh = true;
 		});
 		
 		
@@ -127,6 +157,9 @@ void History_suspend(void)
 void History_init(void)
 {
 	Util_log_save("history/init", "Initializing...");
+	
+	on_long_tap_dialog = new OverlayView(0, 0, 320, 240);
+	on_long_tap_dialog->set_is_visible(false);
 	
 	History_resume("");
 	already_init = true;
@@ -205,6 +238,7 @@ Intent History_draw(void)
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
 		main_view->draw();
+		on_long_tap_dialog->draw();
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);
@@ -228,30 +262,40 @@ Intent History_draw(void)
 	} else if(Util_expl_query_show_flag()) {
 		Util_expl_main(key);
 	} else {
-		update_overlay_menu(&key, &intent, SceneType::HISTORY);
-		
-		main_view->update(key);
-		if (clicked_url != "") {
-			intent.next_scene = SceneType::VIDEO_PLAYER;
-			intent.arg = clicked_url;
-			clicked_url = "";
-		}
-		if (sort_request != -1) {
-			Util_log_save("debug", "r0");
-			auto tmp_watch_history = watch_history;
-			std::sort(tmp_watch_history.begin(), tmp_watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
-				if (sort_request == 0) return i.last_watch_time > j.last_watch_time;
-				if (sort_request == 1) return i.my_view_count > j.my_view_count;
-				// should not reach here
-				return false;
-			});
-			update_watch_history(tmp_watch_history);
-			Util_log_save("debug", "r1");
+		if (on_long_tap_dialog->is_visible) on_long_tap_dialog->update(key);
+		else {
+			update_overlay_menu(&key, &intent, SceneType::HISTORY);
 			
-			sort_request = -1;
+			main_view->update(key);
+			if (clicked_url != "") {
+				intent.next_scene = SceneType::VIDEO_PLAYER;
+				intent.arg = clicked_url;
+				clicked_url = "";
+			}
+			if (sort_request != -1) {
+				auto tmp_watch_history = watch_history;
+				std::sort(tmp_watch_history.begin(), tmp_watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
+					if (sort_request == 0) return i.last_watch_time > j.last_watch_time;
+					if (sort_request == 1) return i.my_view_count > j.my_view_count;
+					// should not reach here
+					return false;
+				});
+				update_watch_history(tmp_watch_history);
+				
+				sort_request = -1;
+			}
+			if (erase_request != "") {
+				// erase 
+				std::vector<HistoryVideo> tmp_watch_history;
+				for (auto video : watch_history) if (video.id != erase_request) tmp_watch_history.push_back(video);
+				update_watch_history(tmp_watch_history);
+				history_erase_by_id(erase_request);
+				misc_tasks_request(TASK_SAVE_HISTORY);
+				
+				erase_request = "";
+			}
+			if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		}
-		
-		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		if(key.h_touch || key.p_touch)
 			var_need_reflesh = true;
 		

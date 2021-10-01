@@ -37,6 +37,11 @@ public :
 		}
 		views.clear();
 	}
+	void reset_holding_status_() override {
+		grabbed = false;
+		scrolling = false;
+		for (auto view : views) view->reset_holding_status();
+	}
 	
 	// direct access to `views` is also allowed
 	// this is just for method chaining mainly used immediately after the construction of the view

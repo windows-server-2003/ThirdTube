@@ -114,6 +114,13 @@ void add_watched_video(HistoryVideo video) {
 	});
 	release();
 }
+void history_erase_by_id(const std::string &id) {
+	lock();
+	std::vector<HistoryVideo> tmp_watch_history;
+	for (auto video : watch_history) if (video.id != id) tmp_watch_history.push_back(video);
+	watch_history = tmp_watch_history;
+	release();
+}
 std::vector<HistoryVideo> get_watch_history() {
 	lock();
 	std::vector<HistoryVideo> res = watch_history;

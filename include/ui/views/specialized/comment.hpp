@@ -60,6 +60,13 @@ public :
 		replies.clear();
 		replies_shown = 0;
 	}
+	void reset_holding_status_() override {
+		icon_holding = false;
+		show_more_holding = false;
+		fold_replies_holding = false;
+		show_more_replies_holding = false;
+		for (auto reply_view : replies) reply_view->reset_holding_status();
+	}
 	float get_height() const override {
 		float main_height = std::max(left_height(), right_height());
 		float reply_height = 0;

@@ -39,6 +39,10 @@ public :
 	SelectorView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~SelectorView () {}
 	
+	void reset_holding_status_() override {
+		holding_button = -1;
+	}
+	
 	SelectorView *set_texts(const std::vector<UI::FlexibleString<SelectorView> > &button_texts, int init_selected) { // mandatory
 		this->button_num = button_texts.size();
 		this->button_texts = button_texts;

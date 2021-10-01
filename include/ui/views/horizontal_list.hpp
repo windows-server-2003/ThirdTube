@@ -34,6 +34,9 @@ public :
 		for (auto view : views) res += view->get_width();
 		return res;
 	}
+	void reset_holding_status_() override {
+		for (auto view : views) view->reset_holding_status();
+	}
 	void on_scroll() override {
 		for (auto view : views) view->on_scroll();
 	}

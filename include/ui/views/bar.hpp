@@ -26,6 +26,10 @@ public :
 	CallBackFuncType on_release_func;
 	CallBackFuncType while_holding_func;
 	
+	void reset_holding_status_() override {
+		holding = false;
+	}
+	
 	BarView *set_values(double low, double high, double init_val) { // mandatory
 		this->low = low;
 		this->high = high;

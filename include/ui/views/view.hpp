@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <utility>
 #include "types.hpp"
 #include "system/draw/draw.hpp"
 #include "system/util/log.hpp"
@@ -11,7 +12,6 @@ private :
 protected :
 	double x0 = 0;
 	double y0 = 0;
-	int view_holding_time = 0;
 	std::function<void (View &view)> on_view_released;
 public :
 	View (double x0, double y0) : x0(x0), y0(y0) {}
@@ -19,10 +19,12 @@ public :
 	
 	u32 background_color = 0;
 	bool scrolled = false;
+	int view_holding_time = 0;
 	double touch_darkness = 0;
-	std::function<u32 (int)> get_background_color;
+	std::function<u32 (const View &)> get_background_color;
 	bool is_visible = true;
 	bool is_touchable = true;
+	std::vector<std::pair<int, std::function<void (View &view)> > > on_long_holds;
 	
 	virtual View *set_on_view_released(std::function<void (View &view)> on_view_released) {
 		this->on_view_released = on_view_released;
@@ -32,7 +34,7 @@ public :
 		this->background_color = color;
 		return this;
 	}
-	virtual View *set_get_background_color(std::function<u32 (int)> get_background_color) {
+	virtual View *set_get_background_color(std::function<u32 (const View &)> get_background_color) {
 		this->get_background_color = get_background_color;
 		return this;
 	}
@@ -44,7 +46,16 @@ public :
 		this->is_touchable = is_touchable;
 		return this;
 	}
+	virtual View *add_on_long_hold(int frames, const std::function<void (View &view)> &func) {
+		this->on_long_holds.push_back({frames, func});
+		return this;
+	}
 	
+	virtual void reset_holding_status() {
+		view_holding_time = 0;
+		reset_holding_status_();
+	}
+	virtual void reset_holding_status_() {}
 	virtual void on_scroll() {
 		view_holding_time = 0;
 		scrolled = true;
@@ -57,7 +68,7 @@ public :
 	virtual float get_width() const = 0;
 	virtual float get_height() const = 0;
 	virtual void draw_background() const {
-		u32 color = get_background_color ? get_background_color(view_holding_time) : background_color;
+		u32 color = get_background_color ? get_background_color(*this) : background_color;
 		if (color >> 24) Draw_texture(var_square_image[0], color, x0, y0, get_width(), get_height());
 	}
 	void draw() const {
@@ -81,6 +92,8 @@ public :
 				view_holding_time++;
 				if (!scrolled) touch_darkness = std::min(1.0, touch_darkness + TOUCH_DARKNESS_SPEED);
 				else touch_darkness = std::max(0.0, touch_darkness - TOUCH_DARKNESS_SPEED);
+				for (auto on_long_hold : on_long_holds) if (on_long_hold.first == view_holding_time)
+					on_long_hold.second(*this);
 			} else touch_darkness = std::max(0.0, touch_darkness - TOUCH_DARKNESS_SPEED);
 			if (key.touch_x == -1 && view_holding_time && on_view_released) on_view_released(*this);
 			if (!inside_view) view_holding_time = 0;

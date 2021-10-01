@@ -11,7 +11,6 @@ struct TextView : public FixedSizeView {
 	double interval = DEFAULT_FONT_INTERVAL;
 	bool x_centered = false;
 	bool y_centered = true;
-	bool holding = false;
 public :
 	TextView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~TextView () {}

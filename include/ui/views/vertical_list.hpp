@@ -10,6 +10,9 @@ public :
 	std::vector<View *> views;
 	std::vector<int> draw_order;
 	
+	void reset_holding_status_() override {
+		for (auto view : views) view->reset_holding_status();
+	}
 	virtual void recursive_delete_subviews() override {
 		for (auto view : views) {
 			view->recursive_delete_subviews();

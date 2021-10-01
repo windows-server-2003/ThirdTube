@@ -269,7 +269,7 @@ static void load_video_page(void *arg) {
 	int exit_button_height = DEFAULT_FONT_INTERVAL * 1.5;
 	View *exit_button_view = (new HorizontalListView(0, 0, exit_button_height))->set_views({
 		(new EmptyView(0, 0, 320 - 100, exit_button_height))
-			->set_get_background_color([] (int) { return DEFAULT_BACK_COLOR; }),
+			->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
 		(new TextView(0, 0, 100, exit_button_height))
 			->set_text((std::function<std::string ()>) [] () { return LOCALIZED(OK); })
 			->set_x_centered(true)
@@ -287,20 +287,20 @@ static void load_video_page(void *arg) {
 	VerticalListView *caption_left_view = new VerticalListView(0, 0, 160);
 	caption_left_view->views.push_back((new TextView(0, 0, 160, DEFAULT_FONT_INTERVAL * 1.2))
 		->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CAPTION_BASE_LANGUAGES); })
-		->set_get_background_color([] (int) { return DEFAULT_BACK_COLOR; })
+		->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; })
 	);
 	caption_left_view->views.push_back((new HorizontalRuleView(0, 0, 160, 3))
-		->set_get_background_color([] (int) { return DEFAULT_BACK_COLOR; }));
+		->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }));
 	ScrollView *base_languages_selector_view = new ScrollView(0, 0, 160, language_selector_height - caption_left_view->get_height());
 	for (size_t i = 0; i < tmp_video_info.caption_base_languages.size(); i++) {
 		auto &cur_lang = tmp_video_info.caption_base_languages[i];
 		base_languages_selector_view->views.push_back((new TextView(0, 0, 160, DEFAULT_FONT_INTERVAL))
 			->set_text(cur_lang.name)
 			->set_text_offset(0.0, -1.0)
-			->set_get_background_color([cur_lang] (int holding_frames) {
+			->set_get_background_color([cur_lang] (const View &view) {
 				if (cur_lang.id == selected_base_lang) return COLOR_GRAY(0x80);
 				else {
-					int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - std::min(1.0, 0.15 * holding_frames)));
+					int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - std::min(1.0, 0.15 * view.view_holding_time)));
 					if (var_night_mode) darkness = 0xFF - darkness;
 					return COLOR_GRAY(darkness);
 				}
@@ -323,7 +323,7 @@ static void load_video_page(void *arg) {
 		->set_on_change([translation_languages_selector_view](const SelectorView &view) {
 			translation_languages_selector_view->set_is_visible(view.selected_button)->set_is_touchable(view.selected_button);
 		})
-		->set_get_background_color([] (int) { return DEFAULT_BACK_COLOR; })
+		->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; })
 	);
 	translation_languages_selector_view->set_height(language_selector_height - caption_right_view->get_height());
 	for (size_t i = 0; i < tmp_video_info.caption_translation_languages.size(); i++) {
@@ -331,10 +331,10 @@ static void load_video_page(void *arg) {
 		TextView *cur_option_view = (new TextView(0, 0, 160, DEFAULT_FONT_INTERVAL))
 			->set_text(cur_lang.name)
 			->set_text_offset(0.0, -1.0);
-		cur_option_view->set_get_background_color([cur_lang] (int holding_frames) {
+		cur_option_view->set_get_background_color([cur_lang] (const View &view) {
 			if (cur_lang.id == selected_translation_lang) return COLOR_GRAY(0x80);
 			else {
-				int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - std::min(1.0, 0.15 * holding_frames)));
+				int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - std::min(1.0, 0.15 * view.view_holding_time)));
 				if (var_night_mode) darkness = 0xFF - darkness;
 				return COLOR_GRAY(darkness);
 			}
@@ -550,7 +550,7 @@ static void load_caption(void *arg_) {
 				(new TextView(0, 0, CAPTION_CONTENT_MAX_WIDTH, DEFAULT_FONT_INTERVAL * cur_lines.size()))
 					->set_text_lines(cur_lines)
 					->set_text_offset(0.0, -1.0)
-					->set_get_background_color([start_time, end_time] (int) {
+					->set_get_background_color([start_time, end_time] (const View &) {
 						return vid_current_pos >= start_time && vid_current_pos < end_time ? LIGHT1_BACK_COLOR : DEFAULT_BACK_COLOR;
 					})
 			})

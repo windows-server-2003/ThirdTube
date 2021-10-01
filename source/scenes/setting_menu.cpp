@@ -174,10 +174,10 @@ void Sem_init(void)
 			(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
 				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS); })
 				->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL)
-				->set_background_color((u32) -1),
+				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
 			// ---------------------
 			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2))
-				->set_background_color((u32) -1),
+				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
 			main_tab_view
 		})
 		->set_draw_order({2, 1, 0});
