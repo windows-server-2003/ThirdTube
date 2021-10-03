@@ -1747,8 +1747,6 @@ Intent VideoPlayer_draw(void)
 			float font_size = 0.4;
 			float x_l = i * 320 / TAB_NUM;
 			float x_r = (i + 1) * 320 / TAB_NUM;
-			float y = CONTENT_Y_HIGH + 3;
-			if (i == selected_tab) y += 1;
 			std::string tab_string;
 			if (i == TAB_GENERAL) tab_string = LOCALIZED(GENERAL);
 			else if (i == TAB_SUGGESTIONS) tab_string = LOCALIZED(SUGGESTIONS);
@@ -1756,6 +1754,9 @@ Intent VideoPlayer_draw(void)
 			else if (i == TAB_CAPTIONS) tab_string = LOCALIZED(CAPTIONS);
 			else if (i == TAB_PLAYLIST) tab_string = LOCALIZED(PLAYLIST);
 			else if (i == TAB_ADVANCED) tab_string = LOCALIZED(ADVANCED);
+			font_size *= std::min(1.0, (x_r - x_l) * 0.9 / Draw_get_width(tab_string, font_size, font_size));
+			float y = CONTENT_Y_HIGH + (TAB_SELECTOR_HEIGHT - Draw_get_height(tab_string, font_size, font_size)) / 2 - 3;
+			if (i == selected_tab) y += 1;
 			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEFAULT_TEXT_COLOR);
 		}
 		
