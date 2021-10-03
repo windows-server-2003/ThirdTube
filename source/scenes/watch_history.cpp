@@ -54,7 +54,7 @@ static void update_watch_history(const std::vector<HistoryVideo> &new_watch_hist
 	delete main_view;
 	
 	// prepare new views
-	video_list_view = new VerticalListView(0, 0, 320);
+	video_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN);
 	for (auto i : watch_history) {
 		std::string view_count_str;
 		{
@@ -72,11 +72,11 @@ static void update_watch_history(const std::vector<HistoryVideo> &new_watch_hist
 			last_watch_time_str = tmp;
 		}
 		
-		SuccinctVideoView *cur_view = (new SuccinctVideoView(0, 0, 320, VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN))
+		SuccinctVideoView *cur_view = (new SuccinctVideoView(0, 0, 320, VIDEO_LIST_THUMBNAIL_HEIGHT))
 			->set_title_lines(i.title_lines)
 			->set_auxiliary_lines({i.author_name, view_count_str + " " + last_watch_time_str})
 			->set_bottom_right_overlay(i.length_text)
-			->set_video_id(i.id);
+			->set_thumbnail_url(youtube_get_video_thumbnail_url_by_id(i.id));
 		
 		cur_view->set_get_background_color([] (const View &view) {
 			int darkness = std::min<int>(0xFF, 0xD0 + 0x30 * (1 - view.touch_darkness));
@@ -192,8 +192,9 @@ Intent History_draw(void)
 	// thumbnail request update
 	int result_num = watch_history.size();
 	if (result_num) {
-		int displayed_l = std::min(result_num, main_view->get_offset() / VIDEO_LIST_THUMBNAIL_HEIGHT);
-		int displayed_r = std::min(result_num, (main_view->get_offset() + CONTENT_Y_HIGHT - 1) / VIDEO_LIST_THUMBNAIL_HEIGHT + 1);
+		int item_interval = VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN;
+		int displayed_l = std::min(result_num, main_view->get_offset() / item_interval);
+		int displayed_r = std::min(result_num, (main_view->get_offset() + CONTENT_Y_HIGHT - 1) / item_interval + 1);
 		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
 		int request_target_r = std::min(result_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
 		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
@@ -210,7 +211,7 @@ Intent History_draw(void)
 		}
 		for (auto i : new_indexes) {
 			auto *cur_view = dynamic_cast<SuccinctVideoView *>(video_list_view->views[i]);
-			cur_view->thumbnail_handle = thumbnail_request(youtube_get_video_thumbnail_url_by_id(cur_view->video_id),
+			cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url,
 				SceneType::HISTORY, 0, ThumbnailType::VIDEO_THUMBNAIL);
 		}
 		

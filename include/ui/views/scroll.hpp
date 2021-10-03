@@ -13,7 +13,7 @@ protected :
 	int last_touch_y = -1;
 	int first_touch_x = -1;
 	int first_touch_y = -1;
-	int content_height = 0;
+	double content_height = 0;
 	
 	int touch_frames = 0;
 	std::deque<int> touch_moves;
@@ -23,6 +23,7 @@ protected :
 	bool scrolling = false;
 public :
 	std::vector<View *> views;
+	double margin = 0.0;
 	
 	ScrollView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~ScrollView () {}
@@ -58,6 +59,10 @@ public :
 		if (!found) on_child_drawn_callbacks.push_back({index, func});
 		return this;
 	}
+	ScrollView *set_margin(double margin) {
+		this->margin = margin;
+		return this;
+	}
 	
 	
 	void draw_() const override {
@@ -69,7 +74,7 @@ public :
 				view->draw(x0, y_offset);
 				for (auto &callback : on_child_drawn_callbacks) if (callback.first == i) callback.second(*this, i);
 			}
-			y_offset += cur_height;
+			y_offset += cur_height + margin;
 		}
 		draw_slider_bar();
 	}
@@ -85,7 +90,7 @@ public :
 		for (auto view : views) {
 			if (scrolling) view->on_scroll();
 			view->update(key, x0, y_offset);
-			y_offset += view->get_height();
+			y_offset += view->get_height() + margin;
 		}
 	}
 	
@@ -100,5 +105,6 @@ public :
 	float selected_overlap_darkness() const { return selected_darkness; }
 	bool is_selecting() const { return grabbed && !scrolling; }
 	int get_offset() const { return offset; }
+	void set_offset(double offset) { this->offset = offset; }
 };
 

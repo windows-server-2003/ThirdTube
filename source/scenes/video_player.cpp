@@ -21,9 +21,7 @@
 #define ICON_SIZE 55
 #define TAB_SELECTOR_HEIGHT 20
 #define TAB_SELECTOR_SELECTED_LINE_HEIGHT 3
-#define SUGGESTION_THUMBNAIL_HEIGHT 54
-#define SUGGESTION_THUMBNAIL_WIDTH 96
-#define SUGGESTIONS_VERTICAL_INTERVAL (SUGGESTION_THUMBNAIL_HEIGHT + SMALL_MARGIN)
+#define SUGGESTIONS_VERTICAL_INTERVAL (VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN)
 #define SUGGESTION_LOAD_MORE_MARGIN 30
 #define COMMENT_ICON_SIZE 48
 #define COMMENT_LOAD_MORE_MARGIN 30
@@ -31,12 +29,14 @@
 #define MAX_THUMBNAIL_LOAD_REQUEST 30
 #define MAX_RETRY_CNT 5
 
-#define TAB_NUM 5
 #define TAB_GENERAL 0
 #define TAB_COMMENTS 1
 #define TAB_SUGGESTIONS 2
 #define TAB_CAPTIONS 3
 #define TAB_ADVANCED 4
+#define TAB_PLAYLIST 5
+
+#define TAB_MAX_NUM 6
 
 namespace VideoPlayer {
 	bool vid_main_run = false;
@@ -91,7 +91,7 @@ namespace VideoPlayer {
 	C2D_Image vid_control[2];
 	Thread vid_decode_thread, vid_convert_thread;
 	
-	VerticalScroller scroller[TAB_NUM];
+	VerticalScroller scroller[TAB_MAX_NUM];
 	constexpr int CONTENT_Y_HIGH = 240 - TAB_SELECTOR_HEIGHT - VIDEO_PLAYING_BAR_HEIGHT; // the bar is always shown here, so this is a constant
 	VerticalScroller tab_selector_scroller; // special one, it does not actually scroll but handles touch releasing
 	int selected_tab = 0;
@@ -107,27 +107,44 @@ namespace VideoPlayer {
 	YouTubeVideoDetail cur_video_info;
 	std::map<std::string, YouTubeVideoDetail> video_info_cache;
 	int video_retry_left = 0;
-	int suggestion_thumbnail_request_l = 0;
-	int suggestion_thumbnail_request_r = 0;
-	std::vector<int> suggestion_thumbnail_handles;
-	std::vector<std::vector<std::string> > suggestion_titles_lines;
+	
 	std::set<CommentView *> comment_thumbnail_loaded_list;
 	std::vector<std::string> title_lines;
 	float title_font_size;
 	std::vector<std::string> description_lines;
 	
 	std::string channel_url_pressed;
+	std::string suggestion_clicked_url; // also used for playlist
 	
+	int TAB_NUM = 5;
+	
+	// suggestion tab
+	VerticalListView *suggestion_main_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN);
+	View *suggestion_bottom_view = new EmptyView(0, 0, 320, 0);
+	ScrollView *suggestion_view;
+	int suggestion_thumbnail_request_l = 0;
+	int suggestion_thumbnail_request_r = 0;
+	
+	// comment tab
 	View *comments_top_view = new EmptyView(0, 0, 320, 4);
 	VerticalListView *comments_main_view = new VerticalListView(0, 0, 320);
 	View *comments_bottom_view = new EmptyView(0, 0, 320, 0);
 	ScrollView *comment_all_view = NULL;
 	
-	
+	// caption tab
 	ScrollView *caption_main_view;
 	VerticalListView *caption_language_select_view;
 	View *captions_tab_view;
 	CaptionOverlayView *caption_overlay_view;
+	
+	// list tab
+	constexpr int PLAYLIST_TOP_HEIGHT = 30;
+	VerticalListView *playlist_view;
+	ScrollView *playlist_list_view;
+	TextView *playlist_title_view;
+	TextView *playlist_author_view;
+	int playlist_thumbnail_request_l = 0;
+	int playlist_thumbnail_request_r = 0;
 };
 using namespace VideoPlayer;
 
@@ -149,7 +166,7 @@ bool VideoPlayer_query_init_flag(void)
 
 #define TITLE_MAX_WIDTH (320 - SMALL_MARGIN * 2)
 #define DESC_MAX_WIDTH (320 - SMALL_MARGIN * 2)
-#define SUGGESTION_TITLE_MAX_WIDTH (320 - (SUGGESTION_THUMBNAIL_WIDTH + 3))
+#define SUGGESTION_TITLE_MAX_WIDTH (320 - (VIDEO_LIST_THUMBNAIL_WIDTH + SMALL_MARGIN))
 #define COMMENT_MAX_WIDTH (320 - (COMMENT_ICON_SIZE + 2 * SMALL_MARGIN))
 #define REPLY_INDENT 25
 #define REPLY_MAX_WIDTH (320 - REPLY_INDENT - (REPLY_ICON_SIZE + 2 * SMALL_MARGIN))
@@ -165,7 +182,49 @@ static void load_more_suggestions(void *);
 static void load_more_replies(void *);
 static void load_caption(void *);
 
-static void update_bottom_view() {
+static void update_suggestion_bottom_view() {
+	delete suggestion_bottom_view;
+	if (cur_video_info.error != "" || cur_video_info.has_more_suggestions() || !cur_video_info.suggestions.size()) {
+		TextView *bottom_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))
+			->set_text(
+				cur_video_info.error != "" ? cur_video_info.error :
+				cur_video_info.has_more_suggestions() ? LOCALIZED(LOADING) :
+				!cur_video_info.suggestions.size() ? LOCALIZED(EMPTY) : "IE")
+			->set_font_size(0.5, DEFAULT_FONT_INTERVAL)
+			->set_x_centered(true)
+			->set_y_centered(false);
+		
+		suggestion_view->set_on_child_drawn(1, [] (const ScrollView &, int) {
+			if (cur_video_info.has_more_suggestions() && cur_video_info.error == "") {
+				if (!is_async_task_running(load_video_page) &&
+					!is_async_task_running(load_more_suggestions)) queue_async_task(load_more_suggestions, &cur_video_info);
+			}
+		});
+		suggestion_bottom_view = bottom_view;
+	} else suggestion_bottom_view = new EmptyView(0, 0, 320, 0);
+	suggestion_view->views[1] = suggestion_bottom_view;
+}
+// also used for playlist items
+static SuccinctVideoView *suggestion_to_view(const YouTubeSuccinctItem &item) {
+	SuccinctVideoView *cur_view = (new SuccinctVideoView(0, 0, 320, VIDEO_LIST_THUMBNAIL_HEIGHT));
+	cur_view->set_title_lines(truncate_str(item.get_name(), SUGGESTION_TITLE_MAX_WIDTH, 2, 0.5, 0.5));
+	cur_view->set_thumbnail_url(item.get_thumbnail_url());
+	if (item.type == YouTubeSuccinctItem::VIDEO) {
+		cur_view->set_auxiliary_lines({item.video.author});
+		cur_view->set_bottom_right_overlay(item.video.duration_text);
+	} else if (item.type == YouTubeSuccinctItem::PLAYLIST) {
+		cur_view->set_auxiliary_lines({item.playlist.video_count_str});
+	}
+	cur_view->set_get_background_color(View::STANDARD_BACKGROUND);
+	cur_view->set_on_view_released([item] (View &view) {
+		suggestion_clicked_url = item.get_url();
+	});
+	cur_view->set_is_playlist(item.type == YouTubeSuccinctItem::PLAYLIST);
+	
+	return cur_view;
+}
+
+static void update_comment_bottom_view() {
 	delete comments_bottom_view;
 	if (cur_video_info.comments_disabled || cur_video_info.error != "" || cur_video_info.has_more_comments() || !cur_video_info.comments.size()) {
 		TextView *bottom_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))
@@ -228,7 +287,7 @@ static void load_video_page(void *arg) {
 		remove_cpu_limit(25);
 	}
 	
-	Util_log_save("player/load-v", "truncate start");
+	Util_log_save("player/load-v", "truncate/view creation start");
 	// wrap main title
 	float title_font_size_tmp;
 	std::vector<std::string> title_lines_tmp = truncate_str(tmp_video_info.title, TITLE_MAX_WIDTH, 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE);
@@ -249,13 +308,12 @@ static void load_video_page(void *arg) {
 			else break;
 		}
 	}
-	// wrap suggestion titles
-	std::vector<std::vector<std::string> > suggestion_titles_lines_tmp(tmp_video_info.suggestions.size());
-	for (size_t i = 0; i < tmp_video_info.suggestions.size(); i++)
-		suggestion_titles_lines_tmp[i] = truncate_str(tmp_video_info.suggestions[i].title, SUGGESTION_TITLE_MAX_WIDTH, 2, 0.5, 0.5);
-	Util_log_save("player/load-v", "truncate end");
+	// prepare suggestion view
+	std::vector<View *> new_suggestion_views;
+	for (size_t i = 0; i < tmp_video_info.suggestions.size(); i++) new_suggestion_views.push_back(suggestion_to_view(tmp_video_info.suggestions[i]));
+	
 	// prepare comment views (comments exist from the first if it's loaded from cache)
-	std::vector<CommentView *> new_comment_views;
+	std::vector<View *> new_comment_views;
 	for (size_t i = 0; i < tmp_video_info.comments.size(); i++) new_comment_views.push_back(comment_to_view(tmp_video_info.comments[i], i));
 	
 	// prepare captions view
@@ -349,14 +407,39 @@ static void load_video_page(void *arg) {
 	caption_right_view->views.push_back(translation_languages_selector_view);
 	caption_right_view->set_draw_order({1, 0});
 	
+	// prepare playlist view
+	double playlist_view_scroll = playlist_list_view->get_offset(); // this call should not need mutex locking
+	std::vector<View *> new_playlist_views;
+	for (auto video : tmp_video_info.playlist.videos) new_playlist_views.push_back(suggestion_to_view(YouTubeSuccinctItem(video)));
+	if (tmp_video_info.playlist.selected_index >= 0 && tmp_video_info.playlist.selected_index < (int) new_playlist_views.size()) {
+		new_playlist_views[tmp_video_info.playlist.selected_index]->set_get_background_color([] (const View &) { return 0xFFAAEEAA; });
+		double selected_y = tmp_video_info.playlist.selected_index * SUGGESTIONS_VERTICAL_INTERVAL;
+		if (playlist_view_scroll < selected_y - (CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT))
+			playlist_view_scroll = selected_y - (CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT) + SUGGESTIONS_VERTICAL_INTERVAL;
+		if (playlist_view_scroll > selected_y + SUGGESTIONS_VERTICAL_INTERVAL) playlist_view_scroll = selected_y;
+	} else playlist_view_scroll = 0;
+	playlist_view_scroll = std::min<double>(playlist_view_scroll, tmp_video_info.playlist.videos.size() * SUGGESTIONS_VERTICAL_INTERVAL - (CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT));
+	playlist_view_scroll = std::max<double>(playlist_view_scroll, 0);
 	
+	Util_log_save("player/load-v", "truncate/view creation end");
+	
+	// acquire lock and perform actual replacements
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	cur_video_info = tmp_video_info;
 	video_info_cache[url] = tmp_video_info;
 	description_lines = description_lines_tmp;
-	suggestion_titles_lines = suggestion_titles_lines_tmp;
 	title_lines = title_lines_tmp;
 	title_font_size = title_font_size_tmp;
+	TAB_NUM = 5;
+	if (cur_video_info.playlist.videos.size()) TAB_NUM++, selected_tab = TAB_PLAYLIST;
+	else if (selected_tab == TAB_PLAYLIST) selected_tab = TAB_GENERAL;
+	
+	for (auto view : suggestion_main_view->views) thumbnail_cancel_request(dynamic_cast<SuccinctVideoView *>(view)->thumbnail_handle);
+	suggestion_thumbnail_request_l = suggestion_thumbnail_request_r = 0;
+	suggestion_main_view->recursive_delete_subviews();
+	suggestion_main_view->views = new_suggestion_views;
+	suggestion_view->reset();
+	update_suggestion_bottom_view();
 	
 	// cancel thumbnail requests
 	for (auto view : comment_thumbnail_loaded_list) {
@@ -365,7 +448,10 @@ static void load_video_page(void *arg) {
 	}
 	comment_thumbnail_loaded_list.clear();
 	comments_main_view->recursive_delete_subviews();
-	comments_main_view->views.insert(comments_main_view->views.end(), new_comment_views.begin(), new_comment_views.end());
+	comments_main_view->views = new_comment_views;
+	comment_all_view->reset();
+	update_comment_bottom_view();
+	
 	caption_main_view->recursive_delete_subviews();
 	caption_overlay_view->set_caption_data({});
 	caption_language_select_view->recursive_delete_subviews();
@@ -374,16 +460,18 @@ static void load_video_page(void *arg) {
 	caption_language_select_view->set_draw_order({1, 0});
 	captions_tab_view = caption_language_select_view;
 	
-	update_bottom_view();
-	
-	thumbnail_cancel_requests(suggestion_thumbnail_handles);
-	suggestion_thumbnail_request_l = suggestion_thumbnail_request_r = 0;
-	suggestion_thumbnail_handles.assign(cur_video_info.suggestions.size(), -1);
+	playlist_title_view->set_text(tmp_video_info.playlist.title);
+	playlist_author_view->set_text(tmp_video_info.playlist.author_name);
+	for (auto view : playlist_list_view->views) thumbnail_cancel_request(dynamic_cast<SuccinctVideoView *>(view)->thumbnail_handle);
+	playlist_list_view->recursive_delete_subviews();
+	playlist_list_view->views = new_playlist_views;
+	playlist_list_view->set_offset(playlist_view_scroll);
+	playlist_thumbnail_request_l = playlist_thumbnail_request_r = 0;
 	
 	thumbnail_cancel_request(icon_thumbnail_handle);
 	icon_thumbnail_handle = thumbnail_request(cur_video_info.author.icon_url, SceneType::VIDEO_PLAYER, 1000, ThumbnailType::ICON);
 	
-	for (int i = 0; i < TAB_NUM; i++) scroller[i].reset();
+	for (int i = 0; i < TAB_MAX_NUM; i++) scroller[i].reset();
 	var_need_reflesh = true;
 	
 	if (cur_video_info.is_playable()) {
@@ -400,20 +488,19 @@ static void load_more_suggestions(void *arg_) {
 	remove_cpu_limit(25);
 	
 	// wrap suggestion titles
-	Util_log_save("player/load-s", "truncate start");
-	std::vector<std::vector<std::string> > suggestion_titles_lines_add(new_result.suggestions.size() - arg->suggestions.size());
-	for (size_t i = arg->suggestions.size(); i < new_result.suggestions.size(); i++)
-		suggestion_titles_lines_add[i - arg->suggestions.size()] = truncate_str(new_result.suggestions[i].title, SUGGESTION_TITLE_MAX_WIDTH, 2, 0.5, 0.5);
-	Util_log_save("player/load-s", "truncate end");
+	Util_log_save("player/load-s", "truncate/view creation start");
+	std::vector<View *> new_suggestion_views;
+	for (size_t i = arg->suggestions.size(); i < new_result.suggestions.size(); i++) new_suggestion_views.push_back(suggestion_to_view(new_result.suggestions[i]));
+	Util_log_save("player/load-s", "truncate/view creation end");
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	if (new_result.error != "") cur_video_info.error = new_result.error;
 	else {
 		cur_video_info = new_result;
+		suggestion_main_view->views.insert(suggestion_main_view->views.end(), new_suggestion_views.begin(), new_suggestion_views.end());
+		update_suggestion_bottom_view();
 		video_info_cache[cur_video_info.url] = new_result;
-		suggestion_titles_lines.insert(suggestion_titles_lines.end(), suggestion_titles_lines_add.begin(), suggestion_titles_lines_add.end());
 	}
-	suggestion_thumbnail_handles.resize(cur_video_info.suggestions.size(), -1);
 	var_need_reflesh = true;
 	svcReleaseMutex(small_resource_lock);
 }
@@ -435,7 +522,7 @@ static void load_more_comments(void *arg_) {
 	cur_video_info = new_result;
 	video_info_cache[cur_video_info.url] = new_result;
 	comments_main_view->views.insert(comments_main_view->views.end(), new_comment_views.begin(), new_comment_views.end());
-	update_bottom_view();
+	update_comment_bottom_view();
 	var_need_reflesh = true;
 	svcReleaseMutex(small_resource_lock);
 }
@@ -565,6 +652,7 @@ static void load_caption(void *arg_) {
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 	caption_main_view->recursive_delete_subviews();
+	caption_main_view->reset();
 	caption_main_view->set_views(caption_main_views);
 	captions_tab_view = caption_main_view;
 	
@@ -598,7 +686,7 @@ static void send_change_video_request_wo_lock(std::string url, bool force_load) 
 	vid_play_request = false;
 	if (vid_url != url) {
 		vid_url = url;
-		selected_tab = TAB_GENERAL;
+		if (selected_tab != TAB_PLAYLIST) selected_tab = TAB_GENERAL;
 	}
 	queue_async_task(load_video_page, &vid_url);
 	var_need_reflesh = true;
@@ -1201,12 +1289,23 @@ void VideoPlayer_init(void)
 	svcCreateMutex(&network_decoder_critical_lock, false);
 	svcCreateMutex(&small_resource_lock, false);
 	
-	for (int i = 0; i < TAB_NUM; i++) scroller[i] = VerticalScroller(0, 320, 0, CONTENT_Y_HIGH);
+	for (int i = 0; i < TAB_MAX_NUM; i++) scroller[i] = VerticalScroller(0, 320, 0, CONTENT_Y_HIGH);
 	tab_selector_scroller = VerticalScroller(0, 320, CONTENT_Y_HIGH, CONTENT_Y_HIGH + TAB_SELECTOR_HEIGHT);
+	suggestion_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH))->set_views({suggestion_main_view, suggestion_bottom_view});
 	comment_all_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH))->set_views({comments_top_view, comments_main_view, comments_bottom_view});
 	captions_tab_view = caption_language_select_view = new VerticalListView(0, 0, 320);
 	caption_main_view = new ScrollView(0, 0, 320, CONTENT_Y_HIGH);
 	caption_overlay_view = new CaptionOverlayView(0, 0, 400, 240);
+	playlist_title_view = (new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL);
+	playlist_author_view = (new TextView(0, 0, 320, PLAYLIST_TOP_HEIGHT - MIDDLE_FONT_INTERVAL))->set_get_text_color([] () { return LIGHT0_TEXT_COLOR; });
+	playlist_list_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT))->set_margin(SMALL_MARGIN);
+	playlist_view = (new VerticalListView(0, 0, 320))->set_views({
+		playlist_title_view,
+		playlist_author_view,
+		(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN)),
+		playlist_list_view
+	})->set_draw_order({3, 2, 1, 0});
+	for (int i = 0; i < 3; i++) playlist_view->views[i]->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; });
 	
 	APT_CheckNew3DS(&new_3ds);
 	if(new_3ds)
@@ -1340,6 +1439,31 @@ void VideoPlayer_exit(void)
 	threadFree(livestream_initer_thread);
 	stream_downloader.delete_all();
 	
+	// clean up views
+	suggestion_view->recursive_delete_subviews();
+	delete suggestion_view;
+	suggestion_view = NULL;
+	suggestion_main_view = NULL;
+	suggestion_bottom_view = NULL;
+	
+	comment_all_view->recursive_delete_subviews();
+	delete comment_all_view;
+	comments_top_view = NULL;
+	comments_main_view = NULL;
+	comments_bottom_view = NULL;
+	comment_all_view = NULL;
+	
+	delete caption_language_select_view;
+	delete caption_main_view;
+	delete caption_overlay_view;
+	caption_language_select_view = NULL;
+	caption_main_view = NULL;
+	caption_overlay_view = NULL;
+	captions_tab_view = NULL;
+	
+	playlist_view->recursive_delete_subviews();
+	delete playlist_view;
+	
 	bool new_3ds;
 	APT_CheckNew3DS(&new_3ds);
 	if (new_3ds) {
@@ -1360,7 +1484,8 @@ void VideoPlayer_exit(void)
 #define DURATION_FONT_SIZE 0.4
 static void draw_video_content(Hid_info key) {
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-	if (is_async_task_running(load_video_page)) {
+	if (selected_tab == TAB_PLAYLIST) playlist_view->draw();
+	else if (is_async_task_running(load_video_page)) {
 		Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 	} else {
 		int y_offset = -scroller[selected_tab].get_offset();
@@ -1414,47 +1539,7 @@ static void draw_video_content(Hid_info key) {
 				y_offset += SMALL_MARGIN;
 			} else Draw_x_centered(LOCALIZED(EMPTY), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		} else if (selected_tab == TAB_SUGGESTIONS) {
-			if (cur_video_info.suggestions.size()) {
-				int suggestion_num = cur_video_info.suggestions.size();
-				int suggestion_displayed_l = std::min(suggestion_num, std::max(0, scroller[TAB_SUGGESTIONS].get_offset() / SUGGESTIONS_VERTICAL_INTERVAL));
-				int suggestion_displayed_r = std::min(suggestion_num, std::max(0, (scroller[TAB_SUGGESTIONS].get_offset() + CONTENT_Y_HIGH - 1) / SUGGESTIONS_VERTICAL_INTERVAL + 1));
-				for (int i = suggestion_displayed_l; i < suggestion_displayed_r; i++) {
-					int y_l = y_offset + i * SUGGESTIONS_VERTICAL_INTERVAL;
-					int y_r = y_l + SUGGESTION_THUMBNAIL_HEIGHT;
-					
-					if (key.touch_y != -1 && key.touch_y >= y_l && key.touch_y < y_r) {
-						u8 darkness = std::min<int>(0xFF, 0xD0 + (1 - scroller[TAB_SUGGESTIONS].selected_overlap_darkness()) * 0x30);
-						if (var_night_mode) darkness = 0xFF - darkness;
-						u32 color = 0xFF000000 | darkness << 16 | darkness << 8 | darkness;
-						Draw_texture(var_square_image[0], color, 0, y_l, 320, y_r - y_l);
-					}
-					
-					auto cur_video = cur_video_info.suggestions[i];
-					int cur_y = y_l;
-					// thumbnail
-					thumbnail_draw(suggestion_thumbnail_handles[i], 0, cur_y, SUGGESTION_THUMBNAIL_WIDTH, SUGGESTION_THUMBNAIL_HEIGHT);
-					float duration_width = Draw_get_width(cur_video.duration_text, DURATION_FONT_SIZE, DURATION_FONT_SIZE);
-					Draw_texture(var_square_image[0], 0xBB000000, SUGGESTION_THUMBNAIL_WIDTH - duration_width - 2, cur_y + SUGGESTION_THUMBNAIL_HEIGHT - 10, duration_width + 2, 10);
-					Draw(cur_video.duration_text, SUGGESTION_THUMBNAIL_WIDTH - duration_width - 1, cur_y + SUGGESTION_THUMBNAIL_HEIGHT - 11,
-						DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);
-					
-					// title
-					auto title_lines = suggestion_titles_lines[i];
-					for (size_t line = 0; line < title_lines.size(); line++) {
-						Draw(title_lines[line], SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-						cur_y += DEFAULT_FONT_INTERVAL;
-					}
-					cur_y += 2;
-					Draw(cur_video.author, SUGGESTION_THUMBNAIL_WIDTH + 3, cur_y, 0.5, 0.5, LIGHT0_TEXT_COLOR);
-					cur_y += DEFAULT_FONT_INTERVAL;
-				}
-				y_offset += cur_video_info.suggestions.size() * SUGGESTIONS_VERTICAL_INTERVAL;
-				if (cur_video_info.has_more_suggestions() || cur_video_info.error != "") {
-					std::string draw_str = cur_video_info.error != "" ? cur_video_info.error : LOCALIZED(LOADING);
-					if (y_offset < 240) Draw_x_centered(draw_str, 0, 320, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-					y_offset += SUGGESTION_LOAD_MORE_MARGIN;
-				}
-			} else Draw_x_centered(LOCALIZED(EMPTY), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
+			suggestion_view->draw();
 		} else if (selected_tab == TAB_COMMENTS) {
 			comment_all_view->draw();
 		} else if (selected_tab == TAB_CAPTIONS) {
@@ -1562,8 +1647,9 @@ static void draw_video_content(Hid_info key) {
 			Draw("Zoom : x" + std::to_string(vid_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_x) + " Y : " + std::to_string((int)vid_y), 0, y_offset + 140, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += 160;
 		}
+		if (selected_tab == TAB_GENERAL || selected_tab == TAB_ADVANCED) scroller[selected_tab].draw_slider_bar();
 	}
-	scroller[selected_tab].draw_slider_bar();
+	
 	svcReleaseMutex(small_resource_lock);
 }
 
@@ -1668,6 +1754,7 @@ Intent VideoPlayer_draw(void)
 			else if (i == TAB_SUGGESTIONS) tab_string = LOCALIZED(SUGGESTIONS);
 			else if (i == TAB_COMMENTS) tab_string = LOCALIZED(COMMENTS);
 			else if (i == TAB_CAPTIONS) tab_string = LOCALIZED(CAPTIONS);
+			else if (i == TAB_PLAYLIST) tab_string = LOCALIZED(PLAYLIST);
 			else if (i == TAB_ADVANCED) tab_string = LOCALIZED(ADVANCED);
 			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEFAULT_TEXT_COLOR);
 		}
@@ -1699,10 +1786,11 @@ Intent VideoPlayer_draw(void)
 		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 		
 		// thumbnail request update (this should be done while `small_resource_lock` is locked)
+		// YES, this section needs refactoring, seriously
 		if (cur_video_info.suggestions.size()) { // suggestions
 			int suggestion_num = cur_video_info.suggestions.size();
-			int displayed_l = std::min(suggestion_num, std::max(0, scroller[TAB_SUGGESTIONS].get_offset() / SUGGESTIONS_VERTICAL_INTERVAL));
-			int displayed_r = std::min(suggestion_num, std::max(0, (scroller[TAB_SUGGESTIONS].get_offset() + CONTENT_Y_HIGH - 1) / SUGGESTIONS_VERTICAL_INTERVAL + 1));
+			int displayed_l = std::min(suggestion_num, std::max(0, suggestion_view->get_offset() / SUGGESTIONS_VERTICAL_INTERVAL));
+			int displayed_r = std::min(suggestion_num, std::max(0, (suggestion_view->get_offset() + CONTENT_Y_HIGH - 1) / SUGGESTIONS_VERTICAL_INTERVAL + 1));
 			int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
 			int request_target_r = std::min(suggestion_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
 			// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
@@ -1712,16 +1800,23 @@ Intent VideoPlayer_draw(void)
 			for (int i = suggestion_thumbnail_request_l; i < suggestion_thumbnail_request_r; i++) new_indexes.erase(i);
 			for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
 			
-			for (auto i : cancelling_indexes) thumbnail_cancel_request(suggestion_thumbnail_handles[i]), suggestion_thumbnail_handles[i] = -1;
-			for (auto i : new_indexes) suggestion_thumbnail_handles[i] =
-				thumbnail_request(cur_video_info.suggestions[i].thumbnail_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::VIDEO_THUMBNAIL);
+			for (auto i : cancelling_indexes) {
+				SuccinctVideoView *cur_view = dynamic_cast<SuccinctVideoView *>(suggestion_main_view->views[i]);
+				thumbnail_cancel_request(cur_view->thumbnail_handle);
+				cur_view->thumbnail_handle = -1;
+			}
+			for (auto i : new_indexes) {
+				SuccinctVideoView *cur_view = dynamic_cast<SuccinctVideoView *>(suggestion_main_view->views[i]);
+				cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::VIDEO_THUMBNAIL);
+			}
 			
 			suggestion_thumbnail_request_l = request_target_l;
 			suggestion_thumbnail_request_r = request_target_r;
 			
 			std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
 			auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-			for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {suggestion_thumbnail_handles[i], 500 - dist(i)};
+			for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {
+				dynamic_cast<SuccinctVideoView *>(suggestion_main_view->views[i])->thumbnail_handle, 500 - dist(i)};
 			thumbnail_set_priorities(priority_list);
 		}
 		if (cur_video_info.comments.size()) { // comments
@@ -1771,9 +1866,48 @@ Intent VideoPlayer_draw(void)
 			for (auto i : comments_list) priority_list.push_back({i.second->author_icon_handle, priority(i.first)});
 			thumbnail_set_priorities(priority_list);
 		}
+		if (cur_video_info.playlist.videos.size()) { // playlist
+			int item_num = cur_video_info.playlist.videos.size();
+			int displayed_l = std::min(item_num, std::max(0, playlist_list_view->get_offset() / SUGGESTIONS_VERTICAL_INTERVAL));
+			int displayed_r = std::min(item_num, std::max(0, (playlist_list_view->get_offset() + (CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT) - 1) / SUGGESTIONS_VERTICAL_INTERVAL + 1));
+			int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
+			int request_target_r = std::min(item_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
+			// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
+			std::set<int> new_indexes, cancelling_indexes;
+			for (int i = playlist_thumbnail_request_l; i < playlist_thumbnail_request_r; i++) cancelling_indexes.insert(i);
+			for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
+			for (int i = playlist_thumbnail_request_l; i < playlist_thumbnail_request_r; i++) new_indexes.erase(i);
+			for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
+			
+			for (auto i : cancelling_indexes) {
+				SuccinctVideoView *cur_view = dynamic_cast<SuccinctVideoView *>(playlist_list_view->views[i]);
+				thumbnail_cancel_request(cur_view->thumbnail_handle);
+				cur_view->thumbnail_handle = -1;
+			}
+			for (auto i : new_indexes) {
+				SuccinctVideoView *cur_view = dynamic_cast<SuccinctVideoView *>(playlist_list_view->views[i]);
+				cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::VIDEO_THUMBNAIL);
+			}
+			
+			playlist_thumbnail_request_l = request_target_l;
+			playlist_thumbnail_request_r = request_target_r;
+			
+			std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
+			auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
+			for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {
+				dynamic_cast<SuccinctVideoView *>(playlist_list_view->views[i])->thumbnail_handle, 500 - dist(i)};
+			thumbnail_set_priorities(priority_list);
+		}
 		
 		update_overlay_menu(&key, &intent, SceneType::VIDEO_PLAYER);
-		if (selected_tab == TAB_COMMENTS) {
+		if (selected_tab == TAB_SUGGESTIONS) {
+			suggestion_view->update(key);
+			if (suggestion_clicked_url != "") {
+				intent.next_scene = SceneType::VIDEO_PLAYER;
+				intent.arg = suggestion_clicked_url;
+				suggestion_clicked_url = "";
+			}
+		} else if (selected_tab == TAB_COMMENTS) {
 			comment_all_view->update(key);
 			if (channel_url_pressed != "") {
 				intent.next_scene = SceneType::CHANNEL;
@@ -1781,6 +1915,14 @@ Intent VideoPlayer_draw(void)
 				channel_url_pressed = "";
 			}
 		} else if (selected_tab == TAB_CAPTIONS) captions_tab_view->update(key);
+		else if (selected_tab == TAB_PLAYLIST) {
+			playlist_view->update(key);
+			if (suggestion_clicked_url != "") {
+				intent.next_scene = SceneType::VIDEO_PLAYER;
+				intent.arg = suggestion_clicked_url;
+				suggestion_clicked_url = "";
+			}
+		}
 		
 		// tab selector
 		{
@@ -1804,10 +1946,6 @@ Intent VideoPlayer_draw(void)
 				content_height += SMALL_MARGIN * 2;
 				content_height += description_lines.size() * DEFAULT_FONT_INTERVAL;
 				content_height += SMALL_MARGIN * 2;
-			} else if (selected_tab == TAB_SUGGESTIONS) {
-				content_height = cur_video_info.suggestions.size() * SUGGESTIONS_VERTICAL_INTERVAL;
-				if (cur_video_info.has_more_suggestions() || cur_video_info.error != "") content_height += SUGGESTION_LOAD_MORE_MARGIN;
-			} else if (selected_tab == TAB_COMMENTS) {
 			} else if (selected_tab == TAB_ADVANCED) {
 				content_height += DEFAULT_FONT_INTERVAL * 6;
 				if (cur_video_info.is_livestream && network_decoder.ready) content_height += DEFAULT_FONT_INTERVAL;
@@ -1837,28 +1975,6 @@ Intent VideoPlayer_draw(void)
 					intent.arg = cur_video_info.author.url;
 				}
 			}
-		} else if (selected_tab == TAB_SUGGESTIONS) {
-			do {
-				if (released_x != -1) {
-					if (released_y < SUGGESTIONS_VERTICAL_INTERVAL * (int) cur_video_info.suggestions.size()) {
-						int index = released_y / SUGGESTIONS_VERTICAL_INTERVAL;
-						int remainder = released_y % SUGGESTIONS_VERTICAL_INTERVAL;
-						if (remainder < SUGGESTION_THUMBNAIL_HEIGHT) {
-							intent.next_scene = SceneType::VIDEO_PLAYER;
-							intent.arg = cur_video_info.suggestions[index].url;
-							break;
-						}
-					}
-				}
-				
-				int load_more_y = SUGGESTIONS_VERTICAL_INTERVAL * cur_video_info.suggestions.size() - scroller[selected_tab].get_offset();
-				if (cur_video_info.has_more_suggestions() && cur_video_info.error == "" && load_more_y < CONTENT_Y_HIGH &&
-					!is_async_task_running(load_more_suggestions) && cur_video_info.suggestions.size()) {
-						
-					send_load_more_suggestions_request();
-				}
-			} while (0);
-		} else if (selected_tab == TAB_COMMENTS) {
 		} else if (selected_tab == TAB_ADVANCED) {
 			int y_offset = 0;
 			y_offset += DEFAULT_FONT_INTERVAL * 6;

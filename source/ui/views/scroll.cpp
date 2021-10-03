@@ -7,6 +7,7 @@
 void ScrollView::update_scroller(Hid_info key) {
 	content_height = 0;
 	for (auto view : views) content_height += view->get_height();
+	content_height += std::max((int) views.size() - 1, 0) * margin;
 	
 	double scroll_max = std::max<double>(0, content_height - (y1 - y0));
 	if (key.p_touch) {

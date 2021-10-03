@@ -19,25 +19,39 @@ struct YouTubeVideoSuccinct {
 	std::string author;
 	std::string thumbnail_url;
 };
+struct YouTubePlaylistSuccinct {
+	std::string url;
+	std::string title;
+	std::string video_count_str;
+	std::string thumbnail_url;
+};
+
+struct YouTubeSuccinctItem {
+	// TODO : use union or std::variant
+	enum {
+		VIDEO,
+		CHANNEL,
+		PLAYLIST
+	} type;
+	YouTubeVideoSuccinct video;
+	YouTubeChannelSuccinct channel;
+	YouTubePlaylistSuccinct playlist;
+	
+	YouTubeSuccinctItem () = default;
+	YouTubeSuccinctItem (YouTubeVideoSuccinct video) : type(VIDEO), video(video) {}
+	YouTubeSuccinctItem (YouTubeChannelSuccinct channel) : type(CHANNEL), channel(channel) {}
+	YouTubeSuccinctItem (YouTubePlaylistSuccinct playlist) : type(PLAYLIST), playlist(playlist) {}
+	
+	std::string get_url() const { return type == VIDEO ? video.url : type == CHANNEL ? channel.url : playlist.url; }
+	std::string get_thumbnail_url() const { return type == VIDEO ? video.thumbnail_url : type == CHANNEL ? channel.icon_url : playlist.thumbnail_url; }
+	std::string get_name() const { return type == VIDEO ? video.title : type == CHANNEL ? channel.name : playlist.title; }
+};
 
 
 struct YouTubeSearchResult {
-	struct Item {
-		// TODO : use union or std::variant
-		enum {
-			VIDEO,
-			CHANNEL
-		} type;
-		YouTubeVideoSuccinct video;
-		YouTubeChannelSuccinct channel;
-		Item () = default;
-		Item (YouTubeVideoSuccinct video) : type(VIDEO), video(video) {}
-		Item (YouTubeChannelSuccinct channel) : type(CHANNEL), channel(channel) {}
-	};
-	
 	std::string error;
 	int estimated_result_num;
-	std::vector<Item> results;
+	std::vector<YouTubeSuccinctItem> results;
 	
 	std::string continue_token;
 	std::string continue_key;
@@ -96,7 +110,17 @@ struct YouTubeVideoDetail {
 	using Caption = std::vector<CaptionPiece>;
 	std::map<std::pair<std::string, std::string>, Caption> caption_data;
 	
-	std::vector<YouTubeVideoSuccinct> suggestions;
+	std::vector<YouTubeSuccinctItem> suggestions;
+	struct Playlist {
+		std::string id;
+		std::string title;
+		std::string author_name;
+		int total_videos;
+		std::vector<YouTubeVideoSuccinct> videos;
+		int selected_index;
+	};
+	Playlist playlist;
+	
 	struct Comment {
 		YouTubeChannelSuccinct author;
 		std::string content;
@@ -154,5 +178,6 @@ void youtube_change_content_language(std::string language_code);
 // util function
 std::string youtube_get_video_thumbnail_url_by_id(const std::string &id);
 std::string youtube_get_video_url_by_id(const std::string &id);
+std::string get_video_id_from_thumbnail_url(const std::string &url);
 
 

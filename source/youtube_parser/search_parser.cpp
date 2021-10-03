@@ -31,7 +31,7 @@ static Json get_initial_data(const std::string &html) {
 	return res;
 }
 
-static bool parse_searched_item(Json content, std::vector<YouTubeSearchResult::Item> &res) {
+static bool parse_searched_item(Json content, std::vector<YouTubeSuccinctItem> &res) {
 	if (content["compactVideoRenderer"] != Json()) {
 		auto video_renderer = content["compactVideoRenderer"];
 		YouTubeVideoSuccinct cur_result;
@@ -56,7 +56,7 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSearchResult::I
 				}
 			}
 		}*/
-		res.push_back(YouTubeSearchResult::Item(cur_result));
+		res.push_back(YouTubeSuccinctItem(cur_result));
 		return true;
 	} else if (content["compactChannelRenderer"] != Json()) {
 		auto channel_renderer = content["compactChannelRenderer"];
@@ -82,8 +82,32 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSearchResult::I
 			if (cur_result.icon_url.substr(0, 2) == "//") cur_result.icon_url = "https:" + cur_result.icon_url;
 		}
 		
-		res.push_back(YouTubeSearchResult::Item(cur_result));
+		res.push_back(YouTubeSuccinctItem(cur_result));
 		return true;
+	} else if (content["compactRadioRenderer"] != Json() || content["compactPlaylistRenderer"] != Json()) {
+		auto playlist_renderer = content["compactRadioRenderer"];
+		if (playlist_renderer == Json()) playlist_renderer = content["compactPlaylistRenderer"];
+		
+		YouTubePlaylistSuccinct cur_list;
+		cur_list.title = get_text_from_object(playlist_renderer["title"]);
+		cur_list.video_count_str = get_text_from_object(playlist_renderer["videoCountText"]);
+		for (auto thumbnail : playlist_renderer["thumbnail"]["thumbnails"].array_items())
+			if (thumbnail["url"].string_value().find("/default.jpg") != std::string::npos) cur_list.thumbnail_url = thumbnail["url"].string_value();
+		
+		cur_list.url = convert_url_to_mobile(playlist_renderer["shareUrl"].string_value());
+		if (!starts_with(cur_list.url, "https://m.youtube.com/watch", 0)) {
+			if (starts_with(cur_list.url, "https://m.youtube.com/playlist?", 0)) {
+				auto params = parse_parameters(cur_list.url.substr(std::string("https://m.youtube.com/playlist?").size(), cur_list.url.size()));
+				auto playlist_id = params["list"];
+				auto video_id = get_video_id_from_thumbnail_url(cur_list.thumbnail_url);
+				cur_list.url = "https://m.youtube.com/watch?v=" + video_id + "&list=" + playlist_id;
+			} else {
+				debug("unknown playlist url");
+				return false;
+			}
+		}
+		
+		res.push_back(YouTubeSuccinctItem(cur_list));
 	}
 	return false;
 }

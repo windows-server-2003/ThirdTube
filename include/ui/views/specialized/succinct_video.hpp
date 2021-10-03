@@ -17,7 +17,9 @@ private :
 	std::string bottom_right_overlay;
 public :
 	int thumbnail_handle = -1;
-	std::string video_id;
+	std::string thumbnail_url;
+	
+	bool is_playlist = false;
 	
 	SuccinctVideoView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~SuccinctVideoView () {}
@@ -34,8 +36,12 @@ public :
 		this->bottom_right_overlay = bottom_right_overlay;
 		return this;
 	}
-	SuccinctVideoView *set_video_id(const std::string &video_id) {
-		this->video_id = video_id;
+	SuccinctVideoView *set_thumbnail_url(const std::string &thumbnail_url) {
+		this->thumbnail_url = thumbnail_url;
+		return this;
+	}
+	SuccinctVideoView *set_is_playlist(bool is_playlist) {
+		this->is_playlist = is_playlist;
 		return this;
 	}
 	
@@ -46,6 +52,13 @@ public :
 			Draw_texture(var_square_image[0], 0xBB000000, x0 + VIDEO_LIST_THUMBNAIL_WIDTH - overlay_width - 2, y0 + VIDEO_LIST_THUMBNAIL_HEIGHT - 10, overlay_width + 2, 10);
 			Draw(bottom_right_overlay, x0 + VIDEO_LIST_THUMBNAIL_WIDTH - overlay_width - 1, y0 + VIDEO_LIST_THUMBNAIL_HEIGHT - 11,
 				DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);
+		}
+		if (is_playlist) {
+			double overlay_proportion = 0.3;
+			Draw_texture(var_square_image[0], 0xA0000000, x0 + VIDEO_LIST_THUMBNAIL_WIDTH * (1 - overlay_proportion), y0,
+				VIDEO_LIST_THUMBNAIL_WIDTH * overlay_proportion, VIDEO_LIST_THUMBNAIL_HEIGHT);
+			Draw_x_centered(LOCALIZED(PLAYLIST_SHORT), x0 + VIDEO_LIST_THUMBNAIL_WIDTH * (1 - overlay_proportion), x0 + VIDEO_LIST_THUMBNAIL_WIDTH,
+				(y1 + y0) / 2 - 8, 0.5, 0.5, (u32) -1);
 		}
 		float y = y0;
 		for (auto line : title_lines) {

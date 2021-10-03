@@ -10,6 +10,8 @@ public :
 	std::vector<View *> views;
 	std::vector<int> draw_order;
 	
+	double margin = 0.0;
+	
 	virtual void recursive_delete_subviews() override {
 		for (auto view : views) {
 			view->recursive_delete_subviews();
@@ -28,10 +30,15 @@ public :
 		this->draw_order = draw_order;
 		return this;
 	}
+	HorizontalListView *set_margin(double margin) {
+		this->margin = margin;
+		return this;
+	}
 	
 	float get_width() const override {
 		float res = 0;
 		for (auto view : views) res += view->get_width();
+		res += std::max((int) views.size() - 1, 0) * margin;
 		return res;
 	}
 	void reset_holding_status_() override {
@@ -46,11 +53,11 @@ public :
 			for (auto view : views) {
 				double x_right = x_offset + view->get_width();
 				if (x_right >= 0 && x_offset < 320) view->draw(x_offset, y0);
-				x_offset = x_right;
+				x_offset = x_right + margin;
 			}
 		} else {
 			std::vector<float> x_pos(views.size() + 1, x0);
-			for (size_t i = 0; i < views.size(); i++) x_pos[i + 1] = x_pos[i] + views[i]->get_width();
+			for (size_t i = 0; i < views.size(); i++) x_pos[i + 1] = x_pos[i] + views[i]->get_width() + margin;
 			for (auto i : draw_order) if (x_pos[i + 1] >= 0 && x_pos[i] < 320) views[i]->draw(x_pos[i], y0);
 		}
 	}
@@ -59,7 +66,7 @@ public :
 		for (auto view : views) {
 			double x_right = x_offset + view->get_width();
 			if (x_right >= 0 && x_offset < 320) view->update(key, x_offset, y0);
-			x_offset = x_right;
+			x_offset = x_right + margin;
 		}
 	}
 };
