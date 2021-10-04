@@ -267,45 +267,6 @@ Intent Search_draw(void)
 	RESULT_Y_HIGH = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
 	result_view->update_y_range(0, RESULT_Y_HIGH - RESULT_Y_LOW);
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-	int result_num = search_result.results.size();
-	if (result_num) {
-		int item_interval = VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN;
-		int displayed_l = std::min(result_num, result_view->get_offset() / item_interval);
-		int displayed_r = std::min(result_num, (result_view->get_offset() + RESULT_Y_HIGH - RESULT_Y_LOW - 1) / item_interval + 1);
-		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-		int request_target_r = std::min(result_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
-		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
-		std::set<int> new_indexes, cancelling_indexes;
-		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancelling_indexes.insert(i);
-		for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
-		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) new_indexes.erase(i);
-		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
-		
-		for (auto i : cancelling_indexes) {
-			int &thumbnail_handle = *get_thumbnail_info_from_view(result_list_view->views[i]).first;
-			thumbnail_cancel_request(thumbnail_handle);
-			thumbnail_handle = -1;
-		}
-		for (auto i : new_indexes) {
-			auto tmp = get_thumbnail_info_from_view(result_list_view->views[i]);
-			int &thumbnail_handle = *tmp.first;
-			std::string &thumbnail_url = *tmp.second;
-			ThumbnailType type = dynamic_cast<SuccinctChannelView *>(result_list_view->views[i]) ? ThumbnailType::ICON : ThumbnailType::VIDEO_THUMBNAIL;
-			thumbnail_handle = thumbnail_request(thumbnail_url, SceneType::SEARCH, 0, type);
-		}
-		
-		thumbnail_request_l = request_target_l;
-		thumbnail_request_r = request_target_r;
-		
-		std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-		for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {
-			*get_thumbnail_info_from_view(result_list_view->views[i]).first, 500 - dist(i)};
-		thumbnail_set_priorities(priority_list);
-	}
-	svcReleaseMutex(resource_lock);
-
 	if(var_need_reflesh || !var_eco_mode)
 	{
 		var_need_reflesh = false;
@@ -345,6 +306,43 @@ Intent Search_draw(void)
 	else
 		gspWaitForVBlank();
 	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	int result_num = search_result.results.size();
+	if (result_num) {
+		int item_interval = VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN;
+		int displayed_l = std::min(result_num, result_view->get_offset() / item_interval);
+		int displayed_r = std::min(result_num, (result_view->get_offset() + RESULT_Y_HIGH - RESULT_Y_LOW - 1) / item_interval + 1);
+		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
+		int request_target_r = std::min(result_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
+		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
+		std::set<int> new_indexes, cancelling_indexes;
+		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancelling_indexes.insert(i);
+		for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
+		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) new_indexes.erase(i);
+		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
+		
+		for (auto i : cancelling_indexes) {
+			int &thumbnail_handle = *get_thumbnail_info_from_view(result_list_view->views[i]).first;
+			thumbnail_cancel_request(thumbnail_handle);
+			thumbnail_handle = -1;
+		}
+		for (auto i : new_indexes) {
+			auto tmp = get_thumbnail_info_from_view(result_list_view->views[i]);
+			int &thumbnail_handle = *tmp.first;
+			std::string &thumbnail_url = *tmp.second;
+			ThumbnailType type = dynamic_cast<SuccinctChannelView *>(result_list_view->views[i]) ? ThumbnailType::ICON : ThumbnailType::VIDEO_THUMBNAIL;
+			thumbnail_handle = thumbnail_request(thumbnail_url, SceneType::SEARCH, 0, type);
+		}
+		
+		thumbnail_request_l = request_target_l;
+		thumbnail_request_r = request_target_r;
+		
+		std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
+		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
+		for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {
+			*get_thumbnail_info_from_view(result_list_view->views[i]).first, 500 - dist(i)};
+		thumbnail_set_priorities(priority_list);
+	}
 
 	if (Util_err_query_error_show_flag()) {
 		Util_err_main(key);
@@ -370,7 +368,9 @@ Intent Search_draw(void)
 		
 		if (key.p_b) intent.next_scene = SceneType::BACK;
 	}
-
+	
+	svcReleaseMutex(resource_lock);
+	
 	if(Util_log_query_log_show_flag())
 		Util_log_main(key);
 	
