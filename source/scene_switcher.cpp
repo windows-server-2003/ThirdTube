@@ -61,6 +61,38 @@ void Menu_init(void)
 	
 	APT_CheckNew3DS(&is_new_3ds);
 	
+	
+	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_high_resolution_mode).code);
+	Draw_frame_ready();
+	Draw_screen_ready(0, DEF_DRAW_WHITE);
+	Draw_screen_ready(1, DEF_DRAW_WHITE);
+	Draw_apply_draw();
+
+	Util_hid_init();
+	Util_expl_init();
+	Exfont_init();
+	for (int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++)
+		Exfont_set_external_font_request_state(i, true);
+
+	for(int i = 0; i < 4; i++)
+		Exfont_set_system_font_request_state(i, true);
+
+	Exfont_request_load_external_font();
+	Exfont_request_load_system_font();
+	
+	/*
+	if (var_allow_send_app_info)
+		menu_send_app_info_thread = threadCreate(Menu_send_app_info_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_LOW, 1, true);
+	*/
+
+	result = Draw_load_texture("romfs:/gfx/draw/app_icon.t3x", 60, menu_app_icon, 0, 4);
+	Util_log_save(DEF_MENU_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+
+	menu_thread_run = true;
+	menu_worker_thread = threadCreate(Menu_worker_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 1, false);
+	menu_check_connectivity_thread = threadCreate(Menu_check_connectivity_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 1, false);
+	menu_update_thread = threadCreate(Menu_update_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 1, false);
+	
 	Sem_init();
 	Sem_suspend();
 	VideoPlayer_init();
@@ -80,38 +112,6 @@ void Menu_init(void)
 	thumbnail_downloader_thread = threadCreate(thumbnail_downloader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	async_task_thread = threadCreate(async_task_thread_func, NULL, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	misc_tasks_thread = threadCreate(misc_tasks_thread_func, NULL, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
-
-	
-	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_high_resolution_mode).code);
-	Draw_frame_ready();
-	Draw_screen_ready(0, DEF_DRAW_WHITE);
-	Draw_screen_ready(1, DEF_DRAW_WHITE);
-	Draw_apply_draw();
-
-	Util_hid_init();
-	Util_expl_init();
-	Exfont_init();
-	for (int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++)
-		Exfont_set_external_font_request_state(i, true);
-
-	for(int i = 0; i < 4; i++)
-		Exfont_set_system_font_request_state(i, true);
-
-	Exfont_request_load_external_font();
-	Exfont_request_load_system_font();
-
-	/*
-	if (var_allow_send_app_info)
-		menu_send_app_info_thread = threadCreate(Menu_send_app_info_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_LOW, 1, true);
-	*/
-
-	result = Draw_load_texture("romfs:/gfx/draw/app_icon.t3x", 60, menu_app_icon, 0, 4);
-	Util_log_save(DEF_MENU_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
-
-	menu_thread_run = true;
-	menu_worker_thread = threadCreate(Menu_worker_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 1, false);
-	menu_check_connectivity_thread = threadCreate(Menu_check_connectivity_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 1, false);
-	menu_update_thread = threadCreate(Menu_update_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 1, false);
 
 	Menu_get_system_info();
 
