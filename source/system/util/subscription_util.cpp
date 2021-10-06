@@ -24,11 +24,17 @@ static void release() {
 #define SUBSCRIPTION_VERSION 0
 
 void load_subscription() {
-	const int BUF_SIZE = 0x100000;
-	char *buf = (char *) malloc(BUF_SIZE + 1);
+	u64 file_size;
+	Result_with_string result = Util_file_check_file_size("subscription.json", DEF_MAIN_DIR, &file_size);
+	if (result.code != 0) {
+		Util_log_save("subsc/load" , "Util_file_check_file_size()..." + result.string + result.error_description, result.code);
+		return;
+	}
+	
+	char *buf = (char *) malloc(file_size + 1);
 	
 	u32 read_size;
-	Result_with_string result = Util_file_load_from_file("subscription.json", DEF_MAIN_DIR, (u8 *) buf, BUF_SIZE, &read_size);
+	result = Util_file_load_from_file("subscription.json", DEF_MAIN_DIR, (u8 *) buf, file_size, &read_size);
 	Util_log_save("subsc/load" , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
 	if (result.code == 0) {
 		buf[read_size] = '\0';
