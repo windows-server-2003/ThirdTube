@@ -181,5 +181,8 @@ void youtube_change_content_language(std::string language_code);
 std::string youtube_get_video_thumbnail_url_by_id(const std::string &id);
 std::string youtube_get_video_url_by_id(const std::string &id);
 std::string get_video_id_from_thumbnail_url(const std::string &url);
+bool youtube_is_valid_video_id(const std::string &id);
+bool is_youtube_url(const std::string &url);
+bool is_youtube_thumbnail_url(const std::string &url);
 
 

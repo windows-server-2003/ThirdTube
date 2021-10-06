@@ -658,3 +658,24 @@ std::string get_video_id_from_thumbnail_url(const std::string &url) {
 	while (pos < url.size() && url[pos] != '/') res.push_back(url[pos++]);
 	return res;
 }
+bool youtube_is_valid_video_id(const std::string &id) {
+	for (auto c : id) if (!isalnum(c) && c != '-' && c != '_') return false;
+	if (id.size() != 11) return false;
+	return true;
+}
+bool is_youtube_url(const std::string &url) {
+	std::vector<std::string> patterns = {
+		"https://m.youtube.com/",
+		"https://www.youtube.com/"
+	};
+	for (auto pattern : patterns) if (starts_with(url, pattern, 0)) return true;
+	return false;
+}
+bool is_youtube_thumbnail_url(const std::string &url) {
+	std::vector<std::string> patterns = {
+		"https://i.ytimg.com/vi/",
+		"https://yt3.ggpht.com/"
+	};
+	for (auto pattern : patterns) if (starts_with(url, pattern, 0)) return true;
+	return false;
+}

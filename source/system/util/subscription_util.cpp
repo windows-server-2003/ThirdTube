@@ -45,7 +45,10 @@ void load_subscription() {
 				cur_channel.icon_url = video["icon_url"].string_value();
 				cur_channel.name = video["name"].string_value();
 				cur_channel.subscriber_count_str = video["subscriber_count_str"].string_value();
-				loaded_channels.push_back(cur_channel);
+				
+				bool valid = is_youtube_url(cur_channel.url) && is_youtube_thumbnail_url(cur_channel.icon_url);
+				if (!valid) Util_log_save("subsc/load", "invalid channel, ignoring...");
+				else loaded_channels.push_back(cur_channel);
 			}
 			lock();
 			subscribed_channels = loaded_channels;

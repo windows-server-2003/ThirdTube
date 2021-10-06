@@ -51,7 +51,10 @@ void load_watch_history() {
 					char *end;
 					cur_video.last_watch_time = strtoll(str.c_str(), &end, 10);
 				}
-				loaded_watch_history.push_back(cur_video);
+				// validation
+				bool valid = youtube_is_valid_video_id(cur_video.id);
+				if (!valid) Util_log_save("history/load", "invalid history item, ignoring...");
+				else loaded_watch_history.push_back(cur_video);
 			}
 			std::sort(loaded_watch_history.begin(), loaded_watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
 				return i.last_watch_time > j.last_watch_time;
