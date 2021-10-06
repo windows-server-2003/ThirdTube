@@ -14,6 +14,8 @@
 #include "ui/colors.hpp"
 #include "network/thumbnail_loader.hpp"
 #include "system/util/async_task.hpp"
+#include "system/util/misc_tasks.hpp"
+#include "system/util/subscription_util.hpp"
 
 #define THUMBNAIL_HEIGHT 54
 #define THUMBNAIL_WIDTH 96
@@ -24,6 +26,8 @@
 #define ICON_SIZE 55
 #define TAB_SELECTOR_HEIGHT 20
 #define TAB_SELECTOR_SELECTED_LINE_HEIGHT 3
+#define SUBSCRIBE_BUTTON_WIDTH 90
+#define SUBSCRIBE_BUTTON_HEIGHT 25
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 30
 
@@ -186,11 +190,14 @@ void Channel_exit(void)
 
 
 struct TemporaryCopyOfChannelInfo {
+	std::string id;
+	std::string url;
 	std::string error;
 	std::string name;
 	std::string banner_url;
 	std::string icon_url;
 	std::string description;
+	std::string subscriber_count_str;
 	int video_num;
 	int displayed_l;
 	int displayed_r;
@@ -214,6 +221,12 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 			thumbnail_draw(icon_thumbnail_handle, SMALL_MARGIN, y_offset, ICON_SIZE, ICON_SIZE); // icon
 		}
 		Draw(channel_info.name, ICON_SIZE + SMALL_MARGIN * 3, y_offset - 3, MIDDLE_FONT_SIZE, MIDDLE_FONT_SIZE, DEFAULT_TEXT_COLOR); // channel name
+		bool is_subscribed = subscription_is_subscribed(channel_info.id);
+		u32 subscribe_button_color = is_subscribed ? LIGHT1_BACK_COLOR : 0xFF4040EE;
+		std::string subscribe_button_str = is_subscribed ? LOCALIZED(SUBSCRIBED) : LOCALIZED(SUBSCRIBE);
+		Draw_texture(var_square_image[0], subscribe_button_color, 320 - SMALL_MARGIN * 2 - SUBSCRIBE_BUTTON_WIDTH, y_offset + SMALL_MARGIN,
+			SUBSCRIBE_BUTTON_WIDTH, SUBSCRIBE_BUTTON_HEIGHT);
+		Draw_x_centered(subscribe_button_str, 320 - SMALL_MARGIN * 2 - SUBSCRIBE_BUTTON_WIDTH, 320 - SMALL_MARGIN * 2, y_offset + SMALL_MARGIN + 4, 0.5, 0.5, 0xFF000000);
 		y_offset += ICON_SIZE;
 		y_offset += SMALL_MARGIN;
 		
@@ -319,6 +332,8 @@ Intent Channel_draw(void)
 	}
 	// back up some information while `resource_lock` is locked
 	TemporaryCopyOfChannelInfo channel_info_bak;
+	channel_info_bak.id = channel_info.id;
+	channel_info_bak.url = channel_info.url;
 	channel_info_bak.error = channel_info.error;
 	channel_info_bak.name = channel_info.name;
 	channel_info_bak.icon_url = channel_info.icon_url;
@@ -326,6 +341,7 @@ Intent Channel_draw(void)
 	channel_info_bak.description = channel_info.description;
 	channel_info_bak.has_continue = channel_info.has_continue();
 	channel_info_bak.video_num = video_num;
+	channel_info_bak.subscriber_count_str = channel_info.subscriber_count_str;
 	channel_info_bak.displayed_l = displayed_l;
 	channel_info_bak.displayed_r = displayed_r;
 	for (int i = displayed_l; i < displayed_r; i++) {
@@ -423,7 +439,26 @@ Intent Channel_draw(void)
 			int released_y = released_point.second;
 			int y_offset = 0;
 			if (channel_info_bak.banner_url != "") y_offset += BANNER_HEIGHT;
-			y_offset += ICON_SIZE + SMALL_MARGIN * 2;
+			y_offset += SMALL_MARGIN;
+			
+			if (y_offset + SMALL_MARGIN <= released_y && released_y < y_offset + SMALL_MARGIN + SUBSCRIBE_BUTTON_HEIGHT &&
+				released_x >= 320 - SMALL_MARGIN * 2 - SUBSCRIBE_BUTTON_WIDTH && released_x < 320 - SMALL_MARGIN * 2) {
+				bool cur_subscribed = subscription_is_subscribed(channel_info_bak.id);
+				if (cur_subscribed) subscription_unsubscribe(channel_info_bak.id);
+				else {
+					SubscriptionChannel new_channel;
+					new_channel.id = channel_info_bak.id;
+					new_channel.url = channel_info_bak.url;
+					new_channel.name = channel_info_bak.name;
+					new_channel.icon_url = channel_info_bak.icon_url;
+					new_channel.subscriber_count_str = channel_info_bak.subscriber_count_str;
+					subscription_subscribe(new_channel);
+				}
+				misc_tasks_request(TASK_SAVE_SUBSCRIPTION);
+				var_need_reflesh = true;
+			}
+			
+			y_offset += ICON_SIZE + SMALL_MARGIN;
 			
 			if (y_offset <= released_y && released_y < y_offset + TAB_SELECTOR_HEIGHT) {
 				int next_tab_index = released_x * TAB_NUM / 320;

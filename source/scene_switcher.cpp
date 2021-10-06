@@ -6,6 +6,7 @@
 #include "scenes/about.hpp"
 #include "scenes/setting_menu.hpp"
 #include "scenes/watch_history.hpp"
+#include "scenes/subscription.hpp"
 #include "network/network_io.hpp"
 #include "network/thumbnail_loader.hpp"
 #include "system/util/async_task.hpp"
@@ -70,6 +71,8 @@ void Menu_init(void)
 	About_suspend();
 	History_init();
 	History_suspend();
+	Subscription_init();
+	Subscription_suspend();
 	// add here
 	Search_init(); // first running
 	current_scene = SceneType::SEARCH;
@@ -129,6 +132,7 @@ void Menu_exit(void)
 	Sem_exit();
 	About_exit();
 	History_exit();
+	Subscription_exit();
 	// add here
 
 	Util_hid_exit();
@@ -230,6 +234,9 @@ bool Menu_main(void)
 	} else if (current_scene == SceneType::HISTORY) {
 		intent = History_draw();
 		if (intent.next_scene != SceneType::NO_CHANGE) History_suspend();
+	} else if (current_scene == SceneType::SUBSCRIPTION) {
+		intent = Subscription_draw();
+		if (intent.next_scene != SceneType::NO_CHANGE) Subscription_suspend();
 	}
 	// add here
 	
@@ -249,6 +256,7 @@ bool Menu_main(void)
 		else if (current_scene == SceneType::SETTINGS) Sem_resume(arg);
 		else if (current_scene == SceneType::ABOUT) About_resume(arg);
 		else if (current_scene == SceneType::HISTORY) History_resume(arg);
+		else if (current_scene == SceneType::SUBSCRIPTION) Subscription_resume(arg);
 		// add here
 	}
 	

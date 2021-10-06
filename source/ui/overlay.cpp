@@ -18,6 +18,7 @@ struct Content {
 	enum class Type {
 		SEARCH,
 		HISTORY,
+		SUBSCRIPTION,
 		EXIT,
 		SETTINGS,
 		ABOUT
@@ -94,6 +95,7 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 	contents.clear();
 	if (current_scene != SceneType::SEARCH) contents.push_back({LOCALIZED(GOTO_SEARCH), Content::Type::SEARCH});
 	if (current_scene != SceneType::HISTORY) contents.push_back({LOCALIZED(WATCH_HISTORY), Content::Type::HISTORY});
+	if (current_scene != SceneType::SUBSCRIPTION) contents.push_back({LOCALIZED(SUBSCRIPTION), Content::Type::SUBSCRIPTION});
 	contents.push_back({LOCALIZED(EXIT_APP), Content::Type::EXIT});
 	if (current_scene != SceneType::SETTINGS) contents.push_back({LOCALIZED(SETTINGS), Content::Type::SETTINGS});
 	if (current_scene != SceneType::ABOUT) contents.push_back({LOCALIZED(ABOUT), Content::Type::ABOUT});
@@ -131,6 +133,9 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 					intent->arg = "";
 				} else if (contents[id].type == Content::Type::HISTORY) {
 					intent->next_scene = SceneType::HISTORY;
+					intent->arg = "";
+				} else {
+					intent->next_scene = SceneType::SUBSCRIPTION;
 					intent->arg = "";
 				}
 			} else menu_status = CLOSED;

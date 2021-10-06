@@ -68,7 +68,7 @@ int thumbnail_request(const std::string &url, SceneType scene_id, int priority, 
 	requested_urls[url].handles.insert(handle);
 	requested_urls[url].type = type;
 	release();
-	if (requests.size() > 120) Util_log_save("tloader", "WARNING : request size too large, possible resource leak : " + std::to_string(requests.size()));
+	if (requests.size() > 180) Util_log_save("tloader", "WARNING : request size too large, possible resource leak : " + std::to_string(requests.size()));
 	return handle;
 }
 inline static void thumbnail_cancel_request_wo_lock(int handle) {

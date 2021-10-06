@@ -7,6 +7,7 @@ enum class SceneType {
 	CHANNEL,
 	ABOUT,
 	HISTORY,
+	SUBSCRIPTION,
 	// used for intent
 	NO_CHANGE,
 	BACK,

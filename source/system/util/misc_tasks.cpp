@@ -1,6 +1,7 @@
 #include "system/util/misc_tasks.hpp"
 #include "system/util/settings.hpp"
 #include "system/util/history.hpp"
+#include "system/util/subscription_util.hpp"
 #include "system/util/change_setting.hpp"
 #include "system/util/string_resource.hpp"
 #include "headers.hpp"
@@ -14,6 +15,7 @@ void misc_tasks_thread_func(void *arg) {
 	(void) arg;
 	
 	load_watch_history();
+	load_subscription();
 	while (should_be_running) {
 		if (request[TASK_SAVE_SETTINGS]) {
 			request[TASK_SAVE_SETTINGS] = false;
@@ -27,6 +29,9 @@ void misc_tasks_thread_func(void *arg) {
 		} else if (request[TASK_SAVE_HISTORY]) {
 			request[TASK_SAVE_HISTORY] = false;
 			save_watch_history();
+		} else if (request[TASK_SAVE_SUBSCRIPTION]) {
+			request[TASK_SAVE_SUBSCRIPTION] = false;
+			save_subscription();
 		} else usleep(50000);
 	}
 	

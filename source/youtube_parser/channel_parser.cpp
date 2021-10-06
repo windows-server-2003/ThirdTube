@@ -50,6 +50,8 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 	
 	auto metadata_renderer = initial_data["metadata"]["channelMetadataRenderer"];
 	res.name = metadata_renderer["title"].string_value();
+	res.subscriber_count_str = get_text_from_object(initial_data["header"]["c4TabbedHeaderRenderer"]["subscriberCountText"]);
+	res.id = metadata_renderer["externalId"].string_value();
 	res.url = "https://m.youtube.com/channel/" + metadata_renderer["externalId"].string_value();
 	res.description = metadata_renderer["description"].string_value();
 	

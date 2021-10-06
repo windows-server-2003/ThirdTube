@@ -155,6 +155,7 @@ YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &pre
 
 
 struct YouTubeChannelDetail {
+	std::string id;
 	std::string error;
 	std::string name;
 	std::string url;
@@ -162,6 +163,7 @@ struct YouTubeChannelDetail {
 	std::string icon_url;
 	std::string banner_url;
 	std::string description;
+	std::string subscriber_count_str;
 	std::vector<YouTubeVideoSuccinct> videos;
 	
 	std::string continue_token;
