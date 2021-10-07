@@ -34,6 +34,13 @@ static bool lock_initialized = false;
 static std::vector<Request> requests;
 static std::queue<int> free_list;
 
+static std::map<std::string, std::vector<u8> > thumbnail_cache;
+static int thumbnail_free_time_cnter = 0; // incremented each time when a thumbnail is freed
+static std::map<std::string, int> thumbnail_free_time;
+
+#define THUMBNAIL_CACHE_MAX 300 // 4 KB * 300 = 1.2 MB
+
+
 struct URLStatus {
 	std::set<int> handles;
 	bool is_loaded = false;
@@ -67,6 +74,7 @@ int thumbnail_request(const std::string &url, SceneType scene_id, int priority, 
 	}
 	requested_urls[url].handles.insert(handle);
 	requested_urls[url].type = type;
+	thumbnail_free_time.erase(url);
 	release();
 	if (requests.size() > 180) Util_log_save("tloader", "WARNING : request size too large, possible resource leak : " + std::to_string(requests.size()));
 	return handle;
@@ -79,6 +87,7 @@ inline static void thumbnail_cancel_request_wo_lock(int handle) {
 	if (!url_status.handles.size()) {
 		if (url_status.is_loaded) Draw_c2d_image_free(url_status.data.data);
 		requested_urls.erase(url);
+		thumbnail_free_time[url] = ++thumbnail_free_time_cnter;
 	}
 	free_list.push(handle);
 }
@@ -136,11 +145,39 @@ bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len
 }
 
 static std::vector<u8> http_get(const std::string &url) {
+	std::vector<u8> res;
+	lock();
+	if (thumbnail_cache.count(url)) res = thumbnail_cache[url];
+	release();
+	
+	if (res.size()) return res;
+	
 	confirm_thread_network_session_list_inited();
 	if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) add_cpu_limit(30);
 	auto result = Access_http_get(thread_network_session_list, url, {});
 	if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) remove_cpu_limit(30);
 	if (result.fail) Util_log_save("thumb-dl", "access fail : " + result.error);
+	else if (result.data.size()) {
+		lock();
+		if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX) {
+			std::string erase_url;
+			int min_time = 1000000000;
+			for (auto &item : thumbnail_cache) {
+				if (!thumbnail_free_time.count(item.first)) continue;
+				int cur_time = thumbnail_free_time[item.first];
+				if (min_time > cur_time) {
+					min_time = cur_time;
+					erase_url = item.first;
+				}
+			}
+			if (erase_url != "") thumbnail_cache.erase(erase_url);
+		}
+		thumbnail_cache[url] = result.data;
+		
+		if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) Util_log_save("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
+		
+		release();
+	}
 	result.finalize();
 	return result.data;
 }
