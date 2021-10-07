@@ -224,9 +224,9 @@ static void draw_channel_content(TemporaryCopyOfChannelInfo &channel_info, Hid_i
 		bool is_subscribed = subscription_is_subscribed(channel_info.id);
 		u32 subscribe_button_color = is_subscribed ? LIGHT1_BACK_COLOR : 0xFF4040EE;
 		std::string subscribe_button_str = is_subscribed ? LOCALIZED(SUBSCRIBED) : LOCALIZED(SUBSCRIBE);
-		Draw_texture(var_square_image[0], subscribe_button_color, 320 - SMALL_MARGIN * 2 - SUBSCRIBE_BUTTON_WIDTH, y_offset + SMALL_MARGIN,
-			SUBSCRIBE_BUTTON_WIDTH, SUBSCRIBE_BUTTON_HEIGHT);
-		Draw_x_centered(subscribe_button_str, 320 - SMALL_MARGIN * 2 - SUBSCRIBE_BUTTON_WIDTH, 320 - SMALL_MARGIN * 2, y_offset + SMALL_MARGIN + 4, 0.5, 0.5, 0xFF000000);
+		float button_y = y_offset + ICON_SIZE - SUBSCRIBE_BUTTON_HEIGHT - SMALL_MARGIN;
+		Draw_texture(var_square_image[0], subscribe_button_color, 320 - SMALL_MARGIN * 2 - SUBSCRIBE_BUTTON_WIDTH, button_y, SUBSCRIBE_BUTTON_WIDTH, SUBSCRIBE_BUTTON_HEIGHT);
+		Draw_x_centered(subscribe_button_str, 320 - SMALL_MARGIN * 2 - SUBSCRIBE_BUTTON_WIDTH, 320 - SMALL_MARGIN * 2, button_y + 4, 0.5, 0.5, 0xFF000000);
 		y_offset += ICON_SIZE;
 		y_offset += SMALL_MARGIN;
 		
@@ -441,7 +441,8 @@ Intent Channel_draw(void)
 			if (channel_info_bak.banner_url != "") y_offset += BANNER_HEIGHT;
 			y_offset += SMALL_MARGIN;
 			
-			if (y_offset + SMALL_MARGIN <= released_y && released_y < y_offset + SMALL_MARGIN + SUBSCRIBE_BUTTON_HEIGHT &&
+			float button_y = y_offset + ICON_SIZE - SUBSCRIBE_BUTTON_HEIGHT - SMALL_MARGIN;
+			if (button_y <= released_y && released_y < button_y + SUBSCRIBE_BUTTON_HEIGHT &&
 				released_x >= 320 - SMALL_MARGIN * 2 - SUBSCRIBE_BUTTON_WIDTH && released_x < 320 - SMALL_MARGIN * 2) {
 				bool cur_subscribed = subscription_is_subscribed(channel_info_bak.id);
 				if (cur_subscribed) subscription_unsubscribe(channel_info_bak.id);

@@ -609,6 +609,7 @@ NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url,
 				session_list.sessions.erase(old_host);
 			}
 		}
+		result.finalize();
 		url = new_url;
 	}
 }
