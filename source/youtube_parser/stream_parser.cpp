@@ -679,3 +679,12 @@ bool is_youtube_thumbnail_url(const std::string &url) {
 	for (auto pattern : patterns) if (starts_with(url, pattern, 0)) return true;
 	return false;
 }
+YouTubePageType youtube_get_page_type(std::string url) {
+	url = convert_url_to_mobile(url);
+	if (starts_with(url, "https://m.youtube.com/watch?", 0)) return YouTubePageType::VIDEO;
+	if (starts_with(url, "https://m.youtube.com/user/", 0)) return YouTubePageType::CHANNEL;
+	if (starts_with(url, "https://m.youtube.com/channel/", 0)) return YouTubePageType::CHANNEL;
+	if (starts_with(url, "https://m.youtube.com/c/", 0)) return YouTubePageType::CHANNEL;
+	if (starts_with(url, "https://m.youtube.com/results?", 0)) return YouTubePageType::SEARCH;
+	return YouTubePageType::INVALID;
+}

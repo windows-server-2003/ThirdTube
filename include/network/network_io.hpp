@@ -52,7 +52,7 @@ public :
 	static void at_exit();
 };
 
-NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url, const std::map<std::string, std::string> &request_headers);
+NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url, const std::map<std::string, std::string> &request_headers, bool follow_redirect = true);
 NetworkResult Access_http_post(NetworkSessionList &session_list, const std::string &url, const std::map<std::string, std::string> &request_headers,
 	const std::string &body);
 

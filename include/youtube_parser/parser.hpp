@@ -185,4 +185,12 @@ bool youtube_is_valid_video_id(const std::string &id);
 bool is_youtube_url(const std::string &url);
 bool is_youtube_thumbnail_url(const std::string &url);
 
+enum class YouTubePageType {
+	VIDEO,
+	CHANNEL,
+	SEARCH,
+	INVALID
+};
+YouTubePageType youtube_get_page_type(std::string url);
+
 

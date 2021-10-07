@@ -129,7 +129,9 @@ static std::string get_page_url(const std::string &url) {
 	auto pos0 = url.find("://");
 	if (pos0 == std::string::npos) return "";
 	pos0 += 3;
-	return std::string(std::find(url.begin() + pos0, url.end(), '/'), url.end());
+	auto res = std::string(std::find(url.begin() + pos0, url.end(), '/'), url.end());
+	if (res == "") res = "/";
+	return res;
 }
 static std::string remove_leading_whitespaces(std::string str) {
 	size_t i = 0;
@@ -459,7 +461,7 @@ int curl_set_socket_options(void *, curl_socket_t sockfd, curlsocktype purpose) 
  
 
 static NetworkResult access_http_internal(NetworkSessionList &session_list, const std::string &method, const std::string &url,
-	std::map<std::string, std::string> request_headers, const std::string &body) {
+	std::map<std::string, std::string> request_headers, const std::string &body, bool follow_redirect) {
 	
 	NetworkResult res;
 	
@@ -556,9 +558,9 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 		if (!curl) {
 			curl = curl_easy_init();
 			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, (long) follow_redirect);
 			curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L);
-			curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long)CURL_HTTP_VERSION_2TLS);
+			curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_2TLS);
 			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_receive_data_callback_func);
 			curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_receive_headers_callback_func);
 			curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, curl_set_socket_options);
@@ -591,15 +593,19 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 	}
 	return res;
 }
-NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url, const std::map<std::string, std::string> &request_headers) {
+NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url, const std::map<std::string, std::string> &request_headers, bool follow_redirect) {
 	NetworkResult result;
 	while (1) {
-		result = access_http_internal(session_list, "GET", url , request_headers, "");
+		result = access_http_internal(session_list, "GET", url , request_headers, "", follow_redirect);
 		if (result.status_code / 100 != 3) {
 			result.redirected_url = url;
 			return result;
 		}
 		Util_log_save("http", "redir");
+		if (!follow_redirect) {
+			result.redirected_url = result.get_header("Location");
+			return result;
+		}
 		auto new_url = result.get_header("Location");
 		if (var_network_framework == NETWORK_FRAMEWORK_SSLC) {
 			auto old_host = url_get_host_name(url);
@@ -616,7 +622,7 @@ NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url,
 NetworkResult Access_http_post(NetworkSessionList &session_list, const std::string &url, const std::map<std::string, std::string> &request_headers,
 	const std::string &data) {
 	
-	auto result = access_http_internal(session_list, "POST", url , request_headers, data);
+	auto result = access_http_internal(session_list, "POST", url , request_headers, data, false);
 	result.redirected_url = url;
 	return result;
 }
