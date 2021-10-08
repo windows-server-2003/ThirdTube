@@ -2022,13 +2022,11 @@ Intent VideoPlayer_draw(void)
 
 			var_need_reflesh = true;
 		}
-		/*
-		TODO : reinstate this
-		else if(key.p_b)
+		else if ((key.h_x && key.p_b) || (key.h_b && key.p_x))
 		{
 			vid_play_request = false;
 			var_need_reflesh = true;
-		}*/
+		}
 		else if(key.p_y)
 		{
 			vid_detail_mode = !vid_detail_mode;
@@ -2037,6 +2035,14 @@ Intent VideoPlayer_draw(void)
 		else if (key.p_b)
 		{
 			intent.next_scene = SceneType::BACK;
+		} else if (key.p_d_right || key.p_d_left) {
+			if (network_decoder.ready) {
+				double pos = vid_current_pos;
+				pos += key.p_d_right ? 10 : -10;
+				pos = std::max<double>(0, pos);
+				pos = std::min<double>(vid_duration, pos);
+				send_seek_request_wo_lock(pos * 1000);
+			}
 		}
 		else if(key.h_touch || key.p_touch)
 			var_need_reflesh = true;
