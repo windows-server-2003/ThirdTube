@@ -1537,7 +1537,8 @@ static void draw_video_content(Hid_info key) {
 				y_offset += SMALL_MARGIN;
 				Draw_line(SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 320 - 1 - SMALL_MARGIN, y_offset, DEF_DRAW_GRAY, 1);
 				y_offset += SMALL_MARGIN;
-			} else Draw_x_centered(LOCALIZED(EMPTY), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
+			} else Draw_x_centered(cur_video_info.playability_reason != "" ? cur_video_info.playability_reason : LOCALIZED(EMPTY),
+				0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		} else if (selected_tab == TAB_SUGGESTIONS) {
 			suggestion_view->draw();
 		} else if (selected_tab == TAB_COMMENTS) {
