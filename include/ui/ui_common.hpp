@@ -10,6 +10,10 @@
 #define MIDDLE_FONT_INTERVAL 18
 #define MIDDLE_FONT_SIZE 0.641
 
+#define DPAD_SCROLL_SPEED0 6
+#define DPAD_SCROLL_SPEED1 9
+#define DPAD_SCROLL_SPEED1_THRESHOLD 120
+
 namespace UI {
 	template<class CallArg> struct FlexibleString {
 		enum class Type {

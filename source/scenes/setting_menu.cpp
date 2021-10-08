@@ -229,7 +229,7 @@ void Sem_init(void)
 						}),
 					(new EmptyView(0, 0, 320, 10))
 				}),
-			// Tab #3 : History
+			// Tab #3 : Advanced
 			(new ScrollView(0, 0, 320, 0))
 				->set_views({
 					// Eco mode
@@ -363,6 +363,19 @@ Intent Sem_draw(void)
 		else main_view->update(key);
 		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		
+		static int consecutive_scroll = 0;
+		if (key.h_c_up || key.h_c_down) {
+			if (key.h_c_up) consecutive_scroll = std::max(0, consecutive_scroll) + 1;
+			else consecutive_scroll = std::min(0, consecutive_scroll) - 1;
+			
+			float scroll_amount = DPAD_SCROLL_SPEED0;
+			if (std::abs(consecutive_scroll) > DPAD_SCROLL_SPEED1_THRESHOLD) scroll_amount = DPAD_SCROLL_SPEED1;
+			if (key.h_c_up) scroll_amount *= -1;
+			
+			dynamic_cast<ScrollView *>(main_tab_view->views[main_tab_view->selected_tab])->scroll(scroll_amount);
+			var_need_reflesh = true;
+		} else consecutive_scroll = 0;
 		
 		if (key.p_b) intent.next_scene = SceneType::BACK;
 		if (key.h_touch || key.p_touch) var_need_reflesh = true;

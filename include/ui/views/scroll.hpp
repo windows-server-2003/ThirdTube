@@ -106,5 +106,9 @@ public :
 	bool is_selecting() const { return grabbed && !scrolling; }
 	int get_offset() const { return offset; }
 	void set_offset(double offset) { this->offset = offset; }
+	void scroll(float amount) {
+		float scroll_max = std::max<float>(0, content_height - (y1 - y0));
+		offset = std::max(0.0f, std::min<float>(scroll_max, offset + amount));
+	}
 };
 

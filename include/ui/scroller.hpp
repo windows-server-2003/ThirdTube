@@ -46,5 +46,9 @@ public :
 	float selected_overlap_darkness() { return selected_darkness; }
 	bool is_selecting() { return grabbed && !scrolling; }
 	int get_offset() { return offset; }
+	void scroll(float amount) {
+		float scroll_max = std::max<float>(0, content_height - (y_r - y_l));
+		offset = std::max(0.0f, std::min<float>(scroll_max, offset + amount));
+	}
 };
 

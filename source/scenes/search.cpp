@@ -469,6 +469,20 @@ Intent Search_draw(void)
 			url_jump_request_type = YouTubePageType::INVALID;
 		}
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		
+		static int consecutive_scroll = 0;
+		if (key.h_c_up || key.h_c_down) {
+			if (key.h_c_up) consecutive_scroll = std::max(0, consecutive_scroll) + 1;
+			else consecutive_scroll = std::min(0, consecutive_scroll) - 1;
+			
+			float scroll_amount = DPAD_SCROLL_SPEED0;
+			if (std::abs(consecutive_scroll) > DPAD_SCROLL_SPEED1_THRESHOLD) scroll_amount = DPAD_SCROLL_SPEED1;
+			if (key.h_c_up) scroll_amount *= -1;
+			
+			result_view->scroll(scroll_amount);
+			var_need_reflesh = true;
+		} else consecutive_scroll = 0;
+		
 		if (key.p_a) search();
 		else if(key.h_touch || key.p_touch) var_need_reflesh = true;
 		

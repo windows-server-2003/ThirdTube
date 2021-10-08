@@ -491,6 +491,19 @@ Intent Channel_draw(void)
 			}
 		} while (0);
 		
+		static int consecutive_scroll = 0;
+		if (key.h_c_up || key.h_c_down) {
+			if (key.h_c_up) consecutive_scroll = std::max(0, consecutive_scroll) + 1;
+			else consecutive_scroll = std::min(0, consecutive_scroll) - 1;
+			
+			float scroll_amount = DPAD_SCROLL_SPEED0;
+			if (std::abs(consecutive_scroll) > DPAD_SCROLL_SPEED1_THRESHOLD) scroll_amount = DPAD_SCROLL_SPEED1;
+			if (key.h_c_up) scroll_amount *= -1;
+			
+			videos_scroller.scroll(scroll_amount);
+			var_need_reflesh = true;
+		} else consecutive_scroll = 0;
+		
 		if (key.p_b) intent.next_scene = SceneType::BACK;
 		
 		if(key.h_touch || key.p_touch)

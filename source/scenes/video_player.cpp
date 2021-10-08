@@ -2044,111 +2044,23 @@ Intent VideoPlayer_draw(void)
 		svcReleaseMutex(small_resource_lock);
 		/* ****************************** LOCK END ******************************  */
 		
-		/*
-		if(key.p_c_down || key.p_c_up || key.p_c_right || key.p_c_left || key.h_c_down || key.h_c_up || key.h_c_right || key.h_c_left
-		|| key.p_d_down || key.p_d_up || key.p_d_right || key.p_d_left || key.h_d_down || key.h_d_up || key.h_d_right || key.h_d_left)
-		{
-			if(key.p_c_down || key.p_d_down)
-				vid_y -= 1 * var_scroll_speed * key.count;
-			else if(key.h_c_down || key.h_d_down)
-			{
-				if(vid_cd_count > 600)
-					vid_y -= 10 * var_scroll_speed * key.count;
-				else if(vid_cd_count > 240)
-					vid_y -= 7.5 * var_scroll_speed * key.count;
-				else if(vid_cd_count > 5)
-					vid_y -= 5 * var_scroll_speed * key.count;
-			}
-
-			if(key.p_c_up || key.p_d_up)
-				vid_y += 1 * var_scroll_speed * key.count;
-			else if(key.h_c_up || key.h_d_up)
-			{
-				if(vid_cd_count > 600)
-					vid_y += 10 * var_scroll_speed * key.count;
-				else if(vid_cd_count > 240)
-					vid_y += 7.5 * var_scroll_speed * key.count;
-				else if(vid_cd_count > 5)
-					vid_y += 5 * var_scroll_speed * key.count;
-			}
-
-			if(key.p_c_right || key.p_d_right)
-				vid_x -= 1 * var_scroll_speed * key.count;
-			else if(key.h_c_right || key.h_d_right)
-			{
-				if(vid_cd_count > 600)
-					vid_x -= 10 * var_scroll_speed * key.count;
-				else if(vid_cd_count > 240)
-					vid_x -= 7.5 * var_scroll_speed * key.count;
-				else if(vid_cd_count > 5)
-					vid_x -= 5 * var_scroll_speed * key.count;
-			}
-
-			if(key.p_c_left || key.p_d_left)
-				vid_x += 1 * var_scroll_speed * key.count;
-			else if(key.h_c_left || key.h_d_left)
-			{
-				if(vid_cd_count > 600)
-					vid_x += 10 * var_scroll_speed * key.count;
-				else if(vid_cd_count > 240)
-					vid_x += 7.5 * var_scroll_speed * key.count;
-				else if(vid_cd_count > 5)
-					vid_x += 5 * var_scroll_speed * key.count;
-			}
-
-			if(vid_x > 400)
-				vid_x = 400;
-			else if(vid_x < -vid_width * vid_zoom)
-				vid_x = -vid_width * vid_zoom;
-
-			if(vid_y > 480)
-				vid_y = 480;
-			else if(vid_y < -vid_height * vid_zoom)
-				vid_y = -vid_height * vid_zoom;
-
-			vid_cd_count++;
+		static int consecutive_scroll = 0;
+		if (key.h_c_up || key.h_c_down) {
+			if (key.h_c_up) consecutive_scroll = std::max(0, consecutive_scroll) + 1;
+			else consecutive_scroll = std::min(0, consecutive_scroll) - 1;
+			
+			float scroll_amount = DPAD_SCROLL_SPEED0;
+			if (std::abs(consecutive_scroll) > DPAD_SCROLL_SPEED1_THRESHOLD) scroll_amount = DPAD_SCROLL_SPEED1;
+			if (key.h_c_up) scroll_amount *= -1;
+			
+			if (selected_tab == TAB_GENERAL || selected_tab == TAB_ADVANCED) scroller[selected_tab].scroll(scroll_amount);
+			else if (selected_tab == TAB_SUGGESTIONS) suggestion_view->scroll(scroll_amount);
+			else if (selected_tab == TAB_COMMENTS) comment_all_view->scroll(scroll_amount);
+			else if (selected_tab == TAB_CAPTIONS) {
+				if (captions_tab_view == caption_main_view) caption_main_view->scroll(scroll_amount);
+			} else if (selected_tab == TAB_PLAYLIST) playlist_list_view->scroll(scroll_amount);
 			var_need_reflesh = true;
-		}
-		else
-			vid_cd_count = 0;
-
-		if(key.p_l || key.p_r || key.h_l || key.h_r)
-		{
-			if(key.p_l)
-				vid_zoom -= 0.005 * var_scroll_speed * key.count;
-			else if(key.h_l)
-			{
-				if(vid_lr_count > 360)
-					vid_zoom -= 0.05 * var_scroll_speed * key.count;
-				else if(vid_lr_count > 120)
-					vid_zoom -= 0.01 * var_scroll_speed * key.count;
-				else if(vid_lr_count > 5)
-					vid_zoom -= 0.005 * var_scroll_speed * key.count;
-			}
-
-			if(key.p_r)
-				vid_zoom += 0.005 * var_scroll_speed * key.count;
-			else if(key.h_r)
-			{
-				if(vid_lr_count > 360)
-					vid_zoom += 0.05 * var_scroll_speed * key.count;
-				else if(vid_lr_count > 120)
-					vid_zoom += 0.01 * var_scroll_speed * key.count;
-				else if(vid_lr_count > 5)
-					vid_zoom += 0.005 * var_scroll_speed * key.count;
-			}
-
-			if(vid_zoom < 0.05)
-				vid_zoom = 0.05;
-			else if(vid_zoom > 10)
-				vid_zoom = 10;
-
-			vid_lr_count++;
-			var_need_reflesh = true;
-		}
-		else
-			vid_lr_count = 0;
-		*/
+		} else consecutive_scroll = 0;
 		
 		if ((key.h_x && key.p_y) || (key.h_y && key.p_x)) var_debug_mode = !var_debug_mode;
 		if ((key.h_x && key.p_a) || (key.h_x && key.p_a)) var_show_fps = !var_show_fps;
