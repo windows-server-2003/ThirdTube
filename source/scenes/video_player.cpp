@@ -47,14 +47,11 @@ namespace VideoPlayer {
 	volatile bool vid_play_request = false;
 	volatile bool vid_seek_request = false;
 	volatile bool vid_change_video_request = false;
-	bool vid_detail_mode = false;
 	volatile bool vid_pausing = false;
 	volatile bool vid_pausing_seek = false;
 	volatile bool eof_reached = false;
 	volatile bool audio_only_mode = false;
 	volatile double seek_at_init_request = -1;
-	bool vid_show_controls = false;
-	bool vid_allow_skip_frames = false;
 	double vid_time[2][320];
 	double vid_copy_time[2] = { 0, 0, };
 	double vid_audio_time = 0;
@@ -81,8 +78,6 @@ namespace VideoPlayer {
 	int vid_height_org = 0;
 	int vid_tex_width[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	int vid_tex_height[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-	int vid_lr_count = 0;
-	int vid_cd_count = 0;
 	int vid_mvd_image_num = 0;
 	std::string vid_url = "";
 	std::string vid_video_format = "n/a";
@@ -1075,7 +1070,6 @@ static void decode_thread(void* arg)
 				} else if (type == NetworkMultipleDecoder::DecodeType::INTERRUPTED) continue;
 				else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "unknown type of packet");
 			}
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoding end, waiting for the speaker to cease playing...");
 			
 			network_waiting_status = NULL;
 			
@@ -1085,12 +1079,9 @@ static void decode_thread(void* arg)
 			if(!vid_change_video_request)
 				vid_play_request = false;
 			
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "speaker exited, waiting for convert thread");
 			// make sure the convert thread stops before closing network_decoder
 			svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "speaker exited, deinit...");
 			network_decoder.deinit();
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "speaker exited, deinit finish");
 			svcReleaseMutex(network_decoder_critical_lock);
 			
 			var_need_reflesh = true;
@@ -1446,7 +1437,7 @@ void VideoPlayer_init(void)
 	for (int i = 0; i < 3; i++) playlist_view->views[i]->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; });
 	
 	APT_CheckNew3DS(&new_3ds);
-	if(new_3ds) {
+	if (new_3ds) {
 		add_cpu_limit(NEW_3DS_CPU_LIMIT);
 		vid_decode_thread = threadCreate(decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
@@ -1503,11 +1494,6 @@ void VideoPlayer_init(void)
 	result = Draw_load_texture("romfs:/gfx/draw/video_player/control.t3x", 62, vid_control, 0, 2);
 	Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 
-	vid_detail_mode = false;
-	vid_show_controls = false;
-	vid_allow_skip_frames = false;
-	vid_lr_count = 0;
-	vid_cd_count = 0;
 	vid_x = 0;
 	vid_y = 15;
 	vid_frametime = 0;
@@ -1599,11 +1585,8 @@ void VideoPlayer_exit(void)
 	
 	bool new_3ds;
 	APT_CheckNew3DS(&new_3ds);
-	if (new_3ds) {
-		remove_cpu_limit(NEW_3DS_CPU_LIMIT);
-	} else {
-		remove_cpu_limit(OLD_3DS_CPU_LIMIT);
-	}
+	if (new_3ds) remove_cpu_limit(NEW_3DS_CPU_LIMIT);
+	else remove_cpu_limit(OLD_3DS_CPU_LIMIT);
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
@@ -1672,16 +1655,12 @@ static void draw_video_content(Hid_info key) {
 				y_offset += SMALL_MARGIN;
 			} else Draw_x_centered(cur_video_info.playability_reason != "" ? cur_video_info.playability_reason : LOCALIZED(EMPTY),
 				0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-		} else if (selected_tab == TAB_SUGGESTIONS) {
-			suggestion_view->draw();
-		} else if (selected_tab == TAB_COMMENTS) {
-			comment_all_view->draw();
-		} else if (selected_tab == TAB_CAPTIONS) {
-			captions_tab_view->draw();
-		} else if (selected_tab == TAB_PLAYBACK) {
-			playback_tab_view->draw();
-		}
-		if (selected_tab == TAB_GENERAL) scroller[selected_tab].draw_slider_bar();
+			
+			scroller[selected_tab].draw_slider_bar();
+		} else if (selected_tab == TAB_SUGGESTIONS) suggestion_view->draw();
+		else if (selected_tab == TAB_COMMENTS) comment_all_view->draw();
+		else if (selected_tab == TAB_CAPTIONS) captions_tab_view->draw();
+		else if (selected_tab == TAB_PLAYBACK) playback_tab_view->draw();
 	}
 	
 	svcReleaseMutex(small_resource_lock);
@@ -1936,10 +1915,10 @@ Intent VideoPlayer_draw(void)
 			}
 		}
 		// main scroller
-		int content_height = 0;
-		if (is_async_task_running(load_video_page)) content_height = DEFAULT_FONT_INTERVAL;
-		else {
-			if (selected_tab == TAB_GENERAL) {
+		if (selected_tab == TAB_GENERAL) {
+			int content_height = 0;
+			if (is_async_task_running(load_video_page)) content_height = DEFAULT_FONT_INTERVAL;
+			else {
 				content_height += 15 * title_lines.size() + SMALL_MARGIN + DEFAULT_FONT_INTERVAL * 2;
 				content_height += SMALL_MARGIN * 2;
 				content_height += ICON_SIZE;
@@ -1948,11 +1927,9 @@ Intent VideoPlayer_draw(void)
 				content_height += description_lines.size() * DEFAULT_FONT_INTERVAL;
 				content_height += SMALL_MARGIN * 2;
 			}
-		}
-		auto released_point = scroller[selected_tab].update(key, content_height);
-		int released_x = released_point.first;
-		int released_y = released_point.second;
-		if (selected_tab == TAB_GENERAL) {
+			auto released_point = scroller[selected_tab].update(key, content_height);
+			int released_x = released_point.first;
+			int released_y = released_point.second;
 			if (released_x != -1) {
 				int cur_y = 0;
 				cur_y += 15 * title_lines.size() + SMALL_MARGIN + DEFAULT_FONT_INTERVAL * 2;
@@ -1981,19 +1958,10 @@ Intent VideoPlayer_draw(void)
 			}
 
 			var_need_reflesh = true;
-		}
-		else if ((key.h_x && key.p_b) || (key.h_b && key.p_x))
-		{
+		} else if ((key.h_x && key.p_b) || (key.h_b && key.p_x)) {
 			vid_play_request = false;
 			var_need_reflesh = true;
-		}
-		else if(key.p_y)
-		{
-			vid_detail_mode = !vid_detail_mode;
-			var_need_reflesh = true;
-		}
-		else if (key.p_b)
-		{
+		} else if (key.p_b) {
 			intent.next_scene = SceneType::BACK;
 		} else if (key.p_d_right || key.p_d_left) {
 			if (network_decoder.ready) {
@@ -2003,9 +1971,7 @@ Intent VideoPlayer_draw(void)
 				pos = std::min<double>(vid_duration, pos);
 				send_seek_request_wo_lock(pos);
 			}
-		}
-		else if(key.h_touch || key.p_touch)
-			var_need_reflesh = true;
+		} else if (key.h_touch || key.p_touch) var_need_reflesh = true;
 		
 		svcReleaseMutex(small_resource_lock);
 		/* ****************************** LOCK END ******************************  */

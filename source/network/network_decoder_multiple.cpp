@@ -27,12 +27,11 @@ void NetworkMultipleDecoder::deinit() {
 }
 void NetworkMultipleDecoder::init_mvd() {
 	if (!mvd_inited) {
-		Util_log_save("dec/init", "free linear space : " + std::to_string(linearSpaceFree() / 1000) + " KB");
 		Result mvd_result = -1;
 		for (int mb = 15; mb >= 5; mb--) {
 			mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, 1000000 * mb, NULL);
 			if (mvd_result == 0) {
-				Util_log_save("dec/init", "mvdstdInit ok at " + std::to_string(mb) + " MB");
+				Util_log_save("dec/init", "mvdstdInit ok at " + std::to_string(mb) + " MB (total : " + std::to_string(linearSpaceFree() / 1000) + " KB)");
 				break;
 			}
 		}
@@ -247,12 +246,6 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			downloader->add_stream(video_stream);
 			downloader->add_stream(audio_stream);
 			
-			/*
-			add_cpu_limit(25);
-			while (!video_stream->ready) usleep(10000);
-			while (!audio_stream->ready) usleep(10000);
-			remove_cpu_limit(25);
-			Util_log_save("debug", "ready");*/
 			Result_with_string result = tmp_ffmpeg_data.init(video_stream, audio_stream, &decoder);
 			// Util_log_save("debug", "init finish");
 			if (result.code != 0) {

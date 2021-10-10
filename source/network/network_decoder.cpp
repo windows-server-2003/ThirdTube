@@ -482,7 +482,6 @@ NetworkDecoder::DecodeType NetworkDecoder::next_decode_type() {
 static std::string debug_str = "";
 Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 	Result_with_string result;
-	int log_num;
 	
 	*width = decoder_context[VIDEO]->width;
 	*height = decoder_context[VIDEO]->height;
@@ -508,11 +507,9 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		offset += 1;
 		memcpy(mvd_packet + offset, decoder_context[VIDEO]->extradata + 8, *(decoder_context[VIDEO]->extradata + 7));
 		offset += *(decoder_context[VIDEO]->extradata + 7);
-		//Util_file_save_to_file("0", "/test/", mvd_packet, offset, true);
 
-		log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
 		result.code = mvdstdProcessVideoFrame(mvd_packet, offset, 0, NULL);
-		Util_log_add(log_num, "", result.code);
+		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) Util_log_save("mvd", "0 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
 
 		offset = 0;
 		memset(mvd_packet, 0x0, 0x2);
@@ -521,33 +518,11 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		offset += 1;
 		memcpy(mvd_packet + offset, decoder_context[VIDEO]->extradata + 11 + *(decoder_context[VIDEO]->extradata + 7), *(decoder_context[VIDEO]->extradata + 10 + *(decoder_context[VIDEO]->extradata + 7)));
 		offset += *(decoder_context[VIDEO]->extradata + 10 + *(decoder_context[VIDEO]->extradata + 7));
-
-		/*memset(mvd_packet + offset, 0x0, 0x2);
-		offset += 2;
-		memset(mvd_packet + offset, 0x1, 0x1);
-		offset += 1;
-		memcpy(mvd_packet + offset, packet_read->data + 4 + *(packet_read->data + 3) + 4, *(packet_read->data + 4 + *(packet_read->data + 3) + 3));
-		offset += *(packet_read->data + 4 + *(packet_read->data + 3) + 3);*/
-		//Util_file_save_to_file("1", "/test/", mvd_packet, offset, true);
-
-		log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
+		
 		result.code = mvdstdProcessVideoFrame(mvd_packet, offset, 0, NULL);
-		Util_log_add(log_num, "", result.code);
+		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) Util_log_save("mvd", "1 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
 	}
-
-	//Util_log_save("", std::to_string(size));
 	
-	/*memcpy(mvd_packet + offset, decoder_context[VIDEO]->extradata + 8, *(decoder_context[VIDEO]->extradata + 7));
-	offset += *(decoder_context[VIDEO]->extradata + 7);*/
-	/*memset(mvd_packet + offset, 0x0, 0x2);
-	offset += 2;
-	memset(mvd_packet + offset, 0x1, 0x1);
-	offset += 1;
-	memcpy(mvd_packet + offset, decoder_context[VIDEO]->extradata + 8 + *(decoder_context[VIDEO]->extradata + 7) + 3, 4);
-	offset += 4;*/
-
-	//Util_log_save("", std::to_string(*(decoder_context[VIDEO]->extradata + 7)));
-
 	offset = 0;
 	source_offset = 0;
 
@@ -569,26 +544,16 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		offset += size;
 		source_offset += size;
 	}
-
-	//Util_log_save("", std::to_string(*(packet_read->data + 3)));
-	/*Util_file_save_to_file("extra.data", "/test/", decoder_context[VIDEO]->extradata, decoder_context[VIDEO]->extradata_size, true);
-	Util_file_save_to_file("mvd_packet.data", "/test/", mvd_packet, offset, true);*/
-
-	//config.physaddr_outdata0 = osConvertVirtToPhys(gfxGetFramebuffer(GFX_TOP, GFX_LEFT, NULL, NULL));
+	
 	config.physaddr_outdata0 = osConvertVirtToPhys(mvd_frame);
-
-	//log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
-	//GSPGPU_FlushDataCache(mvd_packet, offset);
+	
 	result.code = mvdstdProcessVideoFrame(mvd_packet, offset, 0, NULL);
-	//Util_log_save("", "mvdstdProcessVideoFrame()... ", result.code);
-	//Util_log_add(log_num, "", result.code);
-
+	
 	if(mvd_first)
 	{
 		//Do I need to send same nal data at first frame?
-		log_num = Util_log_save("", "mvdstdProcessVideoFrame()...");
 		result.code = mvdstdProcessVideoFrame(mvd_packet, offset, 0, NULL);
-		Util_log_add(log_num, "", result.code);
+		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) Util_log_save("mvd", "1 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
 	}
 
 	if (MVD_CHECKNALUPROC_SUCCESS(result.code)) {
@@ -758,7 +723,6 @@ Result_with_string NetworkDecoder::get_decoded_video_frame(int width, int height
 			Util_log_save("decoder", "SET EMPTY");
 		} else {
 			*cur_pos = *buffered_pts_list.begin();
-			// Util_log_save("decoder", "set poped : " + std::to_string(buffered_pts_list.size()));
 			buffered_pts_list.erase(buffered_pts_list.begin());
 		}
 		svcReleaseMutex(buffered_pts_list_lock);
