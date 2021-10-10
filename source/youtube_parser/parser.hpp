@@ -70,7 +70,7 @@ struct YouTubeVideoDetail {
 	std::string description;
 	YouTubeChannelSuccinct author;
 	std::string audio_stream_url;
-	std::string video_stream_url;
+	std::map<int, std::string> video_stream_urls; // first : video size (144p, 240p, 360p ...)
 	std::string both_stream_url;
 	int duration_ms;
 	bool is_livestream;
@@ -143,7 +143,7 @@ struct YouTubeVideoDetail {
 	bool has_more_suggestions() const { return continue_key != "" && suggestions_continue_token != ""; }
 	bool has_more_comments() const { return comment_continue_type != -1; }
 	bool needs_timestamp_adjusting() const { return is_livestream && livestream_type == LivestreamType::PREMIERE; }
-	bool is_playable() const { return playability_status == "OK" && (both_stream_url != "" || (audio_stream_url != "" && video_stream_url != "")); }
+	bool is_playable() const { return playability_status == "OK" && (both_stream_url != "" || (audio_stream_url != "" && video_stream_urls.size())); }
 };
 // this function does not load comments; call youtube_video_page_load_more_comments() if necessary
 YouTubeVideoDetail youtube_parse_video_page(std::string url);

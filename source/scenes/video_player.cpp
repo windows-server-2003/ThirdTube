@@ -51,6 +51,7 @@ namespace VideoPlayer {
 	volatile bool vid_pausing_seek = false;
 	volatile bool eof_reached = false;
 	volatile bool audio_only_mode = false;
+	volatile int video_p_value = 360;
 	volatile double seek_at_init_request = -1;
 	double vid_time[2][320];
 	double vid_copy_time[2] = { 0, 0, };
@@ -145,6 +146,7 @@ namespace VideoPlayer {
 	
 	// playback tab
 	CustomView *download_progress_view = NULL;
+	SelectorView *video_quality_selector_view;
 	VerticalListView *debug_info_view = NULL;
 	ScrollView *playback_tab_view = NULL;
 };
@@ -474,6 +476,41 @@ static void load_video_page(void *arg) {
 	if (cur_video_info.is_playable()) {
 		vid_change_video_request = true;
 		if (network_decoder.ready) network_decoder.interrupt = true;
+		std::vector<int> available_qualities;
+		for (auto &i : cur_video_info.video_stream_urls) available_qualities.push_back(i.first);
+		if (!std::count(available_qualities.begin(), available_qualities.end(), 360))
+			available_qualities.insert(std::lower_bound(available_qualities.begin(), available_qualities.end(), 360), 360);
+		
+		Util_log_save("yay", std::to_string(available_qualities.size()));
+		video_quality_selector_view->button_texts = { (std::function<std::string ()>) []() { return LOCALIZED(OFF); } };
+		for (auto i : available_qualities) video_quality_selector_view->button_texts.push_back(std::to_string(i) + "p");
+		video_quality_selector_view->button_num = video_quality_selector_view->button_texts.size();
+		
+		if (!audio_only_mode && !cur_video_info.video_stream_urls.count((int) video_p_value)) {
+			video_p_value = 360;
+			if (!cur_video_info.video_stream_urls.count((int) video_p_value)) audio_only_mode = true;
+		}
+		video_quality_selector_view->selected_button = audio_only_mode ? 0 : 1 + std::find(available_qualities.begin(), available_qualities.end(), (int) video_p_value) - available_qualities.begin();
+		video_quality_selector_view->set_on_change([available_qualities] (const SelectorView &view) {
+			bool changed = false;
+			if (view.selected_button == 0) {
+				if (!audio_only_mode) changed = true;
+				audio_only_mode = true;
+			} else {
+				int new_p_value = available_qualities[view.selected_button - 1];
+				if (audio_only_mode || video_p_value != new_p_value) changed = true;
+				audio_only_mode = false;
+				video_p_value = new_p_value;
+			}
+			if (changed) {
+				vid_change_video_request = true;
+				if (network_decoder.ready) network_decoder.interrupt = true;
+			}
+		});
+	} else {
+		video_quality_selector_view->set_texts({
+			(std::function<std::string ()>) []() { return LOCALIZED(OFF); }
+		}, 0);
 	}
 	svcReleaseMutex(small_resource_lock);
 }
@@ -909,12 +946,12 @@ static void decode_thread(void* arg)
 			if (audio_only_mode) {
 				result = network_decoder.init(cur_video_info.audio_stream_url, stream_downloader,
 					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
-			} else if (cur_video_info.duration_ms <= 60 * 60 * 1000 && cur_video_info.both_stream_url != "") {
+			} else if (video_p_value == 360 && cur_video_info.duration_ms <= 60 * 60 * 1000 && cur_video_info.both_stream_url != "") {
 				// itag 18 (both_stream) of a long video takes too much time and sometimes leads to a crash 
 				result = network_decoder.init(cur_video_info.both_stream_url, stream_downloader,
 					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
-			} else if (cur_video_info.video_stream_url != "" && cur_video_info.audio_stream_url != "") {
-				result = network_decoder.init(cur_video_info.video_stream_url, cur_video_info.audio_stream_url, stream_downloader,
+			} else if (cur_video_info.video_stream_urls[(int) video_p_value] != "" && cur_video_info.audio_stream_url != "") {
+				result = network_decoder.init(cur_video_info.video_stream_urls[(int) video_p_value], cur_video_info.audio_stream_url, stream_downloader,
 					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
 			} else {
 				result.code = -1;
@@ -1334,6 +1371,11 @@ void VideoPlayer_init(void)
 				y += SMALL_MARGIN;
 			}
 		});
+	video_quality_selector_view = (new SelectorView(0, 0, 320, 35))
+		->set_texts({
+			(std::function<std::string ()>) []() { return LOCALIZED(OFF); }
+		}, 0)
+		->set_title([](const SelectorView &view) { return LOCALIZED(VIDEO); });
 	debug_info_view = (new VerticalListView(0, 0, 320))
 		->set_views({
 			(new TextView(SMALL_MARGIN, 0, 320, DEFAULT_FONT_INTERVAL * 7))->set_text_lines<std::function<std::string ()> >({
@@ -1393,22 +1435,7 @@ void VideoPlayer_init(void)
 				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(BUFFERING_PROGRESS); })
 				->set_text_offset(SMALL_MARGIN, 0),
 			download_progress_view,
-			(new SelectorView(0, 0, 320, 35))
-				->set_texts({
-					(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
-					(std::function<std::string ()>) []() { return LOCALIZED(ON); }
-				}, audio_only_mode)
-				->set_title([](const SelectorView &view) { return LOCALIZED(AUDIO_ONLY_MODE); })
-				->set_on_change([](const SelectorView &view) {
-					if (audio_only_mode != view.selected_button) {
-						audio_only_mode = view.selected_button;
-						if (!is_async_task_running(load_video_page)) { // reload the video so that audio_only_mode applies
-							seek_at_init_request = vid_current_pos;
-							send_change_video_request_wo_lock(vid_url, false);
-							video_retry_left = MAX_RETRY_CNT;
-						}
-					}
-				}),
+			video_quality_selector_view,
 			(new TextView(SMALL_MARGIN * 2, 0, 100, CONTROL_BUTTON_HEIGHT))
 				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(RELOAD); })
 				->set_x_centered(true)
