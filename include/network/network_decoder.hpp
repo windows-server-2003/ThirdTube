@@ -90,6 +90,7 @@ public :
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
 	const AVCodec *codec[2] = {NULL, NULL};
+	bool audio_only = false;
 	NetworkDecoder *parent_decoder = NULL;
 	
 	Result_with_string init(NetworkStream *video_stream, NetworkStream *audio_stream, NetworkDecoder *parent_decoder);
@@ -115,6 +116,7 @@ private :
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
 	const AVCodec *codec[2] = {NULL, NULL};
+	bool audio_only = false;
 	
 	std::deque<AVPacket *> packet_buffer[2];
 	network_decoder_::output_buffer<AVFrame *> video_tmp_frames;

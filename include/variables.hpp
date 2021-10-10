@@ -14,6 +14,8 @@ extern int var_network_framework;
 extern int var_network_framework_changed;
 extern bool var_show_fps;
 extern bool var_full_screen_mode;
+extern bool var_video_show_debug_info;
+extern bool var_video_linear_filter;
 extern u8 var_wifi_state;
 extern u8 var_wifi_signal;
 extern u8 var_battery_charge;

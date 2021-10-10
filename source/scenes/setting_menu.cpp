@@ -245,14 +245,45 @@ void Sem_init(void)
 								misc_tasks_request(TASK_SAVE_SETTINGS);
 							}
 						}),
+					// Use linear filter
+					(new SelectorView(0, 0, 320, 35))
+						->set_texts({
+							(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+							(std::function<std::string ()>) []() { return LOCALIZED(ON); }
+						}, var_video_linear_filter)
+						->set_title([](const SelectorView &) { return LOCALIZED(LINEAR_FILTER); })
+						->set_on_change([](const SelectorView &view) {
+							if (var_video_linear_filter != view.selected_button) {
+								var_video_linear_filter = view.selected_button;
+								video_set_linear_filter_enabled(var_video_linear_filter);
+								misc_tasks_request(TASK_SAVE_SETTINGS);
+							}
+						}),
 					// Network framework
 					(new SelectorView(0, 0, 320, 35))
 						->set_texts({"httpc", "sslc", "libcurl"}, var_network_framework_changed)
 						->set_title([](const SelectorView &view) { return LOCALIZED(NETWORK_FRAMEWORK) +
 							(var_network_framework != var_network_framework_changed ? " (" + LOCALIZED(RESTART_TO_APPLY) + ")" : ""); })
 						->set_on_change([](const SelectorView &view) {
-							var_network_framework_changed = view.selected_button;
-							misc_tasks_request(TASK_SAVE_SETTINGS);
+							if (var_network_framework_changed != view.selected_button) {
+								var_network_framework_changed = view.selected_button;
+								misc_tasks_request(TASK_SAVE_SETTINGS);
+							}
+						}),
+					(new EmptyView(0, 0, 320, 10)),
+					// Debug info in the control tab
+					(new SelectorView(0, 0, 320, 35))
+						->set_texts({
+							(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+							(std::function<std::string ()>) []() { return LOCALIZED(ON); }
+						}, var_video_show_debug_info)
+						->set_title([](const SelectorView &view) { return LOCALIZED(VIDEO_SHOW_DEBUG_INFO); })
+						->set_on_change([](const SelectorView &view) {
+							if (var_video_show_debug_info != view.selected_button) {
+								var_video_show_debug_info = view.selected_button;
+								video_set_show_debug_info(var_video_show_debug_info);
+								misc_tasks_request(TASK_SAVE_SETTINGS);
+							}
 						}),
 					(new EmptyView(0, 0, 320, 10))
 				})

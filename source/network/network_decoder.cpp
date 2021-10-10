@@ -168,8 +168,13 @@ Result_with_string NetworkDecoderFFmpegData::init_(int type, AVMediaType expecte
 			}
 		}
 		if (stream_index[type] == -1) {
-			result.error_description = "stream of the expected type not found";
-			goto fail;
+			if (type == VIDEO) {
+				audio_only = true;
+				return result;
+			} else {
+				result.error_description = "stream of the expected type not found";
+				goto fail;
+			}
 		}
 	} else stream_index[type] = 0;
 	
@@ -347,12 +352,13 @@ Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	
 	svcCreateMutex(&buffered_pts_list_lock, false);
 	
-	result = init_output_buffer(request_hw_decoder);
-	if (result.code != 0) {
-		result.error_description = "[out buf] " + result.error_description;
-		return result;
+	if (!audio_only) {
+		result = init_output_buffer(request_hw_decoder);
+		if (result.code != 0) {
+			result.error_description = "[out buf] " + result.error_description;
+			return result;
+		}
 	}
-	
 	mvd_first = true;
 	ready = true;
 	return result;
@@ -373,6 +379,7 @@ Result_with_string NetworkDecoder::change_ffmpeg_data(const NetworkDecoderFFmpeg
 		codec[type] = data.codec[type];
 	}
 	swr_context = data.swr_context;
+	audio_only = data.audio_only;
 	this->timestamp_offset = timestamp_offset;
 	
 	return result;
@@ -389,11 +396,16 @@ void NetworkDecoder::clear_buffer() {
 
 NetworkDecoder::VideoFormatInfo NetworkDecoder::get_video_info() {
 	VideoFormatInfo res;
-	res.width = decoder_context[VIDEO]->width;
-	res.height = decoder_context[VIDEO]->height;
-	res.framerate = av_q2d(get_stream(VIDEO)->avg_frame_rate);
-	res.format_name = codec[VIDEO]->long_name;
-	res.duration = (double) format_context[video_audio_seperate ? VIDEO : BOTH]->duration / AV_TIME_BASE;
+	if (audio_only) {
+		res.width = res.height = res.framerate = res.duration = 0;
+		res.format_name = "N/A";
+	} else {
+		res.width = decoder_context[VIDEO]->width;
+		res.height = decoder_context[VIDEO]->height;
+		res.framerate = av_q2d(get_stream(VIDEO)->avg_frame_rate);
+		res.format_name = codec[VIDEO]->long_name;
+		res.duration = (double) format_context[video_audio_seperate ? VIDEO : BOTH]->duration / AV_TIME_BASE;
+	}
 	return res;
 }
 NetworkDecoder::AudioFormatInfo NetworkDecoder::get_audio_info() {
@@ -455,7 +467,7 @@ NetworkDecoder::DecodeType NetworkDecoder::next_decode_type() {
 		for (int type = 0; type < 2; type++) if (!packet_buffer[type].size())
 			read_packet(type);
 	} else {
-		while (!packet_buffer[VIDEO].size() || !packet_buffer[AUDIO].size()) {
+		while ((!audio_only && !packet_buffer[VIDEO].size()) || !packet_buffer[AUDIO].size()) {
 			Result_with_string result = read_packet(BOTH);
 			if (result.code != 0) break;
 		}
@@ -825,9 +837,9 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 			result.error_description = "avformat_seek_file() failed " + std::to_string(ffmpeg_result);
 			return result;
 		}
-		avcodec_flush_buffers(decoder_context[VIDEO]);
+		if (!audio_only) avcodec_flush_buffers(decoder_context[VIDEO]);
 		avcodec_flush_buffers(decoder_context[AUDIO]);
-		while (!packet_buffer[VIDEO].size() || !packet_buffer[AUDIO].size()) {
+		while ((!audio_only && !packet_buffer[VIDEO].size()) || !packet_buffer[AUDIO].size()) {
 			result = read_packet(BOTH);
 			if (result.code != 0) return result;
 		}

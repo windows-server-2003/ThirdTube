@@ -1,5 +1,6 @@
 #include "headers.hpp"
 #include "youtube_parser/parser.hpp"
+#include "scenes/video_player.hpp"
 
 void load_settings() {
 	char buf[0x1001] = { 0 };
@@ -38,10 +39,14 @@ void load_settings() {
 	if (var_network_framework < 0 || var_network_framework >= 3) var_network_framework = var_network_framework_changed = load_int("network_framework", -1);
 	if (var_network_framework < 0 || var_network_framework >= 3) var_network_framework = var_network_framework_changed = 2;
 	var_history_enabled = load_int("history_enabled", 1);
+	var_video_show_debug_info = load_int("video_show_debug_info", 0);
+	var_video_linear_filter = load_int("linear_filter", 1);
 	
 	Util_cset_set_wifi_state(true);
 	Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
 	youtube_change_content_language(var_lang_content);
+	video_set_linear_filter_enabled(var_video_linear_filter);
+	video_set_show_debug_info(var_video_show_debug_info);
 }
 void save_settings() {
 	std::string data = 
@@ -54,7 +59,9 @@ void save_settings() {
 		"<dark_theme>" + std::to_string(var_night_mode) + "</dark_theme>\n" + 
 		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n" + 
 		"<network_framework>" + std::to_string(var_network_framework_changed) + "</network_framework>\n" +
-		"<var_history_enabled>" + std::to_string(var_history_enabled) + "</var_history_enabled>\n";
+		"<history_enabled>" + std::to_string(var_history_enabled) + "</history_enabled>\n" +
+		"<video_show_debug_info>" + std::to_string(var_video_show_debug_info) + "</video_show_debug_info>\n" +
+		"<linear_filter>" + std::to_string(var_video_linear_filter) + "</linear_filter>\n";
 	
 	Result_with_string result = Util_file_save_to_file("settings.txt", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
 	Util_log_save("settings/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);

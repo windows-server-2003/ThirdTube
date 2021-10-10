@@ -6,6 +6,9 @@ bool video_is_playing(void);
 void video_draw_playing_bar();
 void video_update_playing_bar(Hid_info key, Intent *intent);
 
+void video_set_linear_filter_enabled(bool enabled);
+void video_set_show_debug_info(bool show);
+
 bool VideoPlayer_query_init_flag(void);
 
 bool VideoPlayer_query_running_flag(void);

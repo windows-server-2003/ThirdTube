@@ -25,6 +25,7 @@
 #define SUGGESTION_LOAD_MORE_MARGIN 30
 #define COMMENT_ICON_SIZE 48
 #define COMMENT_LOAD_MORE_MARGIN 30
+#define CONTROL_BUTTON_HEIGHT 20
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 30
 #define MAX_RETRY_CNT 5
@@ -33,7 +34,7 @@
 #define TAB_COMMENTS 1
 #define TAB_SUGGESTIONS 2
 #define TAB_CAPTIONS 3
-#define TAB_ADVANCED 4
+#define TAB_PLAYBACK 4
 #define TAB_PLAYLIST 5
 
 #define TAB_MAX_NUM 6
@@ -50,7 +51,8 @@ namespace VideoPlayer {
 	volatile bool vid_pausing = false;
 	volatile bool vid_pausing_seek = false;
 	volatile bool eof_reached = false;
-	bool vid_linear_filter = true;
+	volatile bool audio_only_mode = false;
+	volatile double seek_at_init_request = -1;
 	bool vid_show_controls = false;
 	bool vid_allow_skip_frames = false;
 	double vid_time[2][320];
@@ -145,6 +147,11 @@ namespace VideoPlayer {
 	TextView *playlist_author_view;
 	int playlist_thumbnail_request_l = 0;
 	int playlist_thumbnail_request_r = 0;
+	
+	// playback tab
+	CustomView *download_progress_view = NULL;
+	VerticalListView *debug_info_view = NULL;
+	ScrollView *playback_tab_view = NULL;
 };
 using namespace VideoPlayer;
 
@@ -333,10 +340,7 @@ static void load_video_page(void *arg) {
 			->set_x_centered(true)
 			->set_text_offset(0, -2.0)
 			->set_background_color(COLOR_GRAY(0x80))
-			->set_on_view_released([] (View &view) {
-				Util_log_save("debug", "ok");
-				queue_async_task(load_caption, &load_caption_arg);
-			})
+			->set_on_view_released([] (View &view) { queue_async_task(load_caption, &load_caption_arg); })
 		}
 	)->set_draw_order({1, 0});
 	
@@ -397,15 +401,13 @@ static void load_video_page(void *arg) {
 				return COLOR_GRAY(darkness);
 			}
 		});
-		cur_option_view->set_on_view_released([cur_lang] (View &view) {
-			Util_log_save("debug", "trans : " + cur_lang.id);
-			selected_translation_lang = cur_lang.id;
-		});
+		cur_option_view->set_on_view_released([cur_lang] (View &view) { selected_translation_lang = cur_lang.id; });
 		translation_languages_selector_view->views.push_back(cur_option_view);
 	}
 	translation_languages_selector_view->set_is_visible(false)->set_is_touchable(false);
 	caption_right_view->views.push_back(translation_languages_selector_view);
 	caption_right_view->set_draw_order({1, 0});
+	
 	
 	// prepare playlist view
 	double playlist_view_scroll = playlist_list_view->get_offset(); // this call should not need mutex locking
@@ -632,7 +634,7 @@ static void load_caption(void *arg_) {
 					->set_text_offset(0.0, -1.0)
 					->set_get_text_color([] () { return COLOR_LINK; })
 					->set_on_view_released([start_time] (View &view) {
-						if (network_decoder.ready) send_seek_request_wo_lock(start_time * 1000);
+						if (network_decoder.ready) send_seek_request_wo_lock(start_time);
 					}),
 				(new TextView(0, 0, CAPTION_CONTENT_MAX_WIDTH, DEFAULT_FONT_INTERVAL * cur_lines.size()))
 					->set_text_lines(cur_lines)
@@ -699,7 +701,7 @@ static void send_change_video_request(std::string url, bool force_load) {
 
 static void send_seek_request_wo_lock(double pos) {
 	vid_seek_pos = pos;
-	vid_current_pos = pos / 1000;
+	vid_current_pos = pos;
 	vid_seek_request = true;
 	if (network_decoder.ready) // avoid locking while initing
 		network_decoder.interrupt = true;
@@ -792,12 +794,14 @@ namespace Bar {
 		if (!bar_grabbed && network_decoder.ready && key.p_touch && bar_x_l - GRAB_TOLERANCE <= key.touch_x && key.touch_x <= bar_x_r + GRAB_TOLERANCE &&
 			y_center - 2 - GRAB_TOLERANCE <= key.touch_y && key.touch_y <= y_center + 2 + GRAB_TOLERANCE) {
 			bar_grabbed = true;
+			var_need_reflesh = true;
 		}
 		if (bar_grabbed)
 			last_grab_timestamp = network_decoder.get_timestamp_from_bar_pos(((key.touch_x != -1 ? key.touch_x : last_touch_x) - bar_x_l) / (bar_x_r - bar_x_l));
 		if (bar_grabbed && key.touch_x == -1) {
-			if (network_decoder.ready) send_seek_request(last_grab_timestamp * 1000);
+			if (network_decoder.ready) send_seek_request(last_grab_timestamp);
 			bar_grabbed = false;
+			var_need_reflesh = true;
 		}
 		if (key.p_touch && key.touch_x >= 320 - MAXIMIZE_ICON_WIDTH && key.touch_y >= 240 - VIDEO_PLAYING_BAR_HEIGHT && vid_thread_suspend) {
 			intent->next_scene = SceneType::VIDEO_PLAYER;
@@ -834,6 +838,12 @@ void video_update_playing_bar(Hid_info key, Intent *intent) { Bar::video_update_
 void video_draw_playing_bar() { Bar::video_draw_playing_bar(); }
 
 
+void video_set_linear_filter_enabled(bool enabled) {
+	if (vid_already_init) {
+		for(int i = 0; i < 8; i++)
+			Draw_c2d_image_set_filter(&vid_image[i], enabled);
+	}
+}
 
 static void decode_thread(void* arg)
 {
@@ -899,18 +909,16 @@ static void decode_thread(void* arg)
 			vid_copy_time[1] = 0;
 			vid_convert_time = 0;
 			
-			/*
-			result = Util_decoder_open_file(vid_dir + vid_file, &has_audio, &has_video, 0);
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_decoder_open_file()..." + result.string + result.error_description, result.code);
-			*/
-			
 			// video page parsing sometimes randomly fails, so try several times
 			network_waiting_status = "Reading Stream";
-			// itag 18 (both_stream) of a long video takes too much time and sometimes leads to a crash 
-			if (cur_video_info.duration_ms <= 60 * 60 * 1000 && cur_video_info.both_stream_url != "") {
+			if (audio_only_mode) {
+				result = network_decoder.init(cur_video_info.audio_stream_url, stream_downloader,
+					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
+			} else if (cur_video_info.duration_ms <= 60 * 60 * 1000 && cur_video_info.both_stream_url != "") {
+				// itag 18 (both_stream) of a long video takes too much time and sometimes leads to a crash 
 				result = network_decoder.init(cur_video_info.both_stream_url, stream_downloader,
 					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
-			} else if (cur_video_info.video_stream_url != "" && cur_video_info.audio_stream_url != "") { 
+			} else if (cur_video_info.video_stream_url != "" && cur_video_info.audio_stream_url != "") {
 				result = network_decoder.init(cur_video_info.video_stream_url, cur_video_info.audio_stream_url, stream_downloader,
 					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
 			} else {
@@ -933,8 +941,6 @@ static void decode_thread(void* arg)
 				vid_play_request = false;
 			}
 			network_waiting_status = NULL;
-			
-			// result = Util_decoder_open_network_stream(network_cacher_data, &has_audio, &has_video, 0);
 			
 			if (vid_play_request) {
 				{
@@ -962,6 +968,12 @@ static void decode_thread(void* arg)
 				}
 			}
 			
+			if (seek_at_init_request >= 0) {
+				vid_seek_request = true;
+				vid_seek_pos = seek_at_init_request;
+				seek_at_init_request = -1;
+			}
+			
 			osTickCounterUpdate(&counter1);
 			while (vid_play_request)
 			{
@@ -969,7 +981,7 @@ static void decode_thread(void* arg)
 					network_waiting_status = "Seeking";
 					Util_speaker_clear_buffer(0);
 					svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
-					vid_current_pos = vid_seek_pos / 1000;
+					vid_current_pos = vid_seek_pos;
 					while (vid_seek_request && !vid_change_video_request && vid_play_request) {
 						svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
 						double seek_pos_bak = vid_seek_pos;
@@ -977,7 +989,7 @@ static void decode_thread(void* arg)
 						network_decoder.interrupt = false;
 						svcReleaseMutex(small_resource_lock);
 						
-						result = network_decoder.seek(seek_pos_bak * 1000);
+						result = network_decoder.seek(seek_pos_bak * 1000 * 1000); // nano seconds
 						// if seek failed because of the lock, it's probably another seek request or other requests (change video etc...), so we can ignore it
 						if (network_decoder.interrupt) {
 							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "seek interrupted");
@@ -990,6 +1002,7 @@ static void decode_thread(void* arg)
 					svcReleaseMutex(network_decoder_critical_lock);
 					if (eof_reached) vid_pausing = false;
 					network_waiting_status = NULL;
+					var_need_reflesh = true;
 				}
 				if (vid_change_video_request || !vid_play_request) break;
 				vid_duration = network_decoder.get_duration();
@@ -1122,9 +1135,16 @@ static void convert_thread(void* arg)
 					if (result.code != DEF_ERR_NEED_MORE_INPUT) break;
 					if (vid_pausing || vid_pausing_seek) usleep(10000);
 					else usleep(3000);
-				} while (vid_play_request && !vid_seek_request && !vid_change_video_request);
+				} while (vid_play_request && !vid_seek_request && !vid_change_video_request && !audio_only_mode);
 				
-				
+				if (audio_only_mode) {
+					while (audio_only_mode && vid_play_request && !vid_seek_request && !vid_change_video_request) {
+						double tmp = Util_speaker_get_current_timestamp(0, vid_sample_rate);
+						if (tmp != -1) vid_current_pos = tmp;
+						usleep(50000);
+					}
+					break;
+				}
 				if (!vid_play_request || vid_seek_request || vid_change_video_request) break;
 				if (result.code != 0) { // this is an unexpected error
 					Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "failure getting decoded result" + result.string + result.error_description, result.code);
@@ -1296,6 +1316,124 @@ void VideoPlayer_init(void)
 	captions_tab_view = caption_language_select_view = new VerticalListView(0, 0, 320);
 	caption_main_view = new ScrollView(0, 0, 320, CONTENT_Y_HIGH);
 	caption_overlay_view = new CaptionOverlayView(0, 0, 400, 240);
+	download_progress_view = (new CustomView(0, 0, 320, SMALL_MARGIN * 2))
+		->set_draw([] (const CustomView &view) {
+			int y = view.y0;
+			int sample = 50;
+			auto progress_bars = network_decoder.get_buffering_progress_bars(sample);
+			for (size_t i = 0; i < 2; i++) {
+				if (i < progress_bars.size() && progress_bars[i].second.size()) {
+					auto &cur_bar = progress_bars[i].second;
+					auto cur_pos = progress_bars[i].first;
+					
+					int sample = 50;
+					int bar_len = 310;
+					for (int i = 0; i < sample; i++) {
+						int a = 0xFF;
+						int r = 0x00 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
+						int g = 0x00 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
+						int b = 0xA0 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
+						int xl = 5 + bar_len * i / sample;
+						int xr = 5 + bar_len * (i + 1) / sample;
+						Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl, y, xr - xl, SMALL_MARGIN);
+					}
+					float head_x = 5 + bar_len * cur_pos;
+					Draw_texture(var_square_image[0], DEF_DRAW_RED, head_x - 1, y, SMALL_MARGIN, SMALL_MARGIN);
+				}
+				y += SMALL_MARGIN;
+			}
+		});
+	debug_info_view = (new VerticalListView(0, 0, 320))
+		->set_views({
+			(new TextView(SMALL_MARGIN, 0, 320, DEFAULT_FONT_INTERVAL * 7))->set_text_lines<std::function<std::string ()> >({
+				[] () { return vid_video_format; },
+				[] () { return vid_audio_format; },
+				[] () {
+					return std::to_string(vid_width_org) + "x" + std::to_string(vid_height_org) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps";
+				},
+				[] () { return LOCALIZED(HW_DECODER) + " : " + LOCALIZED_ENABLED_STATUS(network_decoder.hw_decoder_enabled); },
+				[] () {
+					const char *message = get_network_waiting_status();
+					return LOCALIZED(WAITING_STATUS) + " : " + std::string(message ? message : "");
+				},
+				[] () {
+					u32 cpu_limit;
+					APT_GetAppCpuTimeLimit(&cpu_limit);
+					return LOCALIZED(CPU_LIMIT) + " : " + std::to_string(cpu_limit) + "%";
+				},
+				[] () {
+					return LOCALIZED(FORWARD_BUFFER) + " : " + (cur_video_info.is_livestream && network_decoder.ready ? std::to_string(network_decoder.get_forward_buffer()) : "N/A");
+				}
+			}),
+			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
+			(new CustomView(0, 0, 320, 160))->set_draw([] (const CustomView &view) {
+				int y = view.y0;
+				
+				// decoding time graph
+				for (int i = 0; i < 319; i++) {
+					Draw_line(i, y + 90 - vid_time[1][i], DEF_DRAW_BLUE, i + 1, y + 90 - vid_time[1][i + 1], DEF_DRAW_BLUE, 1); //Thread 1
+					Draw_line(i, y + 90 - vid_time[0][i], DEF_DRAW_RED, i + 1, y + 90 - vid_time[0][i + 1], DEF_DRAW_RED, 1); //Thread 0
+				}
+
+				Draw_line(0, y + 90, DEFAULT_TEXT_COLOR, 320, y + 90, DEFAULT_TEXT_COLOR, 2);
+				Draw_line(0, y + 90 - vid_frametime, 0xFFFFFF00, 320, y + 90 - vid_frametime, 0xFFFFFF00, 2);
+				if(vid_total_frames != 0 && vid_min_time != 0  && vid_recent_total_time != 0) {
+					Draw("avg " + std::to_string(1000 / (vid_total_time / vid_total_frames)).substr(0, 5) + " min " + std::to_string(1000 / vid_max_time).substr(0, 5) 
+					+  " max " + std::to_string(1000 / vid_min_time).substr(0, 5) + " recent avg " + std::to_string(1000 / (vid_recent_total_time / 90)).substr(0, 5) +  " fps",
+					0, y + 90, 0.4, 0.4, DEFAULT_TEXT_COLOR);
+				}
+
+				Draw("Deadline : " + std::to_string(vid_frametime).substr(0, 5) + "ms", 0, y + 100, 0.4, 0.4, 0xFFFFFF00);
+				Draw("Video decode : " + std::to_string(vid_video_time).substr(0, 5) + "ms", 0, y + 110, 0.4, 0.4, DEF_DRAW_RED);
+				Draw("Audio decode : " + std::to_string(vid_audio_time).substr(0, 5) + "ms", 0, y + 120, 0.4, 0.4, DEF_DRAW_RED);
+				//Draw("Data copy 0 : " + std::to_string(vid_copy_time[0]).substr(0, 5) + "ms", 160, 120, 0.4, 0.4, DEF_DRAW_BLUE);
+				Draw("Color convert : " + std::to_string(vid_convert_time).substr(0, 5) + "ms", 160, y + 110, 0.4, 0.4, DEF_DRAW_BLUE);
+				Draw("Data copy 1 : " + std::to_string(vid_copy_time[1]).substr(0, 5) + "ms", 160, y + 120, 0.4, 0.4, DEF_DRAW_BLUE);
+				Draw("Thread 0 : " + std::to_string(vid_time[0][319]).substr(0, 6) + "ms", 0, y + 130, 0.5, 0.5, DEF_DRAW_RED);
+				Draw("Thread 1 : " + std::to_string(vid_time[1][319]).substr(0, 6) + "ms", 160, y + 130, 0.5, 0.5, DEF_DRAW_BLUE);
+				Draw("Zoom : x" + std::to_string(vid_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_x) + " Y : " + std::to_string((int)vid_y), 0, y + 140, 0.5, 0.5, DEFAULT_TEXT_COLOR);
+			})
+		});
+	playback_tab_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH))
+		->set_margin(SMALL_MARGIN)
+		->set_views({
+			(new EmptyView(0, 0, 320, 0)), // margin at the top(using ScrollView's auto margin)
+			(new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
+				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(BUFFERING_PROGRESS); })
+				->set_text_offset(SMALL_MARGIN, 0),
+			download_progress_view,
+			(new SelectorView(0, 0, 320, 35))
+				->set_texts({
+					(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+					(std::function<std::string ()>) []() { return LOCALIZED(ON); }
+				}, audio_only_mode)
+				->set_title([](const SelectorView &view) { return LOCALIZED(AUDIO_ONLY_MODE); })
+				->set_on_change([](const SelectorView &view) {
+					if (audio_only_mode != view.selected_button) {
+						audio_only_mode = view.selected_button;
+						if (!is_async_task_running(load_video_page)) { // reload the video so that audio_only_mode applies
+							seek_at_init_request = vid_current_pos;
+							send_change_video_request_wo_lock(vid_url, false);
+							video_retry_left = MAX_RETRY_CNT;
+						}
+					}
+				}),
+			(new TextView(SMALL_MARGIN * 2, 0, 100, CONTROL_BUTTON_HEIGHT))
+				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(RELOAD); })
+				->set_x_centered(true)
+				->set_get_background_color([] (const View &) {
+					return is_async_task_running(load_video_page) ? DEF_DRAW_LIGHT_GRAY : DEF_DRAW_WEAK_AQUA;
+				})
+				->set_on_view_released([] (View &view) {
+					if (!is_async_task_running(load_video_page)) {
+						seek_at_init_request = vid_current_pos;
+						send_change_video_request_wo_lock(vid_url, true);
+						video_retry_left = MAX_RETRY_CNT;
+					}
+				}),
+			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN)),
+			debug_info_view
+		});
 	playlist_title_view = (new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL);
 	playlist_author_view = (new TextView(0, 0, 320, PLAYLIST_TOP_HEIGHT - MIDDLE_FONT_INTERVAL))->set_get_text_color([] () { return LIGHT0_TEXT_COLOR; });
 	playlist_list_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT))->set_margin(SMALL_MARGIN);
@@ -1308,14 +1446,11 @@ void VideoPlayer_init(void)
 	for (int i = 0; i < 3; i++) playlist_view->views[i]->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; });
 	
 	APT_CheckNew3DS(&new_3ds);
-	if(new_3ds)
-	{
+	if(new_3ds) {
 		add_cpu_limit(NEW_3DS_CPU_LIMIT);
 		vid_decode_thread = threadCreate(decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
-	}
-	else
-	{
+	} else {
 		add_cpu_limit(OLD_3DS_CPU_LIMIT);
 		vid_decode_thread = threadCreate(decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
@@ -1323,32 +1458,6 @@ void VideoPlayer_init(void)
 	stream_downloader = NetworkStreamDownloader();
 	stream_downloader_thread = threadCreate(network_downloader_thread, &stream_downloader, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	livestream_initer_thread = threadCreate(livestream_initer_thread_func, &network_decoder, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
-
-	/*
-	add_cpu_limit(25);
-	for (int i = 100; i < 120; i++) {
-		NetworkStream *stream0 = new NetworkStream("https://r2---sn-ogueln7k.googlevideo.com/videoplayback?expire=1628243182&ei=jrAMYaznF6eL1d8Pgc-4-A4&ip=221.240.44.218&id=9gEuOzFKTt4.1&itag=134&aitags=133%2C134%2C135%2C136%2C137%2C160&source=yt_live_broadcast&requiressl=yes&mh=7y&mm=44%2C29&mn=sn-ogueln7k%2Csn-oguesnz6&ms=lva%2Crdu&mv=m&mvi=2&pl=16&initcwndbps=1841250&vprv=1&live=1&hang=1&noclen=1&mime=video%2Fmp4&ns=7YYWlOV7L86Uc8EHIVOGpRoG&gir=yes&mt=1628220986&fvip=2&keepalive=yes&fexp=24001373%2C24007246&c=MWEB&n=d1fLqBuQlw7UXA&sparams=expire%2Cei%2Cip%2Cid%2Caitags%2Csource%2Crequiressl%2Cvprv%2Clive%2Chang%2Cnoclen%2Cmime%2Cns%2Cgir&sig=AOq0QJ8wRQIhAMSzW6dgmKMMoJZxWNWq-mC0s4nJW0ycrzgefubpf19bAiAQ58yRXQO_S1uVQNOWUm1l1cC_h0zDGUPH0WIm_mKbJA%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgKbF0jRdXFoFrsKlLbfk08fCteud5Pflzl_rdk68Uc2sCIA5Zo625JwLXVQZ1ixI9CQVHuzIvlI2RK9T0U-30IC4V&ratebypass=yes&sq=" + std::to_string(i), true);
-		NetworkStream *stream1 = new NetworkStream("https://r2---sn-ogueln7k.googlevideo.com/videoplayback?expire=1628243182&ei=jrAMYaznF6eL1d8Pgc-4-A4&ip=221.240.44.218&id=9gEuOzFKTt4.1&itag=140&source=yt_live_broadcast&requiressl=yes&mh=7y&mm=44%2C29&mn=sn-ogueln7k%2Csn-oguesnz6&ms=lva%2Crdu&mv=m&mvi=2&pl=16&initcwndbps=1841250&vprv=1&live=1&hang=1&noclen=1&mime=audio%2Fmp4&ns=7YYWlOV7L86Uc8EHIVOGpRoG&gir=yes&mt=1628220986&fvip=2&keepalive=yes&fexp=24001373%2C24007246&c=MWEB&n=d1fLqBuQlw7UXA&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Clive%2Chang%2Cnoclen%2Cmime%2Cns%2Cgir&sig=AOq0QJ8wRQIhAO9QK6ZWrt6wCG8rvv10YGn5sjbQdHW4EFrn11wcMlwHAiBKglnuc9FVgZKyzatEFHc6_BDnx-fMW2TtJdrBrgx1Gg%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=AG3C_xAwRAIgKbF0jRdXFoFrsKlLbfk08fCteud5Pflzl_rdk68Uc2sCIA5Zo625JwLXVQZ1ixI9CQVHuzIvlI2RK9T0U-30IC4V&ratebypass=yes&sq=" + std::to_string(i), true);
-		stream_downloader.add_stream(stream0);
-		stream_downloader.add_stream(stream1);
-		Util_log_save("test", "r0");
-		int x = 0;
-		while (!stream0->ready && !stream0->error) {
-			// for (int j = 0; j < 50; j++) x ^= i * j;
-			// usleep(4);
-			usleep(3000);
-		}
-		Util_log_save("test", "r1");
-		while (!stream1->ready && !stream0->error) {
-			// for (int j = 0; j < 50; j++) x ^= i * j;
-			// usleep(4);
-			usleep(3000);
-		}
-		Util_log_save("test", "r2" + std::to_string(x));
-		stream0->quit_request = true;
-		stream1->quit_request = true;
-	}
-	remove_cpu_limit(25);*/
 
 	vid_total_time = 0;
 	vid_total_frames = 0;
@@ -1385,6 +1494,7 @@ void VideoPlayer_init(void)
 			Util_err_set_error_show_flag(true);
 			vid_thread_run = false;
 		}
+		Draw_c2d_image_set_filter(&vid_image[i], var_video_linear_filter);
 	}
 
 	result = Draw_load_texture("romfs:/gfx/draw/video_player/banner.t3x", 61, vid_banner, 0, 2);
@@ -1412,7 +1522,23 @@ void VideoPlayer_init(void)
 	
 	VideoPlayer_resume("");
 	vid_already_init = true;
+	
+	
+	video_set_show_debug_info(var_video_show_debug_info);
+	video_set_linear_filter_enabled(var_video_linear_filter);
 	Util_log_save(DEF_SAPP0_INIT_STR, "Initialized.");
+}
+
+void video_set_show_debug_info(bool show) {
+	if (vid_already_init) {
+		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		if (show) {
+			if (playback_tab_view->views.back() != debug_info_view) playback_tab_view->views.push_back(debug_info_view);
+		} else {
+			if (playback_tab_view->views.back() == debug_info_view) playback_tab_view->views.pop_back();
+		}
+		svcReleaseMutex(small_resource_lock);
+	}
 }
 
 void VideoPlayer_exit(void)
@@ -1461,8 +1587,15 @@ void VideoPlayer_exit(void)
 	caption_overlay_view = NULL;
 	captions_tab_view = NULL;
 	
+	playback_tab_view->recursive_delete_subviews();
+	delete playback_tab_view;
+	playback_tab_view = NULL;
+	debug_info_view = NULL;
+	download_progress_view = NULL;
+	
 	playlist_view->recursive_delete_subviews();
 	delete playlist_view;
+	playlist_view = NULL;
 	
 	bool new_3ds;
 	APT_CheckNew3DS(&new_3ds);
@@ -1545,110 +1678,10 @@ static void draw_video_content(Hid_info key) {
 			comment_all_view->draw();
 		} else if (selected_tab == TAB_CAPTIONS) {
 			captions_tab_view->draw();
-		} else if (selected_tab == TAB_ADVANCED) {
-			Draw(vid_video_format, 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-			y_offset += DEFAULT_FONT_INTERVAL;
-			Draw(vid_audio_format, 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-			y_offset += DEFAULT_FONT_INTERVAL;
-			Draw(std::to_string(vid_width_org) + "x" + std::to_string(vid_height_org) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps", 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-			y_offset += DEFAULT_FONT_INTERVAL;
-			Draw(LOCALIZED(HW_DECODER) + " : " + LOCALIZED_ENABLED_STATUS(network_decoder.hw_decoder_enabled), 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-			y_offset += DEFAULT_FONT_INTERVAL;
-			
-			{
-				const char *message = get_network_waiting_status();
-				Draw(LOCALIZED(WAITING_STATUS) + " : " + std::string(message ? message : ""), 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-				y_offset += DEFAULT_FONT_INTERVAL;
-			}
-			{
-				u32 cpu_limit;
-				APT_GetAppCpuTimeLimit(&cpu_limit);
-				Draw(LOCALIZED(CPU_LIMIT) + " : " + std::to_string(cpu_limit) + "%", 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-				y_offset += DEFAULT_FONT_INTERVAL;
-			}
-			if (cur_video_info.is_livestream && network_decoder.ready) {
-				Draw(LOCALIZED(FORWARD_BUFFER) + " : " + std::to_string(network_decoder.get_forward_buffer()) + " s", 0, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-				y_offset += DEFAULT_FONT_INTERVAL;
-			}
-			//controls
-			/*
-			Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 165, y_offset, 145, 10);
-			Draw(vid_msg[2], 167.5, y_offset, 0.4, 0.4, color);*/
-
-			//texture filter
-			y_offset += SMALL_MARGIN;
-			{
-				Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, 15, y_offset, 135, DEFAULT_FONT_INTERVAL);
-				Draw_x_centered(LOCALIZED(VIDEO_FILTER), 15, 15 + 135, y_offset, 0.4, 0.4, DEFAULT_TEXT_COLOR);
-			}
-			{
-				u32 button_color = is_async_task_running(load_video_page) ? DEF_DRAW_LIGHT_GRAY : DEF_DRAW_WEAK_AQUA;
-				Draw_texture(var_square_image[0], button_color, 170, y_offset, 135, DEFAULT_FONT_INTERVAL);
-				int width = Draw_get_width(LOCALIZED(RELOAD), 0.4, 0.4);
-				Draw(LOCALIZED(RELOAD), (170.0 + 170.0 + 135.0) / 2 - width / 2, y_offset, 0.4, 0.4, DEFAULT_TEXT_COLOR);
-			}
-			y_offset += DEFAULT_FONT_INTERVAL;
-			y_offset += SMALL_MARGIN;
-			
-			// stream download progress
-			{
-				int sample = 50;
-				auto progress_bars = network_decoder.get_buffering_progress_bars(sample);
-				for (size_t i = 0; i < 2; i++) {
-					if (i < progress_bars.size() && progress_bars[i].second.size()) {
-						auto &cur_bar = progress_bars[i].second;
-						auto cur_pos = progress_bars[i].first;
-						
-						int sample = 50;
-						int bar_len = 310;
-						for (int i = 0; i < sample; i++) {
-							int a = 0xFF;
-							int r = 0x00 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
-							int g = 0x00 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
-							int b = 0xA0 * cur_bar[i] / 100 + 0x80 * (1 - cur_bar[i] / 100);
-							int xl = 5 + bar_len * i / sample;
-							int xr = 5 + bar_len * (i + 1) / sample;
-							Draw_texture(var_square_image[0], a << 24 | b << 16 | g << 8 | r, xl, y_offset, xr - xl, 3);
-						}
-						float head_x = 5 + bar_len * cur_pos;
-						Draw_texture(var_square_image[0], DEF_DRAW_RED, head_x - 1, y_offset, 3, 3);
-					}
-					y_offset += SMALL_MARGIN;
-				}
-			}
-			
-			y_offset += SMALL_MARGIN;
-			Draw_line(SMALL_MARGIN, y_offset, DEFAULT_TEXT_COLOR, 320 - SMALL_MARGIN - 1, y_offset, DEFAULT_TEXT_COLOR, 1);
-			y_offset += SMALL_MARGIN;
-			
-			//decoding detail
-			for(int i = 0; i < 319; i++)
-			{
-				Draw_line(i, y_offset + 90 - vid_time[1][i], DEF_DRAW_BLUE, i + 1, y_offset + 90 - vid_time[1][i + 1], DEF_DRAW_BLUE, 1);//Thread 1
-				Draw_line(i, y_offset + 90 - vid_time[0][i], DEF_DRAW_RED, i + 1, y_offset + 90 - vid_time[0][i + 1], DEF_DRAW_RED, 1);//Thread 0
-			}
-
-			Draw_line(0, y_offset + 90, DEFAULT_TEXT_COLOR, 320, y_offset + 90, DEFAULT_TEXT_COLOR, 2);
-			Draw_line(0, y_offset + 90 - vid_frametime, 0xFFFFFF00, 320, y_offset + 90 - vid_frametime, 0xFFFFFF00, 2);
-			if(vid_total_frames != 0 && vid_min_time != 0  && vid_recent_total_time != 0)
-			{
-				Draw("avg " + std::to_string(1000 / (vid_total_time / vid_total_frames)).substr(0, 5) + " min " + std::to_string(1000 / vid_max_time).substr(0, 5) 
-				+  " max " + std::to_string(1000 / vid_min_time).substr(0, 5) + " recent avg " + std::to_string(1000 / (vid_recent_total_time / 90)).substr(0, 5) +  " fps",
-				0, y_offset + 90, 0.4, 0.4, DEFAULT_TEXT_COLOR);
-			}
-
-			Draw("Deadline : " + std::to_string(vid_frametime).substr(0, 5) + "ms", 0, y_offset + 100, 0.4, 0.4, 0xFFFFFF00);
-			Draw("Video decode : " + std::to_string(vid_video_time).substr(0, 5) + "ms", 0, y_offset + 110, 0.4, 0.4, DEF_DRAW_RED);
-			Draw("Audio decode : " + std::to_string(vid_audio_time).substr(0, 5) + "ms", 0, y_offset + 120, 0.4, 0.4, DEF_DRAW_RED);
-			//Draw("Data copy 0 : " + std::to_string(vid_copy_time[0]).substr(0, 5) + "ms", 160, 120, 0.4, 0.4, DEF_DRAW_BLUE);
-			Draw("Color convert : " + std::to_string(vid_convert_time).substr(0, 5) + "ms", 160, y_offset + 110, 0.4, 0.4, DEF_DRAW_BLUE);
-			Draw("Data copy 1 : " + std::to_string(vid_copy_time[1]).substr(0, 5) + "ms", 160, y_offset + 120, 0.4, 0.4, DEF_DRAW_BLUE);
-			Draw("Thread 0 : " + std::to_string(vid_time[0][319]).substr(0, 6) + "ms", 0, y_offset + 130, 0.5, 0.5, DEF_DRAW_RED);
-			Draw("Thread 1 : " + std::to_string(vid_time[1][319]).substr(0, 6) + "ms", 160, y_offset + 130, 0.5, 0.5, DEF_DRAW_BLUE);
-			Draw("Zoom : x" + std::to_string(vid_zoom).substr(0, 5) + " X : " + std::to_string((int)vid_x) + " Y : " + std::to_string((int)vid_y), 0, y_offset + 140, 0.5, 0.5, DEFAULT_TEXT_COLOR);
-			y_offset += 160;
+		} else if (selected_tab == TAB_PLAYBACK) {
+			playback_tab_view->draw();
 		}
-		if (selected_tab == TAB_GENERAL || selected_tab == TAB_ADVANCED) scroller[selected_tab].draw_slider_bar();
+		if (selected_tab == TAB_GENERAL) scroller[selected_tab].draw_slider_bar();
 	}
 	
 	svcReleaseMutex(small_resource_lock);
@@ -1678,12 +1711,12 @@ Intent VideoPlayer_draw(void)
 	
 	if(var_need_reflesh || !var_eco_mode)
 	{
+		bool video_playing = vid_play_request && network_decoder.ready && !audio_only_mode;
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, network_decoder.ready ? DEF_DRAW_BLACK : DEFAULT_BACK_COLOR);
+		Draw_screen_ready(0, video_playing ? DEF_DRAW_BLACK : DEFAULT_BACK_COLOR);
 
-		if(network_decoder.ready)
-		{
+		if (video_playing) {
 			//video
 			Draw_texture(vid_image[image_num * 4 + 0].c2d, vid_x, vid_y, vid_tex_width[image_num * 4 + 0] * vid_zoom, vid_tex_height[image_num * 4 + 0] * vid_zoom);
 			if(vid_width > 1024)
@@ -1692,9 +1725,7 @@ Intent VideoPlayer_draw(void)
 				Draw_texture(vid_image[image_num * 4 + 2].c2d, vid_x, (vid_y + vid_tex_width[image_num * 4 + 0] * vid_zoom), vid_tex_width[image_num * 4 + 2] * vid_zoom, vid_tex_height[image_num * 4 + 2] * vid_zoom);
 			if(vid_width > 1024 && vid_height > 1024)
 				Draw_texture(vid_image[image_num * 4 + 3].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom), (vid_y + vid_tex_height[image_num * 4 + 0] * vid_zoom), vid_tex_width[image_num * 4 + 3] * vid_zoom, vid_tex_height[image_num * 4 + 3] * vid_zoom);
-		}
-		else
-			Draw_texture(vid_banner[var_night_mode], 0, 15, 400, 225);
+		} else Draw_texture(vid_banner[var_night_mode], 0, 15, 400, 225);
 
 		if(Util_log_query_log_show_flag())
 			Util_log_draw();
@@ -1706,39 +1737,6 @@ Intent VideoPlayer_draw(void)
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 
 		draw_video_content(key);
-			
-			// Draw(DEF_SAPP0_VER, 0, 0, 0.4, 0.4, DEF_DRAW_GREEN);
-
-			//codec info
-			// TODO : move these to debug tab
-			
-			/*
-			if(vid_play_request)
-			{
-				//video
-				Draw_texture(vid_image[image_num * 4 + 0].c2d, vid_x - 40, vid_y - 240, vid_tex_width[image_num * 4 + 0] * vid_zoom, vid_tex_height[image_num * 4 + 0] * vid_zoom);
-				if(vid_width > 1024)
-					Draw_texture(vid_image[image_num * 4 + 1].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 40, vid_y - 240, vid_tex_width[image_num * 4 + 1] * vid_zoom, vid_tex_height[image_num * 4 + 1] * vid_zoom);
-				if(vid_height > 1024)
-					Draw_texture(vid_image[image_num * 4 + 2].c2d, vid_x - 40, (vid_y + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 2] * vid_zoom, vid_tex_height[image_num * 4 + 2] * vid_zoom);
-				if(vid_width > 1024 && vid_height > 1024)
-					Draw_texture(vid_image[image_num * 4 + 3].c2d, (vid_x + vid_tex_width[image_num * 4 + 0] * vid_zoom) - 40, (vid_y + vid_tex_height[image_num * 4 + 0] * vid_zoom) - 240, vid_tex_width[image_num * 4 + 3] * vid_zoom, vid_tex_height[image_num * 4 + 3] * vid_zoom);
-			}*/
-			
-			/*
-
-			if(vid_show_controls)
-			{
-				Draw_texture(vid_control[var_night_mode], 80, y_offset + 20, 160, 160);
-				Draw(vid_msg[5], 122.5, y_offset + 47.5, 0.45, 0.45, DEF_DRAW_BLACK);
-				Draw(vid_msg[6], 122.5, y_offset + 62.5, 0.45, 0.45, DEF_DRAW_BLACK);
-				Draw(vid_msg[7], 122.5, y_offset + 77.5, 0.45, 0.45, DEF_DRAW_BLACK);
-				Draw(vid_msg[8], 122.5, y_offset + 92.5, 0.45, 0.45, DEF_DRAW_BLACK);
-				Draw(vid_msg[9], 135, y_offset + 107.5, 0.45, 0.45, DEF_DRAW_BLACK);
-				Draw(vid_msg[10], 122.5, y_offset + 122.5, 0.45, 0.45, DEF_DRAW_BLACK);
-				Draw(vid_msg[11], 132.5, y_offset + 137.5, 0.45, 0.45, DEF_DRAW_BLACK);
-			}
-			*/
 		
 		// tab selector
 		Draw_texture(var_square_image[0], LIGHT1_BACK_COLOR, 0, CONTENT_Y_HIGH, 320, TAB_SELECTOR_HEIGHT);
@@ -1753,8 +1751,8 @@ Intent VideoPlayer_draw(void)
 			else if (i == TAB_SUGGESTIONS) tab_string = LOCALIZED(SUGGESTIONS);
 			else if (i == TAB_COMMENTS) tab_string = LOCALIZED(COMMENTS);
 			else if (i == TAB_CAPTIONS) tab_string = LOCALIZED(CAPTIONS);
+			else if (i == TAB_PLAYBACK) tab_string = LOCALIZED(PLAYBACK);
 			else if (i == TAB_PLAYLIST) tab_string = LOCALIZED(PLAYLIST);
-			else if (i == TAB_ADVANCED) tab_string = LOCALIZED(ADVANCED);
 			font_size *= std::min(1.0, (x_r - x_l) * 0.9 / Draw_get_width(tab_string, font_size, font_size));
 			float y = CONTENT_Y_HIGH + (TAB_SELECTOR_HEIGHT - Draw_get_height(tab_string, font_size, font_size)) / 2 - 3;
 			if (i == selected_tab) y += 1;
@@ -1917,6 +1915,7 @@ Intent VideoPlayer_draw(void)
 				channel_url_pressed = "";
 			}
 		} else if (selected_tab == TAB_CAPTIONS) captions_tab_view->update(key);
+		else if (selected_tab == TAB_PLAYBACK) playback_tab_view->update(key);
 		else if (selected_tab == TAB_PLAYLIST) {
 			playlist_view->update(key);
 			if (suggestion_clicked_url != "") {
@@ -1948,12 +1947,6 @@ Intent VideoPlayer_draw(void)
 				content_height += SMALL_MARGIN * 2;
 				content_height += description_lines.size() * DEFAULT_FONT_INTERVAL;
 				content_height += SMALL_MARGIN * 2;
-			} else if (selected_tab == TAB_ADVANCED) {
-				content_height += DEFAULT_FONT_INTERVAL * 6;
-				if (cur_video_info.is_livestream && network_decoder.ready) content_height += DEFAULT_FONT_INTERVAL;
-				content_height += SMALL_MARGIN + DEFAULT_FONT_INTERVAL + SMALL_MARGIN; // texture filter button
-				content_height += SMALL_MARGIN * 4;
-				content_height += 160;
 			}
 		}
 		auto released_point = scroller[selected_tab].update(key, content_height);
@@ -1961,14 +1954,6 @@ Intent VideoPlayer_draw(void)
 		int released_y = released_point.second;
 		if (selected_tab == TAB_GENERAL) {
 			if (released_x != -1) {
-				// TODO : move these to somewhere else
-				/*
-				if(released_x >= 165 && released_x <= 309 && released_y >= 165 && released_y <= 174)
-				{
-					vid_show_controls = !vid_show_controls;
-					var_need_reflesh = true;
-				}
-				*/
 				int cur_y = 0;
 				cur_y += 15 * title_lines.size() + SMALL_MARGIN + DEFAULT_FONT_INTERVAL * 2;
 				cur_y += SMALL_MARGIN * 2;
@@ -1977,31 +1962,6 @@ Intent VideoPlayer_draw(void)
 					intent.arg = cur_video_info.author.url;
 				}
 			}
-		} else if (selected_tab == TAB_ADVANCED) {
-			int y_offset = 0;
-			y_offset += DEFAULT_FONT_INTERVAL * 6;
-			if (cur_video_info.is_livestream && network_decoder.ready) y_offset += DEFAULT_FONT_INTERVAL;
-			y_offset += SMALL_MARGIN;
-			if (released_x != -1) {
-				// filter button
-				if (released_x >= 15 && released_x < 150 && released_y >= y_offset && released_y < y_offset + DEFAULT_FONT_INTERVAL) {
-					vid_linear_filter = !vid_linear_filter;
-					for(int i = 0; i < 8; i++)
-						Draw_c2d_image_set_filter(&vid_image[i], vid_linear_filter);
-
-					var_need_reflesh = true;
-				}
-				// reload
-				if (released_x >= 170 && released_x < 305 && released_y >= y_offset && released_y < y_offset + DEFAULT_FONT_INTERVAL) {
-					if (!is_async_task_running(load_video_page)) {
-						send_change_video_request(vid_url, true);
-						video_retry_left = MAX_RETRY_CNT;
-					}
-				}
-			}
-			y_offset += DEFAULT_FONT_INTERVAL;
-			y_offset += SMALL_MARGIN * 5;
-			y_offset += 160;
 		}
 		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
@@ -2041,7 +2001,7 @@ Intent VideoPlayer_draw(void)
 				pos += key.p_d_right ? 10 : -10;
 				pos = std::max<double>(0, pos);
 				pos = std::min<double>(vid_duration, pos);
-				send_seek_request_wo_lock(pos * 1000);
+				send_seek_request_wo_lock(pos);
 			}
 		}
 		else if(key.h_touch || key.p_touch)
@@ -2059,12 +2019,13 @@ Intent VideoPlayer_draw(void)
 			if (std::abs(consecutive_scroll) > DPAD_SCROLL_SPEED1_THRESHOLD) scroll_amount = DPAD_SCROLL_SPEED1;
 			if (key.h_c_up) scroll_amount *= -1;
 			
-			if (selected_tab == TAB_GENERAL || selected_tab == TAB_ADVANCED) scroller[selected_tab].scroll(scroll_amount);
+			if (selected_tab == TAB_GENERAL) scroller[selected_tab].scroll(scroll_amount);
 			else if (selected_tab == TAB_SUGGESTIONS) suggestion_view->scroll(scroll_amount);
 			else if (selected_tab == TAB_COMMENTS) comment_all_view->scroll(scroll_amount);
 			else if (selected_tab == TAB_CAPTIONS) {
 				if (captions_tab_view == caption_main_view) caption_main_view->scroll(scroll_amount);
-			} else if (selected_tab == TAB_PLAYLIST) playlist_list_view->scroll(scroll_amount);
+			} else if (selected_tab == TAB_PLAYBACK) playback_tab_view->scroll(scroll_amount);
+			else if (selected_tab == TAB_PLAYLIST) playlist_list_view->scroll(scroll_amount);
 			var_need_reflesh = true;
 		} else consecutive_scroll = 0;
 		

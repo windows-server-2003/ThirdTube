@@ -11,13 +11,13 @@ struct View {
 private :
 	static constexpr double TOUCH_DARKNESS_SPEED = 0.1;
 protected :
-	double x0 = 0;
-	double y0 = 0;
 	std::function<void (View &view)> on_view_released;
 public :
 	View (double x0, double y0) : x0(x0), y0(y0) {}
 	virtual ~View () {}
 	
+	double x0 = 0;
+	double y0 = 0;
 	u32 background_color = 0;
 	bool scrolled = false;
 	int view_holding_time = 0;
@@ -112,12 +112,12 @@ public :
 };
 
 struct FixedWidthView : virtual public View {
-protected :
-	double width = 0;
-	double x1 = 0;
 public :
 	FixedWidthView (double x0, double y0, double width) : View(x0, y0), width(width), x1(x0 + width) {}
 	virtual ~FixedWidthView () {}
+	
+	double width = 0;
+	double x1 = 0;
 	
 	void add_offset(double x_offset, double y_offset) override {
 		View::add_offset(x_offset, y_offset);
@@ -134,12 +134,12 @@ public :
 };
 
 struct FixedHeightView : virtual public View {
-protected :
-	double height = 0;
-	double y1 = 0;
 public :
 	FixedHeightView (double x0, double y0, double height) : View(x0, y0), height(height), y1(y0 + height) {}
 	virtual ~FixedHeightView () {}
+	
+	double height = 0;
+	double y1 = 0;
 	
 	void add_offset(double x_offset, double y_offset) override {
 		View::add_offset(x_offset, y_offset);
