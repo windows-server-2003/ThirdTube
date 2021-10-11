@@ -79,7 +79,7 @@ namespace VideoPlayer {
 	int vid_height_org = 0;
 	int vid_tex_width[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	int vid_tex_height[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-	int vid_mvd_image_num = 0;
+	int vid_mvd_image_num = 0; // write the texture alternately to avoid scattering 
 	std::string vid_url = "";
 	std::string vid_video_format = "n/a";
 	std::string vid_audio_format = "n/a";
@@ -481,7 +481,6 @@ static void load_video_page(void *arg) {
 		if (!std::count(available_qualities.begin(), available_qualities.end(), 360))
 			available_qualities.insert(std::lower_bound(available_qualities.begin(), available_qualities.end(), 360), 360);
 		
-		Util_log_save("yay", std::to_string(available_qualities.size()));
 		video_quality_selector_view->button_texts = { (std::function<std::string ()>) []() { return LOCALIZED(OFF); } };
 		for (auto i : available_qualities) video_quality_selector_view->button_texts.push_back(std::to_string(i) + "p");
 		video_quality_selector_view->button_num = video_quality_selector_view->button_texts.size();
@@ -503,6 +502,7 @@ static void load_video_page(void *arg) {
 				video_p_value = new_p_value;
 			}
 			if (changed) {
+				seek_at_init_request = vid_current_pos;
 				vid_change_video_request = true;
 				if (network_decoder.ready) network_decoder.interrupt = true;
 			}
@@ -952,7 +952,7 @@ static void decode_thread(void* arg)
 					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
 			} else if (cur_video_info.video_stream_urls[(int) video_p_value] != "" && cur_video_info.audio_stream_url != "") {
 				result = network_decoder.init(cur_video_info.video_stream_urls[(int) video_p_value], cur_video_info.audio_stream_url, stream_downloader,
-					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), true);
+					cur_video_info.is_livestream ? cur_video_info.stream_fragment_len : -1, cur_video_info.needs_timestamp_adjusting(), video_p_value == 360);
 			} else {
 				result.code = -1;
 				result.string = "YouTube parser error";
@@ -1272,9 +1272,7 @@ static void convert_thread(void* arg)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 					}
 
-					if (network_decoder.hw_decoder_enabled) {
-						vid_mvd_image_num = !vid_mvd_image_num;
-					}
+					vid_mvd_image_num = !vid_mvd_image_num;
 
 					osTickCounterUpdate(&counter0);
 					vid_copy_time[1] += osTickCounterRead(&counter0);
@@ -1702,7 +1700,7 @@ Intent VideoPlayer_draw(void)
 	Util_hid_query_key_state(&key);
 	Util_hid_key_flag_reset();
 	
-	int image_num = network_decoder.hw_decoder_enabled ? !vid_mvd_image_num : 0;
+	int image_num = !vid_mvd_image_num;
 
 	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 	
