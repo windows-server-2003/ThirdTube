@@ -51,7 +51,7 @@ namespace VideoPlayer {
 	volatile bool vid_pausing_seek = false;
 	volatile bool eof_reached = false;
 	volatile bool audio_only_mode = false;
-	volatile bool video_skip_drawing = true; // for performance reason, enabled when opening keyboard
+	volatile bool video_skip_drawing = false; // for performance reason, enabled when opening keyboard
 	volatile int video_p_value = 360;
 	volatile double seek_at_init_request = -1;
 	double vid_time[2][320];
@@ -1148,6 +1148,8 @@ static void convert_thread(void* arg)
 	Result_with_string result;
 
 	osTickCounterStart(&counter0);
+	
+	y2rInit();
 
 	while (vid_thread_run)
 	{
@@ -1187,7 +1189,7 @@ static void convert_thread(void* arg)
 				
 				osTickCounterUpdate(&counter0);
 				if (!network_decoder.hw_decoder_enabled) {
-					result = Util_converter_yuv420p_to_bgr565(yuv_video, &video, vid_width, vid_height);
+					result = Util_converter_y2r_yuv420p_to_bgr565(yuv_video, &video, vid_width, vid_height, false);
 					video_need_free = true;
 				}
 				osTickCounterUpdate(&counter0);
@@ -1302,6 +1304,8 @@ static void convert_thread(void* arg)
 		while (vid_thread_suspend && !vid_play_request && !vid_change_video_request)
 			usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
 	}
+	
+	y2rExit();
 	
 	Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Thread exit.");
 	threadExit(0);

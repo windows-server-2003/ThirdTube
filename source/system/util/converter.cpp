@@ -1,6 +1,8 @@
 #include "headers.hpp"
 
 extern "C" void memcpy_asm(u8*, u8*, int);
+extern "C" void yuv420p_to_bgr565_asm(u8* yuv420p, u8* bgr565, int width, int height);
+extern "C" void yuv420p_to_bgr888_asm(u8* yuv420p, u8* bgr888, int width, int height);
 
 extern "C" {
 #include "libswscale/swscale.h"
@@ -54,11 +56,51 @@ Result_with_string Util_converter_yuv422_to_bgr565(u8* yuv422, u8** bgr565, int 
 	return result;
 }
 
+Result_with_string Util_converter_yuv422_to_yuv420p(u8* yuv422, u8** yuv420p, int width, int height)
+{
+	int src_line_size[4] = { 0, 0, 0, 0, };
+	int dst_line_size[4] = { 0, 0, 0, 0, };
+	u8* src_data[4] = { NULL, NULL, NULL, NULL, };
+	u8* dst_data[4] = { NULL, NULL, NULL, NULL, };
+	Result_with_string result;
+	SwsContext* sws_context = NULL;
+	
+	sws_context = sws_getContext(width, height, AV_PIX_FMT_YUYV422,
+	width, height, AV_PIX_FMT_YUV420P, 0, 0, 0, 0);
+	if(sws_context == NULL)
+	{
+		result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
+		result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
+		return result;
+	}
+
+	*yuv420p = (u8*)malloc(width * height * 1.5);
+	if(*yuv420p == NULL)
+	{
+		result.code = DEF_ERR_OUT_OF_MEMORY;
+		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
+		return result;
+	}
+
+	src_data[0] = yuv422;
+	src_line_size[0] = width * 2;
+	dst_data[0] = *yuv420p;
+	dst_data[1] = *yuv420p + (width * height);
+	dst_data[2] = *yuv420p + (width * height) + (width * height / 4);
+	dst_line_size[0] = width;
+	dst_line_size[1] = width / 2;
+	dst_line_size[2] = width / 2;
+	
+	sws_scale(sws_context, src_data, src_line_size, 0, 
+	height, dst_data, dst_line_size);
+
+	sws_freeContext(sws_context);
+	return result;
+}
+
 Result_with_string Util_converter_yuv420p_to_bgr565(u8* yuv420p, u8** bgr565, int width, int height)
 {
     int index = 0;
-	/*int uv_pos = 0;
-	int y_pos = 0;*/
     u8* ybase = yuv420p;
     u8* ubase = yuv420p + width * height;
     u8* vbase = yuv420p + width * height + width * height / 4;
@@ -73,87 +115,90 @@ Result_with_string Util_converter_yuv420p_to_bgr565(u8* yuv420p, u8** bgr565, in
 	}
 	
 	u8 Y[4], U, V, r[4], g[4], b[4];
-	if(true)
+	for (int y = 0; y < height; y++)
 	{
-		for (int y = 0; y < height; y++)
+		for (int x = 0; x < width; x++)
 		{
-			for (int x = 0; x < width; x++)
-			{
-					//YYYYYYYYUUVV
-					Y[0] = ybase[x + y * width];
-					U = ubase[y / 2 * width / 2 + (x / 2)];
-					V = vbase[y / 2 * width / 2 + (x / 2)];
-					b[0] = YUV2B(Y[0], U);
-					g[0] = YUV2G(Y[0], U, V);
-					r[0] = YUV2R(Y[0], V);
-					b[0] = b[0] >> 3;
-					g[0] = g[0] >> 2;
-					r[0] = r[0] >> 3;
-					*(*bgr565 + index++) = (g[0] & 0b00000111) << 5 | b[0];
-					*(*bgr565 + index++) = (g[0] & 0b00111000) >> 3 | (r[0] & 0b00011111) << 3;
-			}
+			//YYYYYYYYUUVV
+			Y[0] = ybase[x + y * width];
+			U = ubase[y / 2 * width / 2 + (x / 2)];
+			V = vbase[y / 2 * width / 2 + (x / 2)];
+			b[0] = YUV2B(Y[0], U);
+			g[0] = YUV2G(Y[0], U, V);
+			r[0] = YUV2R(Y[0], V);
+			b[0] = b[0] >> 3;
+			g[0] = g[0] >> 2;
+			r[0] = r[0] >> 3;
+			*(*bgr565 + index++) = (g[0] & 0b00000111) << 5 | b[0];
+			*(*bgr565 + index++) = (g[0] & 0b00111000) >> 3 | (r[0] & 0b00011111) << 3;
 		}
 	}
-	else
+	return result;
+}
+
+Result_with_string Util_converter_yuv420p_to_bgr565_asm(u8* yuv420p, u8** bgr565, int width, int height)
+{
+	Result_with_string result;
+
+	*bgr565 = (u8*)malloc(width * height * 2);
+	if(*bgr565 == NULL)
 	{
-		for (int y = 0; y < height; y++)
+		result.code = DEF_ERR_OUT_OF_MEMORY;
+		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
+		return result;
+	}
+
+	yuv420p_to_bgr565_asm(yuv420p, *bgr565, width, height);
+	return result;
+}
+
+Result_with_string Util_converter_yuv420p_to_bgr888(u8* yuv420p, u8** bgr888, int width, int height)
+{
+    int index = 0;
+    u8* ybase = yuv420p;
+    u8* ubase = yuv420p + width * height;
+    u8* vbase = yuv420p + width * height + width * height / 4;
+	Result_with_string result;
+
+	*bgr888 = (u8*)malloc(width * height * 3);
+	if(*bgr888 == NULL)
+	{
+		result.code = DEF_ERR_OUT_OF_MEMORY;
+		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
+		return result;
+	}
+	
+	u8 Y[4], U, V;
+	for (int y = 0; y < height; y++)
+	{
+		for (int x = 0; x < width; x++)
 		{
-			for (int x = 0; x < width; x += 4)
-			{
-				//YYYYYYYYUUVV
-				/*uv_pos = y / 2 * width / 2 + (x / 2);
-				y_pos = x + y * width;*/
-				U = *ubase++;
-				V = *vbase++;
-				Y[0] = *ybase++;
-				Y[1] = *ybase++;
-				Y[2] = *ybase++;
-				Y[3] = *ybase++;
-
-				/*U = ubase[uv_pos];
-				V = vbase[uv_pos];
-				Y[0] = ybase[y_pos];
-				Y[1] = ybase[y_pos + 1];
-				Y[2] = ybase[y_pos + 2];
-				Y[3] = ybase[y_pos + 3];*/
-
-				b[0] = YUV2B(Y[0], U);
-				g[0] = YUV2G(Y[0], U, V);
-				r[0] = YUV2R(Y[0], V);
-				b[1] = YUV2B(Y[1], U);
-				g[1] = YUV2G(Y[1], U, V);
-				r[1] = YUV2R(Y[1], V);
-				b[2] = YUV2B(Y[2], U);
-				g[2] = YUV2G(Y[2], U, V);
-				r[2] = YUV2R(Y[2], V);
-				b[3] = YUV2B(Y[3], U);
-				g[3] = YUV2G(Y[3], U, V);
-				r[3] = YUV2R(Y[3], V);
-
-				b[0] = b[0] >> 3;
-				g[0] = g[0] >> 2;
-				r[0] = r[0] >> 3;
-				b[1] = b[1] >> 3;
-				g[1] = g[1] >> 2;
-				r[1] = r[1] >> 3;
-				b[2] = b[2] >> 3;
-				g[2] = g[2] >> 2;
-				r[2] = r[2] >> 3;
-				b[3] = b[3] >> 3;
-				g[3] = g[3] >> 2;
-				r[3] = r[3] >> 3;
-
-				*bgr565[index++] = (g[0] & 0b00000111) << 5 | b[0];
-				*bgr565[index++] = (g[0] & 0b00111000) >> 3 | (r[0] & 0b00011111) << 3;
-				*bgr565[index++] = (g[1] & 0b00000111) << 5 | b[1];
-				*bgr565[index++] = (g[1] & 0b00111000) >> 3 | (r[1] & 0b00011111) << 3;
-				*bgr565[index++] = (g[2] & 0b00000111) << 5 | b[2];
-				*bgr565[index++] = (g[2] & 0b00111000) >> 3 | (r[2] & 0b00011111) << 3;
-				*bgr565[index++] = (g[3] & 0b00000111) << 5 | b[3];
-				*bgr565[index++] = (g[3] & 0b00111000) >> 3 | (r[3] & 0b00011111) << 3;
-			}
+			//YYYYYYYYUUVV
+			Y[0] = *ybase++;
+			U = ubase[y / 2 * width / 2 + (x / 2)];
+			V = vbase[y / 2 * width / 2 + (x / 2)];
+			
+			*(*bgr888 + index++) = YUV2B(Y[0], U);
+			*(*bgr888 + index++) = YUV2G(Y[0], U, V);
+			*(*bgr888 + index++) = YUV2R(Y[0], V);
 		}
 	}
+	return result;
+}
+
+Result_with_string Util_converter_yuv420p_to_bgr888_asm(u8* yuv420p, u8** bgr888, int width, int height)
+{
+	Result_with_string result;
+
+	*bgr888 = (u8*)malloc(width * height * 3);
+	if(*bgr888 == NULL)
+	{
+		result.code = DEF_ERR_OUT_OF_MEMORY;
+		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
+		return result;
+	}
+
+	yuv420p_to_bgr888_asm(yuv420p, *bgr888, width, height);
 	return result;
 }
 
@@ -248,88 +293,81 @@ Result_with_string Util_converter_bgr888_to_yuv420p(u8* bgr888, u8** yuv420p, in
 	sws_freeContext(sws_context);
 
 	return result;
+}
 
-	/*Result_with_string result;
-	u8* y_pos = NULL;
-	u8* u_pos = NULL;
-	u8* v_pos = NULL;
-	u8 b, g, r, y, u, v;
+Result_with_string Util_converter_y2r_yuv420p_to_bgr565(u8* yuv420p, u8** bgr565, int width, int height, bool texture_format)
+{
+	bool finished = false;
+	Y2RU_ConversionParams y2r_parameters;
+	Result_with_string result;
 
-	*yuv420p = (u8*)malloc(width * height * 1.5);
-	if(*yuv420p == NULL)
+	*bgr565 = (u8*)malloc(width * height * 2);
+	if(*bgr565 == NULL)
 	{
 		result.code = DEF_ERR_OUT_OF_MEMORY;
 		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
 		return result;
 	}
-	y_pos = *yuv420p;
-	u_pos = *yuv420p + (width * height);
-	v_pos = *yuv420p + (width * height) + (width * height / 4);
 
-	for(int i = 0; i < height; i++)
+	y2r_parameters.input_format = INPUT_YUV420_INDIV_8;
+	y2r_parameters.output_format = OUTPUT_RGB_16_565;
+	y2r_parameters.rotation = ROTATION_NONE;
+	if(texture_format)
+		y2r_parameters.block_alignment = BLOCK_8_BY_8;
+	else
+		y2r_parameters.block_alignment = BLOCK_LINE;
+	y2r_parameters.input_line_width = width;
+	y2r_parameters.input_lines = height;
+	y2r_parameters.standard_coefficient = COEFFICIENT_ITU_R_BT_709_SCALING;
+	y2r_parameters.alpha = 0xFF;
+
+	result.code = Y2RU_SetConversionParams(&y2r_parameters);
+	if(result.code != 0)
 	{
-		for(int k = 0; k < width; k += 4)
-		{
-			b = *bgr888++;
-			g = *bgr888++;
-			r = *bgr888++;
-			y = ((66 * r + 129 * g +  25 * b + 128) >> 8) + 16;
-            u = ((-38 * r -  74 * g + 112 * b + 128) >> 8) + 128 ;
-            v = (( 112 * r -  94 * g -  18 * b + 128) >> 8) + 128;
-			//y = (77 * r + 150 * g + 29 * b) >> 8;
-			//u = ((128 * b - 43 * r -85 * g) >> 8) + 128;
-			//v = ((128 * r - 107 * g -21 * b) >> 8 ) + 128;
-			if(y > 255)
-				y = 255;
-			else if(y < 0)
-				y = 0;
-			if(u > 255)
-				u = 255;
-			else if(u < 0)
-				u = 0;
-			if(v > 255)
-				v = 255;
-			else if(v < 0)
-				v = 0;
-			
-			*y_pos++ = y;
-			*u_pos++ = u;
-			*v_pos++ = v;
-
-			b = *bgr888++;
-			g = *bgr888++;
-			r = *bgr888++;
-			y = ((66 * r + 129 * g +  25 * b + 128) >> 8) + 16;
-			//y = (77 * r + 150 * g + 29 * b) >> 8;
-			if(y > 255)
-				y = 255;
-			else if(y < 0)
-				y = 0;
-			*y_pos++ = y;
-
-			b = *bgr888++;
-			g = *bgr888++;
-			r = *bgr888++;
-			y = ((66 * r + 129 * g +  25 * b + 128) >> 8) + 16;
-			//y = (77 * r + 150 * g + 29 * b) >> 8;
-			if(y > 255)
-				y = 255;
-			else if(y < 0)
-				y = 0;
-			*y_pos++ = y;
-
-			b = *bgr888++;
-			g = *bgr888++;
-			r = *bgr888++;
-			y = ((66 * r + 129 * g +  25 * b + 128) >> 8) + 16;
-			//y = (77 * r + 150 * g + 29 * b) >> 8;
-			if(y > 255)
-				y = 255;
-			else if(y < 0)
-				y = 0;
-			*y_pos++ = y;
-		}
+		result.string = "[Error] Y2RU_SetConversionParams() failed. ";
+		return result;
 	}
-	
-	return result;*/
+
+	result.code = Y2RU_SetSendingY(yuv420p, width * height, width, 0);
+	if(result.code != 0)
+	{
+		result.string = "[Error] Y2RU_SetSendingY() failed. ";
+		return result;
+	}
+
+	result.code = Y2RU_SetSendingU(yuv420p + (width * height), width * height / 4, width / 2, 0);
+	if(result.code != 0)
+	{
+		result.string = "[Error] Y2RU_SetSendingU() failed. ";
+		return result;
+	}
+
+	result.code = Y2RU_SetSendingV(yuv420p + ((width * height) + (width * height / 4)), width * height / 4, width / 2, 0);
+	if(result.code != 0)
+	{
+		result.string = "[Error] Y2RU_SetSendingV() failed. ";
+		return result;
+	}
+
+	result.code = Y2RU_SetReceiving(*bgr565, width * height * 2, width * 2 * 4, 0);
+	if(result.code != 0)
+	{
+		result.string = "[Error] Y2RU_SetReceiving() failed. ";
+		return result;
+	}
+
+	result.code = Y2RU_StartConversion();
+	if(result.code != 0)
+	{
+		result.string = "[Error] Y2RU_StartConversion() failed. ";
+		return result;
+	}
+
+	while(!finished)
+	{
+		Y2RU_IsDoneReceiving(&finished);
+		usleep(1000);
+	}
+
+	return result;
 }
