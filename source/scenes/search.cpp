@@ -302,7 +302,9 @@ static void search() {
 		swkbdSetInitialText(&keyboard, cur_search_word.c_str());
 		char search_word[129];
 		add_cpu_limit(40);
+		video_set_skip_drawing(true);
 		auto button_pressed = swkbdInputText(&keyboard, search_word, 64);
+		video_set_skip_drawing(false);
 		remove_cpu_limit(40);
 		
 		if (button_pressed == SWKBD_BUTTON_RIGHT) {
@@ -329,7 +331,9 @@ static void url_input() {
 		swkbdSetInitialText(&keyboard, last_url_input.c_str());
 		char url[256];
 		add_cpu_limit(40);
+		video_set_skip_drawing(true);
 		auto button_pressed = swkbdInputText(&keyboard, url, 256 - 1);
+		video_set_skip_drawing(false);
 		remove_cpu_limit(40);
 		
 		if (button_pressed == SWKBD_BUTTON_RIGHT) {

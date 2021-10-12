@@ -51,6 +51,7 @@ namespace VideoPlayer {
 	volatile bool vid_pausing_seek = false;
 	volatile bool eof_reached = false;
 	volatile bool audio_only_mode = false;
+	volatile bool video_skip_drawing = true; // for performance reason, enabled when opening keyboard
 	volatile int video_p_value = 360;
 	volatile double seek_at_init_request = -1;
 	double vid_time[2][320];
@@ -162,6 +163,7 @@ bool VideoPlayer_query_init_flag(void)
 {
 	return vid_already_init;
 }
+void video_set_skip_drawing(bool skip) { video_skip_drawing = skip; }
 
 // START : functions called from async_task.cpp
 /* -------------------------------------------------------------------------------------------------------------- */
@@ -1249,30 +1251,32 @@ static void convert_thread(void* arg)
 					osTickCounterUpdate(&counter0);
 					osTickCounterUpdate(&counter1);
 					
-					result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width, vid_height_org, 1024, 1024, GPU_RGB565);
-					if(result.code != 0)
-						Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+					if (!video_skip_drawing) {
+						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 0], video, vid_width, vid_height_org, 1024, 1024, GPU_RGB565);
+						if(result.code != 0)
+							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 
-					if(vid_width > 1024)
-					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width, vid_height_org, 1024, 0, 1024, 1024, GPU_RGB565);
-						if(result.code != 0)
-							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
-					}
-					if(vid_height > 1024)
-					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width, vid_height_org, 0, 1024, 1024, 1024, GPU_RGB565);
-						if(result.code != 0)
-							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
-					}
-					if(vid_width > 1024 && vid_height > 1024)
-					{
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width, vid_height_org, 1024, 1024, 1024, 1024, GPU_RGB565);
-						if(result.code != 0)
-							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
-					}
+						if(vid_width > 1024)
+						{
+							result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 1], video, vid_width, vid_height_org, 1024, 0, 1024, 1024, GPU_RGB565);
+							if(result.code != 0)
+								Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+						}
+						if(vid_height > 1024)
+						{
+							result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 2], video, vid_width, vid_height_org, 0, 1024, 1024, 1024, GPU_RGB565);
+							if(result.code != 0)
+								Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+						}
+						if(vid_width > 1024 && vid_height > 1024)
+						{
+							result = Draw_set_texture_data(&vid_image[vid_mvd_image_num * 4 + 3], video, vid_width, vid_height_org, 1024, 1024, 1024, 1024, GPU_RGB565);
+							if(result.code != 0)
+								Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+						}
 
-					vid_mvd_image_num = !vid_mvd_image_num;
+						vid_mvd_image_num = !vid_mvd_image_num;
+					}
 
 					osTickCounterUpdate(&counter0);
 					vid_copy_time[1] += osTickCounterRead(&counter0);
