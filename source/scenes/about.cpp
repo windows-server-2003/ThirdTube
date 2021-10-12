@@ -32,11 +32,12 @@ namespace About {
 		"License (GPL) v3 or under the terms of",
 		"any later revisions of the GPL.",
 	};
-	const std::vector<std::pair<std::string, std::string> > third_party_licenses = {
-		{"FFmpeg", "by the FFmpeg developers under LGPLv2"},
-		{"json11", "by Dropbox under MIT License"},
-		{"libctru", "by devkitPro under zlib License"},
-		{"stb", "by Sean Barrett under MIT License"}
+	const std::vector<std::pair<std::string, std::vector<std::string> > > third_party_licenses = {
+		{"FFmpeg", {"by the FFmpeg developers under LGPLv2"} },
+		{"json11", {"by Dropbox under MIT License"} },
+		{"libctru", {"by devkitPro under zlib License"} },
+		{"libcurl", {"by Daniel Stenberg and many contributors", "under the curl license"} },
+		{"stb", {"by Sean Barrett under MIT License"} }
 	};
 	
 	int CONTENT_Y_HIGH = 240;
@@ -148,8 +149,11 @@ static void draw_about() {
 		for (auto license : third_party_licenses) {
 			Draw(license.first, SMALL_MARGIN, y_offset, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 			y_offset += DEFAULT_FONT_INTERVAL;
-			Draw(license.second, SMALL_MARGIN * 3, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
-			y_offset += DEFAULT_FONT_INTERVAL + SMALL_MARGIN;
+			for (auto line : license.second) {
+				Draw(line, SMALL_MARGIN * 3, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
+				y_offset += DEFAULT_FONT_INTERVAL;
+			}
+			y_offset += SMALL_MARGIN;
 		}
 	}
 	scroller.draw_slider_bar();
@@ -219,7 +223,8 @@ Intent About_draw(void)
 		// license section
 		content_height += MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 4 + DEFAULT_FONT_INTERVAL * license_lines.size();
 		// third-party licenses section
-		content_height += MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 4 + (DEFAULT_FONT_INTERVAL * 2 + SMALL_MARGIN) * third_party_licenses.size();
+		content_height += MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 4;
+		for (auto license : third_party_licenses) content_height += (DEFAULT_FONT_INTERVAL + SMALL_MARGIN) + DEFAULT_FONT_INTERVAL * license.second.size();
 		// for the additional margin below the content
 		content_height += SMALL_MARGIN * 2;
 		
