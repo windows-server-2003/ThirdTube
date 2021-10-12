@@ -1713,7 +1713,7 @@ Intent VideoPlayer_draw(void)
 	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 	
 	//fit to screen size
-	vid_zoom = std::min(400.0 / vid_width_org, (var_full_screen_mode ? 240.0 : 225.0) / vid_height_org);
+	vid_zoom = std::min(401.0 / vid_width_org, (var_full_screen_mode ? 241.0 : 226.0) / vid_height_org);
 	vid_zoom = std::min(10.0, std::max(0.05, vid_zoom));
 	vid_x = (400 - (vid_width_org * vid_zoom)) / 2;
 	vid_y = ((var_full_screen_mode ? 240 : 225) - (vid_height_org * vid_zoom)) / 2;
