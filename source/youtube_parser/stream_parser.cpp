@@ -28,7 +28,7 @@ static Json initial_player_response(const std::string &html) {
 }
 
 static std::map<std::string, yt_cipher_transform_procedure> cipher_transform_proc_cache;
-static std::map<std::string, yt_nparam_transform_procedure> nparam_transform_proc_cache;
+static std::map<std::string, std::string> nparam_transform_function_cache;
 static std::map<std::pair<std::string, std::string>, std::string> nparam_transform_results_cache;
 static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	Json player_response = initial_player_response(html);
@@ -61,7 +61,7 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 		}
 	}
 	js_url = "https://m.youtube.com" + js_url;
-	if (!cipher_transform_proc_cache.count(js_url) || !nparam_transform_proc_cache.count(js_url)) {
+	if (!cipher_transform_proc_cache.count(js_url) || !nparam_transform_function_cache.count(js_url)) {
 		std::string js_id;
 		std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
 		std::smatch match_res;
@@ -77,7 +77,7 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 		if (buf && Util_file_load_from_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) buf, 0x4000 - 1, &read_size).code == 0) {
 			debug("cache found (" + js_id + ") size:" + std::to_string(read_size) + " found, using...");
 			buf[read_size] = '\0';
-			if (yt_procs_from_string(buf, cipher_transform_proc_cache[js_url], nparam_transform_proc_cache[js_url])) cache_used = true;
+			if (yt_procs_from_string(buf, cipher_transform_proc_cache[js_url], nparam_transform_function_cache[js_url])) cache_used = true;
 			else debug("failed to load cache");
 		}
 		free(buf);
@@ -89,9 +89,9 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 				return false;
 			}
 			cipher_transform_proc_cache[js_url] = yt_cipher_get_transform_plan(js_content);
-			nparam_transform_proc_cache[js_url] = yt_nparam_get_transform_plan(js_content);
+			nparam_transform_function_cache[js_url] = yt_nparam_get_function_content(js_content);
 #ifndef _WIN32
-			auto cache_str = yt_procs_to_string(cipher_transform_proc_cache[js_url], nparam_transform_proc_cache[js_url]);
+			auto cache_str = yt_procs_to_string(cipher_transform_proc_cache[js_url], nparam_transform_function_cache[js_url]);
 			Result_with_string result = Util_file_save_to_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) cache_str.c_str(), cache_str.size(), true);
 			if (result.code != 0) debug("cache write failed : " + result.error_description);
 #endif
@@ -114,7 +114,7 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 			auto cur_n = match_result[1].str();
 			std::string next_n;
 			if (!nparam_transform_results_cache.count({js_url, cur_n})) {
-				next_n = yt_modify_nparam(match_result[1].str(), nparam_transform_proc_cache[js_url]);
+				next_n = yt_modify_nparam(match_result[1].str(), nparam_transform_function_cache[js_url]);
 				nparam_transform_results_cache[{js_url, cur_n}] = next_n;
 			} else next_n = nparam_transform_results_cache[{js_url, cur_n}];
 			url = std::string(url.cbegin(), match_result[1].first) + next_n + std::string(match_result[1].second, url.cend());
