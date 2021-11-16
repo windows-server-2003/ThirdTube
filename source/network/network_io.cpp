@@ -464,6 +464,7 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 	std::map<std::string, std::string> request_headers, const std::string &body, bool follow_redirect) {
 	
 	NetworkResult res;
+	res.redirected_url = url;
 	
 	if (!session_list.inited) {
 		res.fail = true;
@@ -597,10 +598,8 @@ NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url,
 	NetworkResult result;
 	while (1) {
 		result = access_http_internal(session_list, "GET", url , request_headers, "", follow_redirect);
-		if (result.status_code / 100 != 3) {
-			result.redirected_url = url;
-			return result;
-		}
+		if (result.status_code / 100 != 3) return result;
+		
 		Util_log_save("http", "redir");
 		if (!follow_redirect) {
 			result.redirected_url = result.get_header("Location");
