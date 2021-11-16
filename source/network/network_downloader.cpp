@@ -1,7 +1,6 @@
 #include "headers.hpp"
 #include "network/network_downloader.hpp"
 #include "network/network_io.hpp"
-#include <cassert>
 
 
 // --------------------------------
@@ -37,9 +36,9 @@ std::vector<u8> NetworkStream::get_data(u64 start, u64 size) {
 	
 	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
 	auto itr = downloaded_data.find(start_block);
-	assert(itr != downloaded_data.end());
+	my_assert(itr != downloaded_data.end());
 	for (u64 block = start_block; block <= end_block; block++) {
-		assert(itr->first == block);
+		my_assert(itr->first == block);
 		u64 cur_l = std::max(start, block * BLOCK_SIZE) - block * BLOCK_SIZE;
 		u64 cur_r = std::min(end + 1, (block + 1) * BLOCK_SIZE) - block * BLOCK_SIZE;
 		res.insert(res.end(), itr->second.begin() + cur_l, itr->second.begin() + cur_r);

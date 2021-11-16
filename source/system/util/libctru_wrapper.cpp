@@ -25,3 +25,11 @@ void linearFree_concurrent(void *ptr) {
 	linearFree(ptr);
 	release();
 }
+
+
+void my_assert(bool condition) {
+	if (!condition) {
+		volatile int *pointer = NULL;
+		*pointer = 100;
+	}
+}

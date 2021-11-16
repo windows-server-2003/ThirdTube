@@ -128,6 +128,10 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	return result;
 	
 	cleanup :
+	tmp_ffmpeg_data.deinit(false);
+	if (video_session_list.inited) video_session_list.close_sessions();
+	if (audio_session_list.inited) audio_session_list.close_sessions();
+	if (both_session_list.inited) both_session_list.close_sessions();
 	for (auto stream : streams) stream->quit_request = true;
 	return result;
 }

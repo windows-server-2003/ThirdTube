@@ -1,6 +1,5 @@
 #include "headers.hpp"
 #include "network/network_io.hpp"
-#include <cassert>
 #include <deque>
 
 #include <fcntl.h>

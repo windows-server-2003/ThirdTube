@@ -993,7 +993,7 @@ static void decode_thread(void* arg)
 					vid_framerate = tmp.framerate;
 					vid_video_format = tmp.format_name;
 					vid_duration = tmp.duration;
-					vid_frametime = 1000.0 / vid_framerate;;
+					vid_frametime = 1000.0 / vid_framerate;
 
 					if(vid_width % 16 != 0)
 						vid_width += 16 - vid_width % 16;
