@@ -153,14 +153,10 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	}
 	// audio
 	{
-		int max_bitrate = -1;
-		for (auto i : audio_formats) {
-			int cur_bitrate = i["bitrate"].int_value();
-			if (max_bitrate < cur_bitrate) {
-				max_bitrate = cur_bitrate;
-				res.audio_stream_url = i["url"].string_value();
-			}
-		}
+		res.audio_stream_url = "";
+		for (auto i : audio_formats) if (i["itag"].int_value() == 140) res.audio_stream_url = i["url"].string_value();
+		
+		if (res.audio_stream_url == "" && audio_formats.size()) res.audio_stream_url = audio_formats[0]["url"].string_value();
 	}
 	// video
 	{
