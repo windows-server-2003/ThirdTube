@@ -142,6 +142,7 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 		if (i["approxDurationMs"].string_value() != "")
 			res.duration_ms = stoll(i["approxDurationMs"].string_value());
 		
+		if (i["type"].string_value() == "FORMAT_STREAM_TYPE_OTF") continue;
 		auto mime_type = i["mimeType"].string_value();
 		if (mime_type.substr(0, 5) == "video") {
 			// H.264 is virtually the only playable video codec
