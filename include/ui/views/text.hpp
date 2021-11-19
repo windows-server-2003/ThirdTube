@@ -53,12 +53,16 @@ public :
 	void draw_() const override {
 		int y = y_centered ? (int)((y0 + y1 - interval * text.size()) / 2) : y0;
 		if (x_centered) {
-			for (size_t i = 0; i < text.size(); i++) 
+			for (size_t i = 0; i < text.size(); i++) {
+				if (y + i * interval + text_y_offset > 240 || y + i * interval + text_y_offset < -50) continue;
 				Draw_x_centered(text[i], x0 + SMALL_MARGIN + text_x_offset, x1 - SMALL_MARGIN + text_x_offset, y + i * interval + text_y_offset,
 					font_size, font_size, get_text_color());
+			}
 		} else {
-			for (size_t i = 0; i < text.size(); i++) 
+			for (size_t i = 0; i < text.size(); i++) {
+				if (y + i * interval + text_y_offset > 240 || y + i * interval + text_y_offset < -50) continue;
 				Draw(text[i], x0 + SMALL_MARGIN + text_x_offset, y + i * interval + text_y_offset, font_size, font_size, get_text_color());
+			}
 		}
 	}
 	void update_(Hid_info key) override {}

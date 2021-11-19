@@ -72,6 +72,5 @@ public :
 		}
 	}
 	void update_(Hid_info key) override {
-		
 	}
 };

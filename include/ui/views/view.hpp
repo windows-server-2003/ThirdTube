@@ -12,6 +12,7 @@ private :
 	static constexpr double TOUCH_DARKNESS_SPEED = 0.1;
 protected :
 	std::function<void (View &view)> on_view_released;
+	std::function<void (View &view)> on_drawn;
 public :
 	View (double x0, double y0) : x0(x0), y0(y0) {}
 	virtual ~View () {}
@@ -31,6 +32,10 @@ public :
 	
 	virtual View *set_on_view_released(std::function<void (View &view)> on_view_released) {
 		this->on_view_released = on_view_released;
+		return this;
+	}
+	virtual View *set_on_drawn(std::function<void (View &view)> on_drawn) {
+		this->on_drawn = on_drawn;
 		return this;
 	}
 	virtual View *set_background_color(u32 color) {
@@ -83,6 +88,7 @@ public :
 	virtual void draw_() const = 0;
 	void draw(double x_offset, double y_offset) {
 		add_offset(x_offset, y_offset);
+		if (on_drawn) on_drawn(*this);
 		draw();
 		add_offset(-x_offset, -y_offset);
 	}
