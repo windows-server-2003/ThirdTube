@@ -56,6 +56,7 @@ void load_subscription() {
 				if (!valid) Util_log_save("subsc/load", "invalid channel, ignoring...");
 				else loaded_channels.push_back(cur_channel);
 			}
+			std::sort(loaded_channels.begin(), loaded_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
 			lock();
 			subscribed_channels = loaded_channels;
 			release();
@@ -119,6 +120,7 @@ void subscription_subscribe(const SubscriptionChannel &new_channel) {
 		break;
 	}
 	if (!found) subscribed_channels.push_back(new_channel);
+	std::sort(subscribed_channels.begin(), subscribed_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
 	release();
 }
 void subscription_unsubscribe(const std::string &id) {
@@ -126,6 +128,7 @@ void subscription_unsubscribe(const std::string &id) {
 	std::vector<SubscriptionChannel> new_subscribed_channels;
 	for (auto channel : subscribed_channels) if (channel.id != id) new_subscribed_channels.push_back(channel);
 	subscribed_channels = new_subscribed_channels;
+	std::sort(subscribed_channels.begin(), subscribed_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
 	release();
 }
 
