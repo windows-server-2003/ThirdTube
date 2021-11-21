@@ -197,6 +197,21 @@ static void load_channel(void *) {
 	}
 	Util_log_save("channel", "truncate end");
 	
+	// update metadata if it's subscribed
+	if (subscription_is_subscribed(result.id) && result.name != "") {
+		SubscriptionChannel new_info;
+		new_info.id = result.id;
+		new_info.url = result.url;
+		new_info.name = result.name;
+		new_info.icon_url = result.icon_url;
+		new_info.subscriber_count_str = result.subscriber_count_str;
+		subscription_unsubscribe(result.id);
+		subscription_subscribe(new_info);
+		
+		misc_tasks_request(TASK_SAVE_SUBSCRIPTION);
+		var_need_reflesh = true;
+	}
+	
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	channel_info = result;

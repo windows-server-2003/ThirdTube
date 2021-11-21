@@ -44,6 +44,10 @@ static std::map<std::string, int> thumbnail_free_time;
 struct URLStatus {
 	std::set<int> handles;
 	bool is_loaded = false;
+	bool error = false;
+	bool waiting_retry = false;
+	time_t next_retry;
+	int last_status_code = -2;
 	LoadedThumbnail data;
 	ThumbnailType type;
 };
@@ -119,6 +123,7 @@ void thumbnail_set_priorities(const std::vector<std::pair<int, int> > &priority_
 void thumbnail_set_active_scene(SceneType type) {
 	active_scene = type;
 }
+
 bool thumbnail_is_available(const std::string &url) {
 	if (url == "") return false;
 	lock();
@@ -130,6 +135,19 @@ bool thumbnail_is_available(int handle) {
 	if (handle == -1) return false;
 	return thumbnail_is_available(requests[handle].url); // TODO : lock
 }
+
+int thumbnail_get_status_code(const std::string &url) {
+	if (url == "") return false;
+	lock();
+	int res = requested_urls.count(url) ? requested_urls[url].last_status_code : -2;
+	release();
+	return res;
+}
+int thumbnail_get_status_code(int handle) {
+	if (handle == -1) return false;
+	return thumbnail_get_status_code(requests[handle].url);
+}
+
 bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len) {
 	if (handle == -1) return false;
 	bool res;
@@ -144,39 +162,47 @@ bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len
 	return res;
 }
 
-static std::vector<u8> http_get(const std::string &url) {
+static std::vector<u8> http_get(const std::string &url, int &status_code) {
 	std::vector<u8> res;
 	lock();
 	if (thumbnail_cache.count(url)) res = thumbnail_cache[url];
 	release();
 	
-	if (res.size()) return res;
+	if (res.size()) {
+		status_code = 0;
+		return res;
+	}
 	
 	confirm_thread_network_session_list_inited();
 	if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) add_cpu_limit(30);
 	auto result = Access_http_get(thread_network_session_list, url, {});
 	if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) remove_cpu_limit(30);
-	if (result.fail) Util_log_save("thumb-dl", "access fail : " + result.error);
-	else if (result.data.size()) {
-		lock();
-		if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX) {
-			std::string erase_url;
-			int min_time = 1000000000;
-			for (auto &item : thumbnail_cache) {
-				if (!thumbnail_free_time.count(item.first)) continue;
-				int cur_time = thumbnail_free_time[item.first];
-				if (min_time > cur_time) {
-					min_time = cur_time;
-					erase_url = item.first;
+	if (result.fail) {
+		status_code = -1;
+		Util_log_save("thumb-dl", "access fail : " + result.error);
+	} else {
+		if (result.data.size()) {
+			lock();
+			if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX) {
+				std::string erase_url;
+				int min_time = 1000000000;
+				for (auto &item : thumbnail_cache) {
+					if (!thumbnail_free_time.count(item.first)) continue;
+					int cur_time = thumbnail_free_time[item.first];
+					if (min_time > cur_time) {
+						min_time = cur_time;
+						erase_url = item.first;
+					}
 				}
+				if (erase_url != "") thumbnail_cache.erase(erase_url);
 			}
-			if (erase_url != "") thumbnail_cache.erase(erase_url);
+			thumbnail_cache[url] = result.data;
+			
+			if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) Util_log_save("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
+			
+			release();
 		}
-		thumbnail_cache[url] = result.data;
-		
-		if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) Util_log_save("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
-		
-		release();
+		status_code = result.status_code;
 	}
 	result.finalize();
 	return result.data;
@@ -192,6 +218,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 			int max_priority = -1;
 			for (auto &i : requested_urls) {
 				if (i.second.is_loaded) continue;
+				if (i.second.error && (!i.second.waiting_retry || time(NULL) < i.second.next_retry)) continue;
 				int cur_url_priority = 0;
 				for (auto handle : i.second.handles) {
 					int cur_priority = requests[handle].priority;
@@ -214,7 +241,8 @@ void thumbnail_downloader_thread_func(void *arg) {
 			continue;
 		}
 		// Util_log_save("thumb-dl", "size:" + std::to_string(requests.size()));
-		auto encoded_data = http_get(next_url);
+		int status_code;
+		auto encoded_data = http_get(next_url, status_code);
 		
 		int w, h;
 		u8 *decoded_data = Image_decode(&encoded_data[0], encoded_data.size(), &w, &h);
@@ -275,7 +303,20 @@ void thumbnail_downloader_thread_func(void *arg) {
 			}
 			free(decoded_data);
 			decoded_data = NULL;
-		} else Util_log_save("thumb-dl", "Image_decode() failed");
+		} else {
+			lock();
+			if (requested_urls.count(next_url)) {
+				requested_urls[next_url].is_loaded = false;
+				requested_urls[next_url].error = true;
+				if (status_code / 100 != 4) {
+					requested_urls[next_url].waiting_retry = true;
+					requested_urls[next_url].next_retry = time(NULL) + 3;
+				} else requested_urls[next_url].waiting_retry = false;
+				requested_urls[next_url].last_status_code = status_code;
+			}
+			release();
+			Util_log_save("thumb-dl", "Image_decode() failed (http code : " + std::to_string(status_code) + ")");
+		}
 	}
 	
 	lock();

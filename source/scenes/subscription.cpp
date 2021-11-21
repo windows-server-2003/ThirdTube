@@ -147,6 +147,21 @@ static void load_subscription_feed(void *) {
 		auto result = youtube_parse_channel_page(channel.url);
 		remove_cpu_limit(35);
 		
+		// update the subscription metadata at the same time
+		if (result.name != "") {
+			SubscriptionChannel new_info;
+			new_info.id = result.id;
+			new_info.url = result.url;
+			new_info.name = result.name;
+			new_info.icon_url = result.icon_url;
+			new_info.subscriber_count_str = result.subscriber_count_str;
+			subscription_unsubscribe(result.id);
+			subscription_subscribe(new_info);
+		}
+		
+		misc_tasks_request(TASK_SAVE_SUBSCRIPTION);
+		var_need_reflesh = true;
+		
 		for (auto video : result.videos) {
 			std::string date_number_str;
 			for (auto c : video.publish_date) if (isdigit(c)) date_number_str.push_back(c);
@@ -208,7 +223,11 @@ static void load_subscription_feed(void *) {
 		}
 	}
 	
+	misc_tasks_request(TASK_SAVE_SUBSCRIPTION);
+	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	update_subscribed_channels(get_subscribed_channels());
+	
 	for (auto view : feed_videos_view->views) thumbnail_cancel_request(dynamic_cast<SuccinctVideoView *>(view)->thumbnail_handle);
 	feed_videos_view->recursive_delete_subviews();
 	video_thumbnail_request_l = video_thumbnail_request_r = 0;

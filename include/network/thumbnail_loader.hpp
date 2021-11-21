@@ -20,6 +20,8 @@ void thumbnail_set_active_scene(SceneType type);
 
 bool thumbnail_is_available(const std::string &url);
 bool thumbnail_is_available(int handle);
+int thumbnail_get_status_code(const std::string &url);
+int thumbnail_get_status_code(int handle);
 
 bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len);
 
