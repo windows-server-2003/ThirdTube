@@ -24,8 +24,6 @@ namespace WatchHistory {
 	std::vector<HistoryVideo> watch_history;
 	std::string clicked_url;
 	std::string erase_request;
-	int thumbnail_request_l = 0;
-	int thumbnail_request_r = 0;
 	
 	int cur_sort_type = 0;
 	int sort_request = -1;
@@ -38,23 +36,50 @@ namespace WatchHistory {
 };
 using namespace WatchHistory;
 
-bool History_query_init_flag(void) {
-	return already_init;
+static void update_watch_history(const std::vector<HistoryVideo> &new_watch_history);
+
+void History_init(void) {
+	Util_log_save("history/init", "Initializing...");
+	
+	on_long_tap_dialog = new OverlayView(0, 0, 320, 240);
+	on_long_tap_dialog->set_is_visible(false);
+	
+	History_resume("");
+	already_init = true;
 }
+void History_exit(void) {
+	already_init = false;
+	thread_suspend = false;
+	exiting = true;
+	
+	Util_log_save("history/exit", "Exited.");
+}
+void History_suspend(void) {
+	thread_suspend = true;
+}
+void History_resume(std::string arg) {
+	(void) arg;
+	
+	if (main_view) main_view->on_resume();
+	overlay_menu_on_resume();
+	thread_suspend = false;
+	var_need_reflesh = true;
+	
+	update_watch_history(get_watch_history());
+}
+
+
 
 static void update_watch_history(const std::vector<HistoryVideo> &new_watch_history) {
 	watch_history = new_watch_history;
-	
-	// clean up previous views and thumbnail requests
-	if (video_list_view) for (auto view : video_list_view->views)
-		thumbnail_cancel_request(dynamic_cast<SuccinctVideoView *>(view)->thumbnail_handle);
-	thumbnail_request_l = thumbnail_request_r = 0;
 	
 	if (main_view) main_view->recursive_delete_subviews();
 	delete main_view;
 	
 	// prepare new views
-	video_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN);
+	video_list_view = (new VerticalListView(0, 0, 320))
+		->set_margin(SMALL_MARGIN)
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
 	for (auto i : watch_history) {
 		std::string view_count_str;
 		{
@@ -136,44 +161,6 @@ static void update_watch_history(const std::vector<HistoryVideo> &new_watch_hist
 		});
 }
 
-
-void History_resume(std::string arg)
-{
-	(void) arg;
-	
-	if (main_view) main_view->on_resume();
-	overlay_menu_on_resume();
-	thread_suspend = false;
-	var_need_reflesh = true;
-	
-	update_watch_history(get_watch_history());
-}
-
-void History_suspend(void)
-{
-	thread_suspend = true;
-}
-
-void History_init(void)
-{
-	Util_log_save("history/init", "Initializing...");
-	
-	on_long_tap_dialog = new OverlayView(0, 0, 320, 240);
-	on_long_tap_dialog->set_is_visible(false);
-	
-	History_resume("");
-	already_init = true;
-}
-
-void History_exit(void)
-{
-	already_init = false;
-	thread_suspend = false;
-	exiting = true;
-	
-	Util_log_save("history/exit", "Exited.");
-}
-
 Intent History_draw(void)
 {
 	Intent intent;
@@ -188,43 +175,6 @@ Intent History_draw(void)
 	CONTENT_Y_HIGHT = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
 	main_view->update_y_range(0, CONTENT_Y_HIGHT);
 	
-	
-	// thumbnail request update
-	int result_num = watch_history.size();
-	if (result_num) {
-		int item_interval = VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN;
-		int displayed_l = std::min(result_num, main_view->get_offset() / item_interval);
-		int displayed_r = std::min(result_num, (main_view->get_offset() + CONTENT_Y_HIGHT - 1) / item_interval + 1);
-		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-		int request_target_r = std::min(result_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
-		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
-		std::set<int> new_indexes, cancelling_indexes;
-		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancelling_indexes.insert(i);
-		for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
-		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) new_indexes.erase(i);
-		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
-		
-		for (auto i : cancelling_indexes) {
-			auto *cur_view = dynamic_cast<SuccinctVideoView *>(video_list_view->views[i]);
-			thumbnail_cancel_request(cur_view->thumbnail_handle);
-			cur_view->thumbnail_handle = -1;
-		}
-		for (auto i : new_indexes) {
-			auto *cur_view = dynamic_cast<SuccinctVideoView *>(video_list_view->views[i]);
-			cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url,
-				SceneType::HISTORY, 0, ThumbnailType::VIDEO_THUMBNAIL);
-		}
-		
-		thumbnail_request_l = request_target_l;
-		thumbnail_request_r = request_target_r;
-		
-		std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-		for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] =
-			{dynamic_cast<SuccinctVideoView *>(video_list_view->views[i])->thumbnail_handle, 500 - dist(i)};
-		thumbnail_set_priorities(priority_list);
-	}
-
 	if(var_need_reflesh || !var_eco_mode)
 	{
 		var_need_reflesh = false;

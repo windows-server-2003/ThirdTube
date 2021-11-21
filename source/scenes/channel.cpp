@@ -41,7 +41,12 @@ namespace Channel {
 		ImageView *banner_view;
 		ChannelView *channel_view;
 		Tab2View *tab_view;
-			VerticalListView *video_list_view;
+			// anonymous VerticalListView
+				VerticalListView *video_list_view;
+				TextView *video_load_more_view;
+			// anonymous VerticalListView
+				VerticalListView *playlist_list_view;
+				TextView *playlist_load_more_view;
 			VerticalListView *info_view;
 	
 	TextView *load_more_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))->set_x_centered(true);
@@ -52,10 +57,90 @@ namespace Channel {
 	std::string cur_channel_url;
 	YouTubeChannelDetail channel_info;
 	std::map<std::string, YouTubeChannelDetail> channel_info_cache;
-	int thumbnail_request_l = 0;
-	int thumbnail_request_r = 0;
 };
 using namespace Channel;
+
+static bool send_load_request(std::string url);
+static void load_channel(void *);
+static void load_channel_more(void *);
+static void load_channel_playlists(void *);
+
+void Channel_init(void)
+{
+	Util_log_save("channel/init", "Initializing...");
+	Result_with_string result;
+	
+	svcCreateMutex(&resource_lock, false);
+	
+	
+	banner_view = new ImageView(0, 0, 320, BANNER_HEIGHT);
+	channel_view = new ChannelView(0, 0, 320, CHANNEL_ICON_SIZE + SMALL_MARGIN * 2);
+	video_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
+	video_load_more_view = (new TextView(0, 0, 320, 0));
+	video_load_more_view
+		->set_text((std::function<std::string ()>) [] () { return
+			channel_info.error != "" ? channel_info.error : channel_info.has_continue() ? LOCALIZED(LOADING) : "";
+		})
+		->set_x_centered(true)
+		->set_on_drawn([] (const View &) {
+			if (channel_info.has_continue() && channel_info.error == "") {
+				if (!is_async_task_running(load_channel) &&
+					!is_async_task_running(load_channel_more)) queue_async_task(load_channel_more, NULL);
+			}
+		});
+	playlist_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
+	playlist_load_more_view = (new TextView(0, 0, 320, 0))
+		->set_x_centered(true);
+	info_view = (new VerticalListView(0, 0, 320));
+	tab_view = (new Tab2View(0, 0, 320))->set_tab_texts({
+		(std::function<std::string ()>) [] () { return LOCALIZED(VIDEOS); },
+		(std::function<std::string ()>) [] () { return LOCALIZED(PLAYLISTS); },
+		(std::function<std::string ()>) [] () { return LOCALIZED(INFO); }
+	})->set_views({
+		(new VerticalListView(0, 0, 320))->set_views({video_list_view, video_load_more_view}),
+		(new VerticalListView(0, 0, 320))->set_views({playlist_list_view, playlist_load_more_view}),
+		info_view
+	});
+	
+	Channel_resume("");
+	already_init = true;
+}
+
+void Channel_exit(void)
+{
+	already_init = false;
+	thread_suspend = false;
+	exiting = true;
+	
+	delete main_view;
+	main_view = NULL;
+	delete banner_view;
+	banner_view = NULL;
+	delete channel_view;
+	channel_view = NULL;
+	tab_view->recursive_delete_subviews();
+	delete tab_view;
+	tab_view = NULL;
+	video_list_view = NULL;
+	playlist_list_view = NULL;
+	info_view = NULL;
+	delete load_more_view;
+	load_more_view = NULL;
+	
+	Util_log_save("search/exit", "Exited.");
+}
+
+void Channel_resume(std::string arg)
+{
+	if (arg != "" && arg != cur_channel_url) send_load_request(arg);
+	overlay_menu_on_resume();
+	main_view->on_resume();
+	thread_suspend = false;
+	var_need_reflesh = true;
+}
+
+void Channel_suspend(void) { thread_suspend = true; }
+
 
 View *video2view(const YouTubeVideoSuccinct &video) {
 	return (new SuccinctVideoView(0, 0, 320, VIDEO_LIST_THUMBNAIL_HEIGHT))
@@ -64,12 +149,19 @@ View *video2view(const YouTubeVideoSuccinct &video) {
 		->set_auxiliary_lines({video.publish_date, video.views_str})
 		->set_bottom_right_overlay(video.duration_text)
 		->set_get_background_color(View::STANDARD_BACKGROUND)
-		->set_on_view_released([video] (View &view) { clicked_url = video.thumbnail_url; });
+		->set_on_view_released([video] (View &) { clicked_url = video.url; });
+}
+View *playlist2view(const YouTubePlaylistSuccinct &playlist) {
+	return (new SuccinctVideoView(0, 0, 320, VIDEO_LIST_THUMBNAIL_HEIGHT))
+		->set_title_lines(truncate_str(playlist.title, 320 - (VIDEO_LIST_THUMBNAIL_WIDTH + 3), 2, 0.5, 0.5))
+		->set_thumbnail_url(playlist.thumbnail_url)
+		->set_auxiliary_lines({playlist.video_count_str})
+		->set_is_playlist(true)
+		->set_get_background_color(View::STANDARD_BACKGROUND)
+		->set_on_view_released([playlist] (View &) { clicked_url = playlist.url; });
 }
 
-void load_channel_more(void *);
-
-void load_channel(void *) {
+static void load_channel(void *) {
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	auto url = cur_channel_url;
 	YouTubeChannelDetail result;
@@ -90,21 +182,6 @@ void load_channel(void *) {
 	Util_log_save("channel", "truncate start");
 	std::vector<View *> video_views;
 	for (auto video : result.videos) video_views.push_back(video2view(video));
-	if (result.error != "" || result.has_continue())
-		video_views.push_back((new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))
-			->set_text((std::function<std::string ()>) [] () { return
-				channel_info.error != "" ? channel_info.error : channel_info.has_continue() ? LOCALIZED(LOADING) : "";
-			})
-			->set_x_centered(true)
-			->set_on_drawn([] (const View &) {
-				if (channel_info.has_continue() && channel_info.error == "") {
-					if (!is_async_task_running(load_channel) &&
-						!is_async_task_running(load_channel_more)) queue_async_task(load_channel_more, NULL);
-				}
-			})
-		);
-	else 
-		video_views.push_back(new TextView(0, 0, 320, 0));
 	std::vector<std::string> description_lines;
 	{
 		std::string cur_str;
@@ -154,13 +231,26 @@ void load_channel(void *) {
 		->set_get_is_subscribed([] () { return subscription_is_subscribed(channel_info.id); })
 		->set_icon_handle(thumbnail_request(channel_info.icon_url, SceneType::CHANNEL, 1001, ThumbnailType::ICON));
 	// video list
-	for (auto view : video_list_view->views) {
-		auto *cur_view = dynamic_cast<SuccinctVideoView *>(view);
-		if (cur_view) thumbnail_cancel_request(cur_view->thumbnail_handle); // ignore the "load more" view
-	}
 	video_list_view->recursive_delete_subviews();
 	video_list_view->set_views(video_views);
-	thumbnail_request_l = thumbnail_request_r = 0;
+	if (result.error != "" || result.has_continue()) {
+		video_load_more_view->update_y_range(0, DEFAULT_FONT_INTERVAL * 2);
+		video_load_more_view->set_is_visible(true);
+	} else {
+		video_load_more_view->update_y_range(0, 0);
+		video_load_more_view->set_is_visible(false);
+	}
+	// playlist list
+	playlist_list_view->recursive_delete_subviews();
+	playlist_load_more_view
+		->set_text((std::function<std::string ()>) [] () { return channel_info.error != "" ? channel_info.error : LOCALIZED(LOADING); })
+		->update_y_range(0, DEFAULT_FONT_INTERVAL * 2)
+		->set_on_drawn([] (const View &) {
+			if (channel_info.error == "") {
+				if (!is_async_task_running(load_channel) &&
+					!is_async_task_running(load_channel_playlists)) queue_async_task(load_channel_playlists, NULL);
+			}
+		});
 	// video info
 	info_view->recursive_delete_subviews();
 	info_view->set_views({
@@ -178,7 +268,7 @@ void load_channel(void *) {
 	var_need_reflesh = true;
 	svcReleaseMutex(resource_lock);
 }
-void load_channel_more(void *) {
+static void load_channel_more(void *) {
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	auto prev_result = channel_info;
 	svcReleaseMutex(resource_lock);
@@ -198,17 +288,43 @@ void load_channel_more(void *) {
 		channel_info = new_result;
 		channel_info_cache[channel_info.url_original] = channel_info;
 	}
-	// the last one is the "load more" view
-	my_assert(video_list_view->views.size());
-	TextView *load_more_view = dynamic_cast<TextView *>(video_list_view->views.back());
-	Util_log_save("debug", std::to_string(channel_info.has_continue()));
+	video_list_view->views.insert(video_list_view->views.end(), new_video_views.begin(), new_video_views.end());
 	if (channel_info.error != "" || channel_info.has_continue()) {
-		load_more_view->set_text((std::function<std::string ()>) [] () { return
-			channel_info.error != "" ? channel_info.error : channel_info.has_continue() ? LOCALIZED(LOADING) : "";
-		});
-		load_more_view->update_y_range(0, DEFAULT_FONT_INTERVAL);
-	} else load_more_view->update_y_range(0, 0);
-	video_list_view->views.insert(video_list_view->views.end() - 1, new_video_views.begin(), new_video_views.end());
+		video_load_more_view->update_y_range(0, DEFAULT_FONT_INTERVAL);
+		video_load_more_view->set_is_visible(true);
+	} else {
+		video_load_more_view->update_y_range(0, 0);
+		video_load_more_view->set_is_visible(false);
+	}
+	var_need_reflesh = true;
+	svcReleaseMutex(resource_lock);
+}
+static void load_channel_playlists(void *) {
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	auto prev_result = channel_info;
+	svcReleaseMutex(resource_lock);
+	
+	auto new_result = youtube_channel_load_playlists(prev_result);
+	
+	Util_log_save("channel-p", "truncate start");
+	std::vector<View *> new_playlist_views;
+	for (size_t i = prev_result.playlists.size(); i < new_result.playlists.size(); i++)
+		new_playlist_views.push_back(playlist2view(new_result.playlists[i]));
+	Util_log_save("channel-p", "truncate end");
+	
+	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (new_result.error != "") channel_info.error = new_result.error;
+	else {
+		channel_info = new_result;
+		channel_info_cache[channel_info.url_original] = channel_info;
+	}
+	playlist_list_view->views.insert(playlist_list_view->views.end(), new_playlist_views.begin(), new_playlist_views.end());
+	// channel playlist doesn't seem to have continuation
+	playlist_load_more_view
+		->set_text("")
+		->update_y_range(0, 0)
+		->set_on_drawn(std::function<void (View &view)> ());
 	var_need_reflesh = true;
 	svcReleaseMutex(resource_lock);
 }
@@ -223,79 +339,6 @@ static bool send_load_request(std::string url) {
 		queue_async_task(load_channel, NULL);
 		return true;
 	} else return false;
-}
-static bool send_load_more_request() {
-	bool res = false;
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-	if (channel_info.videos.size() && channel_info.has_continue()) {
-		queue_async_task(load_channel_more, NULL);
-		res = true;
-	}
-	svcReleaseMutex(resource_lock);
-	return res;
-}
-
-bool Channel_query_init_flag(void) {
-	return already_init;
-}
-
-
-void Channel_resume(std::string arg)
-{
-	if (arg != "" && arg != cur_channel_url) send_load_request(arg);
-	overlay_menu_on_resume();
-	main_view->on_resume();
-	thread_suspend = false;
-	var_need_reflesh = true;
-}
-
-void Channel_suspend(void)
-{
-	thread_suspend = true;
-}
-
-void Channel_init(void)
-{
-	Util_log_save("channel/init", "Initializing...");
-	Result_with_string result;
-	
-	svcCreateMutex(&resource_lock, false);
-	
-	
-	banner_view = new ImageView(0, 0, 320, BANNER_HEIGHT);
-	channel_view = new ChannelView(0, 0, 320, CHANNEL_ICON_SIZE + SMALL_MARGIN * 2);
-	video_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN);
-	info_view = (new VerticalListView(0, 0, 320));
-	tab_view = (new Tab2View(0, 0, 320))->set_tab_texts({
-		(std::function<std::string ()>) [] () { return LOCALIZED(VIDEOS); },
-		(std::function<std::string ()>) [] () { return LOCALIZED(INFO); }
-	})->set_views({video_list_view, info_view});
-	
-	Channel_resume("");
-	already_init = true;
-}
-
-void Channel_exit(void)
-{
-	already_init = false;
-	thread_suspend = false;
-	exiting = true;
-	
-	delete main_view;
-	main_view = NULL;
-	delete banner_view;
-	banner_view = NULL;
-	delete channel_view;
-	channel_view = NULL;
-	tab_view->recursive_delete_subviews();
-	delete tab_view;
-	tab_view = NULL;
-	video_list_view = NULL;
-	info_view = NULL;
-	delete load_more_view;
-	load_more_view = NULL;
-	
-	Util_log_save("search/exit", "Exited.");
 }
 
 Intent Channel_draw(void)
@@ -355,48 +398,13 @@ Intent Channel_draw(void)
 		
 		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 		
-		int video_num = channel_info.videos.size();
-		int displayed_l, displayed_r;
-		// thumbnail request update (this should be done while `resource_lock` is locked)
-		if (video_num) {
-			int y_offset = main_view->get_offset_of_view(tab_view) + tab_view->tab_selector_height;
-			int displayed_l = std::min(video_num, std::max(0, (main_view->get_offset() - y_offset) / VIDEOS_VERTICAL_INTERVAL));
-			int displayed_r = std::min(video_num, std::max(0, (main_view->get_offset() - y_offset + VIDEO_LIST_Y_HIGH - 1) / VIDEOS_VERTICAL_INTERVAL + 1));
-			int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-			int request_target_r = std::min(video_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
-			// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
-			std::set<int> new_indexes, cancelling_indexes;
-			for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancelling_indexes.insert(i);
-			for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
-			for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) new_indexes.erase(i);
-			for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
-			
-			for (auto i : cancelling_indexes) {
-				auto *cur_view = dynamic_cast<SuccinctVideoView *>(video_list_view->views[i]);
-				thumbnail_cancel_request(cur_view->thumbnail_handle);
-				cur_view->thumbnail_handle = -1;
-			}
-			for (auto i : new_indexes) {
-				auto *cur_view = dynamic_cast<SuccinctVideoView *>(video_list_view->views[i]);
-				cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, SceneType::CHANNEL, 0, ThumbnailType::VIDEO_THUMBNAIL);
-			}
-			
-			thumbnail_request_l = request_target_l;
-			thumbnail_request_r = request_target_r;
-			
-			std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-			auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-			for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] =
-				{dynamic_cast<SuccinctVideoView *>(video_list_view->views[i])->thumbnail_handle, 500 - dist(i)};
-			thumbnail_set_priorities(priority_list);
-		}
-		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		main_view->update(key);
 		svcReleaseMutex(resource_lock);
 		
 		if (clicked_url != "") {
-			Util_log_save("debug", clicked_url);
+			intent.next_scene = SceneType::VIDEO_PLAYER;
+			intent.arg = clicked_url;
 			clicked_url = "";
 		}
 		

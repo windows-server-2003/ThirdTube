@@ -31,8 +31,6 @@ namespace Search {
 	Handle resource_lock;
 	std::string cur_search_word = "";
 	YouTubeSearchResult search_result;
-	int thumbnail_request_l = 0;
-	int thumbnail_request_r = 0;
 	bool search_done = false;
 	
 	std::string last_url_input = "https://m.youtube.com/watch?v=";
@@ -54,7 +52,7 @@ namespace Search {
 	TextView *search_box_view;
 	TextView *url_button_view;
 	
-	VerticalListView *result_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN);
+	VerticalListView *result_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
 	View *result_bottom_view = new EmptyView(0, 0, 320, 0);
 	ScrollView *result_view;
 };
@@ -64,6 +62,71 @@ using namespace Search;
 static void load_search_results(void *);
 static void load_more_search_results(void *);
 
+void Search_init(void) {
+	Util_log_save("search/init", "Initializing...");
+	Result_with_string result;
+	
+	svcCreateMutex(&resource_lock, false);
+	
+	search_box_view = (new TextView(0, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 3 - URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2));
+	search_box_view->set_text_offset(0, -1);
+	search_box_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SEARCH_HINT); });
+	search_box_view->set_background_color(LIGHT0_BACK_COLOR);
+	search_box_view->set_get_text_color([] () { return LIGHT1_TEXT_COLOR; });
+	search_box_view->set_on_view_released([] (View &) { search_request = true; });
+	
+	url_button_view = (new TextView(0, SEARCH_BOX_MARGIN, URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2));
+	url_button_view->set_text_offset(0, -1);
+	url_button_view->set_x_centered(true);
+	url_button_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(URL); });
+	url_button_view->set_background_color(LIGHT1_BACK_COLOR);
+	url_button_view->set_on_view_released([] (View &) { url_input_request = true; });
+	
+	toast_view = (new TextView((320 - 150) / 2, 190, 150, DEFAULT_FONT_INTERVAL + SMALL_MARGIN));
+	toast_view->set_is_visible(false);
+	toast_view->set_x_centered(true);
+	toast_view->set_text_offset(0, -1);
+	toast_view->set_get_background_color([] (const View &) { return 0x50000000; });
+	toast_view->set_get_text_color([] () { return (u32) -1; });
+	
+	top_bar_view = (new HorizontalListView(0, 0, RESULT_Y_LOW))
+		->set_views({
+			new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW),
+			search_box_view,
+			new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW),
+			url_button_view
+		});
+	
+	result_view = (new ScrollView(0, 0, 320, RESULT_Y_HIGH - RESULT_Y_LOW))
+		->set_views({result_list_view, result_bottom_view});
+	
+	
+	
+	Search_resume("");
+	already_init = true;
+}
+
+void Search_exit(void) {
+	already_init = false;
+	thread_suspend = false;
+	exiting = true;
+	
+	Util_log_save("search/exit", "Exited.");
+}
+
+void Search_suspend(void) {
+	thread_suspend = true;
+}
+
+void Search_resume(std::string arg) {
+	(void) arg;
+	overlay_menu_on_resume();
+	thread_suspend = false;
+	var_need_reflesh = true;
+}
+
+
+// async functions
 static void set_loading_bottom_view() {
 	delete result_bottom_view;
 	result_bottom_view = (new TextView(0, 0, 320, 30))
@@ -123,16 +186,12 @@ static std::pair<int *, std::string *> get_thumbnail_info_from_view(View *view) 
 	usleep(1000000);
 	return {NULL, NULL};
 }
-
-
 static void load_search_results(void *) {
 	// pre-access processing
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	std::string search_word = cur_search_word;
 	search_done = false;
 	
-	for (auto view : result_list_view->views) thumbnail_cancel_request(*get_thumbnail_info_from_view(view).first);
-	thumbnail_request_l = thumbnail_request_r = 0;
 	result_list_view->recursive_delete_subviews();
 	set_loading_bottom_view();
 	search_result = YouTubeSearchResult();
@@ -219,77 +278,7 @@ static void access_input_url(void *) {
 	svcReleaseMutex(resource_lock);
 }
 
-bool Search_query_init_flag(void) {
-	return already_init;
-}
 
-
-void Search_resume(std::string arg)
-{
-	(void) arg;
-	overlay_menu_on_resume();
-	thread_suspend = false;
-	var_need_reflesh = true;
-}
-
-void Search_suspend(void)
-{
-	thread_suspend = true;
-}
-
-void Search_init(void)
-{
-	Util_log_save("search/init", "Initializing...");
-	Result_with_string result;
-	
-	svcCreateMutex(&resource_lock, false);
-	
-	search_box_view = (new TextView(0, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 3 - URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2));
-	search_box_view->set_text_offset(0, -1);
-	search_box_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SEARCH_HINT); });
-	search_box_view->set_background_color(LIGHT0_BACK_COLOR);
-	search_box_view->set_get_text_color([] () { return LIGHT1_TEXT_COLOR; });
-	search_box_view->set_on_view_released([] (View &) { search_request = true; });
-	
-	url_button_view = (new TextView(0, SEARCH_BOX_MARGIN, URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2));
-	url_button_view->set_text_offset(0, -1);
-	url_button_view->set_x_centered(true);
-	url_button_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(URL); });
-	url_button_view->set_background_color(LIGHT1_BACK_COLOR);
-	url_button_view->set_on_view_released([] (View &) { url_input_request = true; });
-	
-	toast_view = (new TextView((320 - 150) / 2, 190, 150, DEFAULT_FONT_INTERVAL + SMALL_MARGIN));
-	toast_view->set_is_visible(false);
-	toast_view->set_x_centered(true);
-	toast_view->set_text_offset(0, -1);
-	toast_view->set_get_background_color([] (const View &) { return 0x50000000; });
-	toast_view->set_get_text_color([] () { return (u32) -1; });
-	
-	top_bar_view = (new HorizontalListView(0, 0, RESULT_Y_LOW))
-		->set_views({
-			new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW),
-			search_box_view,
-			new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW),
-			url_button_view
-		});
-	
-	result_view = (new ScrollView(0, 0, 320, RESULT_Y_HIGH - RESULT_Y_LOW))
-		->set_views({result_list_view, result_bottom_view});
-	
-	
-	
-	Search_resume("");
-	already_init = true;
-}
-
-void Search_exit(void)
-{
-	already_init = false;
-	thread_suspend = false;
-	exiting = true;
-	
-	Util_log_save("search/exit", "Exited.");
-}
 
 static void search() {
 	if (!is_async_task_running(load_search_results)) {
@@ -406,42 +395,6 @@ Intent Search_draw(void)
 		gspWaitForVBlank();
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-	int result_num = search_result.results.size();
-	if (result_num) {
-		int item_interval = VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN;
-		int displayed_l = std::min(result_num, result_view->get_offset() / item_interval);
-		int displayed_r = std::min(result_num, (result_view->get_offset() + RESULT_Y_HIGH - RESULT_Y_LOW - 1) / item_interval + 1);
-		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-		int request_target_r = std::min(result_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
-		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
-		std::set<int> new_indexes, cancelling_indexes;
-		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) cancelling_indexes.insert(i);
-		for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
-		for (int i = thumbnail_request_l; i < thumbnail_request_r; i++) new_indexes.erase(i);
-		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
-		
-		for (auto i : cancelling_indexes) {
-			int &thumbnail_handle = *get_thumbnail_info_from_view(result_list_view->views[i]).first;
-			thumbnail_cancel_request(thumbnail_handle);
-			thumbnail_handle = -1;
-		}
-		for (auto i : new_indexes) {
-			auto tmp = get_thumbnail_info_from_view(result_list_view->views[i]);
-			int &thumbnail_handle = *tmp.first;
-			std::string &thumbnail_url = *tmp.second;
-			ThumbnailType type = dynamic_cast<SuccinctChannelView *>(result_list_view->views[i]) ? ThumbnailType::ICON : ThumbnailType::VIDEO_THUMBNAIL;
-			thumbnail_handle = thumbnail_request(thumbnail_url, SceneType::SEARCH, 0, type);
-		}
-		
-		thumbnail_request_l = request_target_l;
-		thumbnail_request_r = request_target_r;
-		
-		std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-		for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {
-			*get_thumbnail_info_from_view(result_list_view->views[i]).first, 500 - dist(i)};
-		thumbnail_set_priorities(priority_list);
-	}
 
 	if (Util_err_query_error_show_flag()) {
 		Util_err_main(key);

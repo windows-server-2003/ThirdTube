@@ -41,6 +41,7 @@ namespace youtube_parser {
 	std::string http_post_json(const std::string &url, const std::string &json);
 	
 	bool starts_with(const std::string &str, const std::string &pattern, size_t offset = 0);
+	bool ends_with(const std::string &str, const std::string &pattern);
 	
 	std::string url_decode(std::string input);
 	

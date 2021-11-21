@@ -93,14 +93,6 @@ public :
 			y_offset += view->get_height() + margin;
 		}
 	}
-	float get_offset_of_view(View *view) {
-		float res = 0;
-		for (auto cur_view : views) {
-			if (cur_view == view) return res;
-			res += cur_view->get_height();
-		}
-		return res;
-	}
 	
 	// if the touch is released on the content without scrolling, returns the relative coordinates of the releasing position from the top-left of the content
 	// otherwise, returns {-1, -1}

@@ -83,6 +83,9 @@ namespace youtube_parser {
 	bool starts_with(const std::string &str, const std::string &pattern, size_t offset) {
 		return str.substr(offset, pattern.size()) == pattern;
 	}
+	bool ends_with(const std::string &str, const std::string &pattern) {
+		return str.size() >= pattern.size() && str.substr(str.size() - pattern.size(), pattern.size()) == pattern;
+	}
 	
 	std::string url_decode(std::string input) {
 		std::string res;

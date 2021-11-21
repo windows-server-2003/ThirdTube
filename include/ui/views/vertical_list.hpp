@@ -1,5 +1,6 @@
 #pragma once
 #include "view.hpp"
+#include "scene_switcher.hpp"
 #include <vector>
 
 struct VerticalListView : public FixedWidthView {
@@ -10,17 +11,17 @@ public :
 	std::vector<View *> views;
 	std::vector<int> draw_order;
 	double margin = 0.0;
+	bool do_thumbnail_update = false;
+		// these are thumbnail-related variables, not used if do_thumbnail_update == false
+		int thumbnail_loaded_l = 0;
+		int thumbnail_loaded_r = 0;
+		int thumbnail_max_request = 1;
+		SceneType thumbnail_scene;
 	
 	void reset_holding_status_() override {
 		for (auto view : views) view->reset_holding_status();
 	}
-	virtual void recursive_delete_subviews() override {
-		for (auto view : views) {
-			view->recursive_delete_subviews();
-			delete view;
-		}
-		views.clear();
-	}
+	virtual void recursive_delete_subviews() override;
 	
 	// direct access to `views` is also allowed
 	// this is just for method chaining mainly used immediately after the construction of the view
@@ -36,6 +37,11 @@ public :
 		this->margin = margin;
 		return this;
 	}
+	VerticalListView *enable_thumbnail_request_update(int thumbnail_max_request) {
+		this->do_thumbnail_update = true;
+		this->thumbnail_max_request = thumbnail_max_request;
+		return this;
+	}
 	
 	float get_height() const override {
 		float res = 0;
@@ -46,39 +52,8 @@ public :
 	void on_scroll() override {
 		for (auto view : views) view->on_scroll();
 	}
-	void draw_() const override {
-		if (!draw_order.size()) {
-			double y_offset = y0;
-			for (auto view : views) {
-				double y_bottom = y_offset + view->get_height();
-				if (y_bottom >= 0 && y_offset < 240) view->draw(x0, y_offset);
-				y_offset = y_bottom + margin;
-			}
-		} else {
-			std::vector<float> y_pos(views.size() + 1, y0);
-			for (size_t i = 0; i < views.size(); i++) y_pos[i + 1] = y_pos[i] + views[i]->get_height() + margin;
-			for (auto i : draw_order) if (y_pos[i + 1] >= 0 && y_pos[i] < 240) views[i]->draw(x0, y_pos[i]);
-		}
-	}
-	void update_(Hid_info key) override {
-		double y_offset = y0;
-		for (auto view : views) {
-			double y_bottom = y_offset + view->get_height();
-			if (y_bottom >= 0 && y_offset < 240) view->update(key, x0, y_offset);
-			y_offset = y_bottom + margin;
-		}
-	}
-	std::pair<int, int> get_displayed_range(int offset) {
-		int cur_y = offset;
-		int l = views.size(), r = 0;
-		for (int i = 0; i < (int) views.size(); i++) {
-			if (cur_y < 240) r = i;
-			cur_y += views[i]->get_height();
-			if (cur_y >= 0) l = std::min(l, i);
-			cur_y += margin;
-		}
-		if (l > r) return {0, -1};
-		return {l, r};
-	}
+	
+	void draw_() const override;
+	void update_(Hid_info key) override;
 };
 

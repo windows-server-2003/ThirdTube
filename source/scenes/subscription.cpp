@@ -50,6 +50,89 @@ namespace Subscription {
 };
 using namespace Subscription;
 
+static void load_subscription_feed(void *);
+static void update_subscribed_channels(const std::vector<SubscriptionChannel> &new_subscribed_channels);
+
+void Subscription_init(void) {
+	Util_log_save("subsc/init", "Initializing...");
+	
+	svcCreateMutex(&resource_lock, false);
+	
+	channels_tab_view = (new ScrollView(0, 0, 320, 0))->set_margin(SMALL_MARGIN); // height : dummy(set properly by set_stretch_subview(true) on main_tab_view)
+	feed_videos_view = (new ScrollView(0, 0, 320, 0))->set_margin(SMALL_MARGIN);
+	feed_tab_view = (new VerticalListView(0, 0, 320))
+		->set_views({
+			(new TextView(0, 0, 320, FEED_RELOAD_BUTTON_HEIGHT))
+				->set_text((std::function<std::string ()>) [] () {
+					auto res = LOCALIZED(RELOAD);
+					if (is_async_task_running(load_subscription_feed)) res += " (" + std::to_string(feed_loading_progress) + "/" + std::to_string(feed_loading_total) + ")";
+					return res;
+				})
+				->set_text_offset(SMALL_MARGIN, -1)
+				->set_on_view_released([] (View &) {
+					if (!is_async_task_running(load_subscription_feed))
+						queue_async_task(load_subscription_feed, NULL);
+				})
+				->set_get_background_color([] (const View &view) -> u32 {
+					if (is_async_task_running(load_subscription_feed)) return LIGHT0_BACK_COLOR;
+					return View::STANDARD_BACKGROUND(view);
+				}),
+			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN))->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
+			feed_videos_view
+		})
+		->set_draw_order({2, 1, 0});
+	main_tab_view = (new TabView(0, 0, 320, CONTENT_Y_HIGH - TOP_HEIGHT))
+		->set_views({channels_tab_view, feed_tab_view})
+		->set_tab_texts({
+			(std::function<std::string ()>) [] () { return LOCALIZED(SUBSCRIBED_CHANNELS); },
+			(std::function<std::string ()>) [] () { return LOCALIZED(NEW_VIDEOS); }
+		});
+	main_view = (new VerticalListView(0, 0, 320))
+		->set_views({
+			(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
+				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SUBSCRIPTION); })
+				->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL)
+				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
+			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2))
+				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
+			main_tab_view
+		})
+		->set_draw_order({2, 1, 0});
+	
+	Subscription_resume("");
+	already_init = true;
+}
+void Subscription_exit(void) {
+	already_init = false;
+	thread_suspend = false;
+	exiting = true;
+	
+	main_view->recursive_delete_subviews();
+	delete main_view;
+	main_view = NULL;
+	main_tab_view = NULL;
+	feed_tab_view = NULL;
+	feed_videos_view = NULL;
+	channels_tab_view = NULL;
+	
+	Util_log_save("subsc/exit", "Exited.");
+}
+void Subscription_suspend(void) {
+	thread_suspend = true;
+}
+void Subscription_resume(std::string arg) {
+	(void) arg;
+	
+	// main_tab_view->on_resume();
+	overlay_menu_on_resume();
+	thread_suspend = false;
+	var_need_reflesh = true;
+	
+	update_subscribed_channels(get_subscribed_channels());
+}
+
+
+// async functions
 static void load_subscription_feed(void *) {
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	auto channels = subscribed_channels;
@@ -134,10 +217,6 @@ static void load_subscription_feed(void *) {
 	svcReleaseMutex(resource_lock);
 }
 
-bool Subscription_query_init_flag(void) {
-	return already_init;
-}
-
 static void update_subscribed_channels(const std::vector<SubscriptionChannel> &new_subscribed_channels) {
 	subscribed_channels = new_subscribed_channels;
 	
@@ -164,93 +243,9 @@ static void update_subscribed_channels(const std::vector<SubscriptionChannel> &n
 }
 
 
-void Subscription_resume(std::string arg)
-{
-	(void) arg;
-	
-	// main_tab_view->on_resume();
-	overlay_menu_on_resume();
-	thread_suspend = false;
-	var_need_reflesh = true;
-	
-	update_subscribed_channels(get_subscribed_channels());
-}
 
-void Subscription_suspend(void)
-{
-	thread_suspend = true;
-}
 
-void Subscription_init(void)
-{
-	Util_log_save("subsc/init", "Initializing...");
-	
-	svcCreateMutex(&resource_lock, false);
-	
-	channels_tab_view = (new ScrollView(0, 0, 320, 0))->set_margin(SMALL_MARGIN); // height : dummy(set properly by set_stretch_subview(true) on main_tab_view)
-	feed_videos_view = (new ScrollView(0, 0, 320, 0))->set_margin(SMALL_MARGIN);
-	feed_tab_view = (new VerticalListView(0, 0, 320))
-		->set_views({
-			(new TextView(0, 0, 320, FEED_RELOAD_BUTTON_HEIGHT))
-				->set_text((std::function<std::string ()>) [] () {
-					auto res = LOCALIZED(RELOAD);
-					if (is_async_task_running(load_subscription_feed)) res += " (" + std::to_string(feed_loading_progress) + "/" + std::to_string(feed_loading_total) + ")";
-					return res;
-				})
-				->set_text_offset(SMALL_MARGIN, -1)
-				->set_on_view_released([] (View &) {
-					if (!is_async_task_running(load_subscription_feed))
-						queue_async_task(load_subscription_feed, NULL);
-				})
-				->set_get_background_color([] (const View &view) -> u32 {
-					if (is_async_task_running(load_subscription_feed)) return LIGHT0_BACK_COLOR;
-					return View::STANDARD_BACKGROUND(view);
-				}),
-			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN))->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
-			feed_videos_view
-		})
-		->set_draw_order({2, 1, 0});
-	main_tab_view = (new TabView(0, 0, 320, CONTENT_Y_HIGH - TOP_HEIGHT))
-		->set_views({channels_tab_view, feed_tab_view})
-		->set_tab_texts({
-			(std::function<std::string ()>) [] () { return LOCALIZED(SUBSCRIBED_CHANNELS); },
-			(std::function<std::string ()>) [] () { return LOCALIZED(NEW_VIDEOS); }
-		});
-	main_view = (new VerticalListView(0, 0, 320))
-		->set_views({
-			(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
-				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SUBSCRIPTION); })
-				->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL)
-				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
-			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2))
-				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
-			main_tab_view
-		})
-		->set_draw_order({2, 1, 0});
-	
-	Subscription_resume("");
-	already_init = true;
-}
-
-void Subscription_exit(void)
-{
-	already_init = false;
-	thread_suspend = false;
-	exiting = true;
-	
-	main_view->recursive_delete_subviews();
-	delete main_view;
-	main_view = NULL;
-	main_tab_view = NULL;
-	feed_tab_view = NULL;
-	feed_videos_view = NULL;
-	channels_tab_view = NULL;
-	
-	Util_log_save("subsc/exit", "Exited.");
-}
-
-Intent Subscription_draw(void)
-{
+Intent Subscription_draw(void) {
 	Intent intent;
 	intent.next_scene = SceneType::NO_CHANGE;
 	Hid_info key;

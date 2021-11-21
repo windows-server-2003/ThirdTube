@@ -3,6 +3,7 @@
 #include <functional>
 #include "3ds.h"
 #include "system/draw/draw.hpp"
+#include "system/util/string_resource.hpp"
 #include "ui/colors.hpp"
 
 #define SMALL_MARGIN 3

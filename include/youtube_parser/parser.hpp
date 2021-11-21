@@ -166,14 +166,19 @@ struct YouTubeChannelDetail {
 	std::string subscriber_count_str;
 	std::vector<YouTubeVideoSuccinct> videos;
 	
+	std::string innertube_key;
 	std::string continue_token;
-	std::string continue_key;
+	std::string playlist_tab_browse_id;
+	std::string playlist_tab_params;
 	
-	bool has_continue() const { return continue_token != "" && continue_key != ""; }
+	std::vector<YouTubePlaylistSuccinct> playlists;
+	
+	bool has_continue() const { return innertube_key != "" && continue_token != ""; }
 };
 YouTubeChannelDetail youtube_parse_channel_page(std::string url);
 // takes the previous result, returns the new result with both old items and new items
 YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result);
+YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &prev_result);
 
 void youtube_change_content_language(std::string language_code);
 

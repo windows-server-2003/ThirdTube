@@ -32,24 +32,7 @@ namespace Settings {
 using namespace Settings;
 
 
-bool Sem_query_init_flag(void) {
-	return already_init;
-}
-
-void Sem_resume(std::string arg)
-{
-	overlay_menu_on_resume();
-	thread_suspend = false;
-	var_need_reflesh = true;
-}
-
-void Sem_suspend(void)
-{
-	thread_suspend = true;
-}
-
-void Sem_init(void)
-{
+void Sem_init(void) {
 	Util_log_save("settings/init", "Initializing...");
 	Result_with_string result;
 	
@@ -314,9 +297,7 @@ void Sem_init(void)
 	Sem_resume("");
 	already_init = true;
 }
-
-void Sem_exit(void)
-{
+void Sem_exit(void) {
 	already_init = false;
 	thread_suspend = false;
 	exiting = true;
@@ -330,6 +311,15 @@ void Sem_exit(void)
 	
 	Util_log_save("settings/exit", "Exited.");
 }
+void Sem_suspend(void) {
+	thread_suspend = true;
+}
+void Sem_resume(std::string arg) {
+	overlay_menu_on_resume();
+	thread_suspend = false;
+	var_need_reflesh = true;
+}
+
 
 Intent Sem_draw(void)
 {
