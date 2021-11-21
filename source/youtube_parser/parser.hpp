@@ -171,9 +171,10 @@ struct YouTubeChannelDetail {
 	std::string playlist_tab_browse_id;
 	std::string playlist_tab_params;
 	
-	std::vector<YouTubePlaylistSuccinct> playlists;
+	std::vector<std::pair<std::string, std::vector<YouTubePlaylistSuccinct> > > playlists; // {category title, list of playlists}
 	
 	bool has_continue() const { return innertube_key != "" && continue_token != ""; }
+	bool has_playlist_to_load() const { return innertube_key != "" && playlist_tab_browse_id != "" && playlist_tab_params != ""; }
 };
 YouTubeChannelDetail youtube_parse_channel_page(std::string url);
 // takes the previous result, returns the new result with both old items and new items

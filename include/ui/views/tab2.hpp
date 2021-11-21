@@ -22,8 +22,8 @@ public :
 	float tab_width() const { return (x1 - x0) / get_tab_num(); }
 	float tab_pos_x(int tab) const { return x0 + (x1 - x0) * tab / get_tab_num(); }
 	
-	Tab2View *set_tab_texts(const std::vector<UI::FlexibleString<Tab2View> > &tab_texts) {
-		this->tab_texts = tab_texts;
+	template<class T> Tab2View *set_tab_texts(const std::vector<T> &tab_texts) {
+		this->tab_texts = decltype(this->tab_texts)(tab_texts.begin(), tab_texts.end());
 		return this;
 	}
 	Tab2View *set_views(const std::vector<View *> &views, int selected_tab = 0) {

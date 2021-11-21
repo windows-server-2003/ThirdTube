@@ -44,9 +44,7 @@ namespace Channel {
 			// anonymous VerticalListView
 				VerticalListView *video_list_view;
 				TextView *video_load_more_view;
-			// anonymous VerticalListView
-				VerticalListView *playlist_list_view;
-				TextView *playlist_load_more_view;
+			// playlists : Tab2View (if there are playlists loaded) or TextView (if they're not loaded or the channel has no playlist)
 			VerticalListView *info_view;
 	
 	TextView *load_more_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))->set_x_centered(true);
@@ -88,17 +86,14 @@ void Channel_init(void)
 					!is_async_task_running(load_channel_more)) queue_async_task(load_channel_more, NULL);
 			}
 		});
-	playlist_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
-	playlist_load_more_view = (new TextView(0, 0, 320, 0))
-		->set_x_centered(true);
 	info_view = (new VerticalListView(0, 0, 320));
-	tab_view = (new Tab2View(0, 0, 320))->set_tab_texts({
-		(std::function<std::string ()>) [] () { return LOCALIZED(VIDEOS); },
-		(std::function<std::string ()>) [] () { return LOCALIZED(PLAYLISTS); },
-		(std::function<std::string ()>) [] () { return LOCALIZED(INFO); }
+	tab_view = (new Tab2View(0, 0, 320))->set_tab_texts<std::function<std::string ()> >({
+		[] () { return LOCALIZED(VIDEOS); },
+		[] () { return LOCALIZED(PLAYLISTS); },
+		[] () { return LOCALIZED(INFO); }
 	})->set_views({
 		(new VerticalListView(0, 0, 320))->set_views({video_list_view, video_load_more_view}),
-		(new VerticalListView(0, 0, 320))->set_views({playlist_list_view, playlist_load_more_view}),
+		(new EmptyView(0, 0, 320, 0)),
 		info_view
 	});
 	
@@ -122,7 +117,6 @@ void Channel_exit(void)
 	delete tab_view;
 	tab_view = NULL;
 	video_list_view = NULL;
-	playlist_list_view = NULL;
 	info_view = NULL;
 	delete load_more_view;
 	load_more_view = NULL;
@@ -132,7 +126,10 @@ void Channel_exit(void)
 
 void Channel_resume(std::string arg)
 {
-	if (arg != "" && arg != cur_channel_url) send_load_request(arg);
+	if (arg != "" && arg != cur_channel_url) {
+		send_load_request(arg);
+		tab_view->selected_tab = 0;
+	}
 	overlay_menu_on_resume();
 	main_view->on_resume();
 	thread_suspend = false;
@@ -159,6 +156,26 @@ View *playlist2view(const YouTubePlaylistSuccinct &playlist) {
 		->set_is_playlist(true)
 		->set_get_background_color(View::STANDARD_BACKGROUND)
 		->set_on_view_released([playlist] (View &) { clicked_url = playlist.url; });
+}
+View *get_playlist_categories_tab_view(const std::vector<std::pair<std::string, std::vector<YouTubePlaylistSuccinct> > > &playlist_categories) {
+	if (playlist_categories.size()) {
+		Tab2View *res_view = new Tab2View(0, 0, 320);
+		
+		std::vector<std::string> titles;
+		for (auto playlist_category : playlist_categories) {
+			titles.push_back(playlist_category.first);
+			
+			VerticalListView *cur_list_view = (new VerticalListView(0, 0, 320))
+				->set_margin(SMALL_MARGIN)
+				->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
+			for (auto playlist : playlist_category.second) cur_list_view->views.push_back(playlist2view(playlist));
+			res_view->views.push_back(cur_list_view);
+		}
+		res_view->set_tab_texts<std::string>(titles);
+		return res_view;
+	} else return (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
+		->set_text((std::function<std::string ()>) [] () { return LOCALIZED(EMPTY); })
+		->set_x_centered(true);
 }
 
 static void load_channel(void *) {
@@ -256,16 +273,19 @@ static void load_channel(void *) {
 		video_load_more_view->set_is_visible(false);
 	}
 	// playlist list
-	playlist_list_view->recursive_delete_subviews();
-	playlist_load_more_view
-		->set_text((std::function<std::string ()>) [] () { return channel_info.error != "" ? channel_info.error : LOCALIZED(LOADING); })
-		->update_y_range(0, DEFAULT_FONT_INTERVAL * 2)
-		->set_on_drawn([] (const View &) {
-			if (channel_info.error == "") {
-				if (!is_async_task_running(load_channel) &&
-					!is_async_task_running(load_channel_playlists)) queue_async_task(load_channel_playlists, NULL);
-			}
-		});
+	tab_view->views[1]->recursive_delete_subviews();
+	delete tab_view->views[1];
+	if (result.has_playlist_to_load()) {
+		tab_view->views[1] = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))
+			->set_text((std::function<std::string ()>) [] () { return channel_info.error != "" ? channel_info.error : LOCALIZED(LOADING); })
+			->set_x_centered(true)
+			->set_on_drawn([] (const View &) {
+				if (channel_info.error == "" && channel_info.has_playlist_to_load()) {
+					if (!is_async_task_running(load_channel) &&
+						!is_async_task_running(load_channel_playlists)) queue_async_task(load_channel_playlists, NULL);
+				}
+			});
+	} else tab_view->views[1] = get_playlist_categories_tab_view(result.playlists); // possible if the channel info is loaded from cache
 	// video info
 	info_view->recursive_delete_subviews();
 	info_view->set_views({
@@ -322,9 +342,7 @@ static void load_channel_playlists(void *) {
 	auto new_result = youtube_channel_load_playlists(prev_result);
 	
 	Util_log_save("channel-p", "truncate start");
-	std::vector<View *> new_playlist_views;
-	for (size_t i = prev_result.playlists.size(); i < new_result.playlists.size(); i++)
-		new_playlist_views.push_back(playlist2view(new_result.playlists[i]));
+	auto *playlist_tab_view = get_playlist_categories_tab_view(new_result.playlists);
 	Util_log_save("channel-p", "truncate end");
 	
 	
@@ -334,12 +352,10 @@ static void load_channel_playlists(void *) {
 		channel_info = new_result;
 		channel_info_cache[channel_info.url_original] = channel_info;
 	}
-	playlist_list_view->views.insert(playlist_list_view->views.end(), new_playlist_views.begin(), new_playlist_views.end());
-	// channel playlist doesn't seem to have continuation
-	playlist_load_more_view
-		->set_text("")
-		->update_y_range(0, 0)
-		->set_on_drawn(std::function<void (View &view)> ());
+	tab_view->views[1]->recursive_delete_subviews();
+	delete tab_view->views[1];
+	tab_view->views[1] = playlist_tab_view;
+	
 	var_need_reflesh = true;
 	svcReleaseMutex(resource_lock);
 }

@@ -23,7 +23,7 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 	// append "/videos" at the end of the url
 	{
 		bool ok = false;
-		for (auto pattern : std::vector<std::string>{"https://m.youtube.com/channel/", "https://m.youtube.com/c/"}) {
+		for (auto pattern : std::vector<std::string>{"https://m.youtube.com/channel/", "https://m.youtube.com/c/", "https://m.youtube.com/user/"}) {
 			if (url.substr(0, pattern.size()) == pattern) {
 				url = url.substr(pattern.size(), url.size());
 				auto next_slash = std::find(url.begin(), url.end(), '/');
@@ -227,36 +227,54 @@ YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &
 		new_result.error = "received json empty";
 		return new_result;
 	}
+	auto convert_compact_playlist_renderer = [] (Json playlist_renderer) {
+		YouTubePlaylistSuccinct cur_list;
+		cur_list.title = get_text_from_object(playlist_renderer["title"]);
+		cur_list.video_count_str = get_text_from_object(playlist_renderer["videoCountText"]);
+		for (auto thumbnail : playlist_renderer["thumbnail"]["thumbnails"].array_items())
+			if (thumbnail["url"].string_value().find("/default.jpg") != std::string::npos) cur_list.thumbnail_url = thumbnail["url"].string_value();
+		
+		cur_list.url = convert_url_to_mobile(playlist_renderer["shareUrl"].string_value());
+		if (!starts_with(cur_list.url, "https://m.youtube.com/watch", 0)) {
+			if (starts_with(cur_list.url, "https://m.youtube.com/playlist?", 0)) {
+				auto params = parse_parameters(cur_list.url.substr(std::string("https://m.youtube.com/playlist?").size(), cur_list.url.size()));
+				auto playlist_id = params["list"];
+				auto video_id = get_video_id_from_thumbnail_url(cur_list.thumbnail_url);
+				cur_list.url = "https://m.youtube.com/watch?v=" + video_id + "&list=" + playlist_id;
+			} else {
+				debug("unknown playlist url");
+				return cur_list;
+			}
+		}
+		return cur_list;
+	};
 	
 	for (auto tab : yt_result["contents"]["singleColumnBrowseResultsRenderer"]["tabs"].array_items()) {
 		if (tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"] != Json()) {
 			for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items()) {
-				for (auto j : i["itemSectionRenderer"]["contents"].array_items()) {
-					auto playlist_renderer = j["compactPlaylistRenderer"];
-					YouTubePlaylistSuccinct cur_list;
-					cur_list.title = get_text_from_object(playlist_renderer["title"]);
-					cur_list.video_count_str = get_text_from_object(playlist_renderer["videoCountText"]);
-					for (auto thumbnail : playlist_renderer["thumbnail"]["thumbnails"].array_items())
-						if (thumbnail["url"].string_value().find("/default.jpg") != std::string::npos) cur_list.thumbnail_url = thumbnail["url"].string_value();
-					
-					cur_list.url = convert_url_to_mobile(playlist_renderer["shareUrl"].string_value());
-					if (!starts_with(cur_list.url, "https://m.youtube.com/watch", 0)) {
-						if (starts_with(cur_list.url, "https://m.youtube.com/playlist?", 0)) {
-							auto params = parse_parameters(cur_list.url.substr(std::string("https://m.youtube.com/playlist?").size(), cur_list.url.size()));
-							auto playlist_id = params["list"];
-							auto video_id = get_video_id_from_thumbnail_url(cur_list.thumbnail_url);
-							cur_list.url = "https://m.youtube.com/watch?v=" + video_id + "&list=" + playlist_id;
-						} else {
-							debug("unknown playlist url");
-							continue;
-						}
-					}
-					
-					new_result.playlists.push_back(cur_list);
+				if (i["shelfRenderer"] != Json()) {
+					debug(i.dump());
+					std::string category_name = get_text_from_object(i["shelfRenderer"]["title"]);
+					std::vector<YouTubePlaylistSuccinct> playlists;
+					for (auto j : i["shelfRenderer"]["content"]["verticalListRenderer"]["items"].array_items())
+						if (j["compactPlaylistRenderer"] != Json()) playlists.push_back(convert_compact_playlist_renderer(j["compactPlaylistRenderer"]));
+					if (playlists.size()) new_result.playlists.push_back({category_name, playlists});
+				}
+				if (i["itemSectionRenderer"] != Json()) {
+					std::string category_name;
+					for (auto j : tab["tabRenderer"]["content"]["sectionListRenderer"]["subMenu"]["channelSubMenuRenderer"]["contentTypeSubMenuItems"].array_items())
+						category_name += j["title"].string_value();
+					std::vector<YouTubePlaylistSuccinct> playlists;
+					for (auto j : i["itemSectionRenderer"]["contents"].array_items())
+						if (j["compactPlaylistRenderer"] != Json()) playlists.push_back(convert_compact_playlist_renderer(j["compactPlaylistRenderer"]));
+					// If the channel has no playlists, there's an itemSectionRenderer with only a messageRenderer in i["itemSectionRenderer"]["contents"]
+					if (playlists.size()) new_result.playlists.push_back({category_name, playlists});
 				}
 			}
 		}
 	}
+	new_result.playlist_tab_browse_id = "";
+	new_result.playlist_tab_params = "";
 	
 	return new_result;
 }
