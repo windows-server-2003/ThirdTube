@@ -14,7 +14,7 @@
 #include "system/util/history.hpp"
 #include "system/util/misc_tasks.hpp"
 
-#define MAX_THUMBNAIL_LOAD_REQUEST 30
+#define MAX_THUMBNAIL_LOAD_REQUEST 20
 
 namespace WatchHistory {
 	bool thread_suspend = false;

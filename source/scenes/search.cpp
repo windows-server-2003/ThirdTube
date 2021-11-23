@@ -20,7 +20,7 @@
 
 #define URL_BUTTON_WIDTH 60
 
-#define MAX_THUMBNAIL_LOAD_REQUEST 25
+#define MAX_THUMBNAIL_LOAD_REQUEST 20
 
 
 namespace Search {

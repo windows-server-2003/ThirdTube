@@ -15,7 +15,7 @@
 #include "system/util/misc_tasks.hpp"
 #include "system/util/async_task.hpp"
 
-#define MAX_THUMBNAIL_LOAD_REQUEST 30
+#define MAX_THUMBNAIL_LOAD_REQUEST 20
 
 #define FEED_RELOAD_BUTTON_HEIGHT 18
 #define TOP_HEIGHT (MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2)

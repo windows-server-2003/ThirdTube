@@ -181,7 +181,7 @@ static std::vector<u8> http_get(const std::string &url, int &status_code) {
 		status_code = -1;
 		Util_log_save("thumb-dl", "access fail : " + result.error);
 	} else {
-		if (result.data.size()) {
+		if (result.data.size() && result.status_code / 100 == 2) {
 			lock();
 			if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX) {
 				std::string erase_url;

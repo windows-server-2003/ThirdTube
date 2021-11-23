@@ -99,12 +99,12 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 		if (res.banner_url.substr(0, 2) == "//") res.banner_url = "https:" + res.banner_url;
 	}
 	{ // icon
-		int max_width = -1;
+		int min_width = 1000000000;
 		for (auto icon : initial_data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"].array_items()) {
 			int cur_width = icon["width"].int_value();
 			if (cur_width > 1024) continue;
-			if (max_width < cur_width) {
-				max_width = cur_width;
+			if (min_width > cur_width) {
+				min_width = cur_width;
 				res.icon_url = icon["url"].string_value();
 			}
 		}
