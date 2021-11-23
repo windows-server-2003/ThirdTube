@@ -253,7 +253,6 @@ YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &
 		if (tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"] != Json()) {
 			for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items()) {
 				if (i["shelfRenderer"] != Json()) {
-					debug(i.dump());
 					std::string category_name = get_text_from_object(i["shelfRenderer"]["title"]);
 					std::vector<YouTubePlaylistSuccinct> playlists;
 					for (auto j : i["shelfRenderer"]["content"]["verticalListRenderer"]["items"].array_items())
@@ -275,6 +274,116 @@ YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &
 	}
 	new_result.playlist_tab_browse_id = "";
 	new_result.playlist_tab_params = "";
+	
+	return new_result;
+}
+YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &prev_result) {
+	auto new_result = prev_result;
+	new_result.community_loaded = true;
+	
+	if (!prev_result.has_community_posts_to_load()) {
+		new_result.error = "No community post to load";
+		return new_result;
+	}
+	
+	Json contents;
+	if (!prev_result.community_loaded) {
+		// community post seems to be only available in the desktop version
+		std::string url = convert_url_to_desktop(prev_result.url + "/community");
+		std::string html = http_get(url, {{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0"}});
+		if (!html.size()) {
+			new_result.error = "failed to download community page";
+			return new_result;
+		}
+		Json initial_data = get_initial_data(html);
+		
+		for (auto tab : initial_data["contents"]["twoColumnBrowseResultsRenderer"]["tabs"].array_items()) if (tab["tabRenderer"]["content"] != Json()) {
+			for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items()) if (i["itemSectionRenderer"] != Json()) {
+				contents = i["itemSectionRenderer"]["contents"];
+			}
+		}
+	} else {
+		Json yt_result;
+		{
+			std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "WEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}}, "continuation": "%2"})";
+			post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
+			post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
+			post_content = std::regex_replace(post_content, std::regex("%2"), prev_result.community_continuation_token);
+			
+			std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + prev_result.innertube_key;
+			
+			std::string received_str = http_post_json(post_url, post_content);
+			if (received_str != "") {
+				std::string json_err;
+				yt_result = Json::parse(received_str, json_err);
+				if (json_err != "") {
+					debug("[post] json parsing failed : " + json_err);
+					new_result.error = "[post] json parsing failed";
+					return new_result;
+				}
+			}
+		}
+		if (yt_result == Json()) {
+			debug("[continue] failed (json empty)");
+			new_result.error = "received json empty";
+			return new_result;
+		}
+		for (auto i : yt_result["onResponseReceivedEndpoints"].array_items()) if (i["appendContinuationItemsAction"] != Json())
+			contents = i["appendContinuationItemsAction"]["continuationItems"];
+	}
+	
+	new_result.community_continuation_token = "";
+	for (auto post : contents.array_items()) {
+		if (post["backstagePostThreadRenderer"] != Json()) {
+			auto post_renderer = post["backstagePostThreadRenderer"]["post"]["backstagePostRenderer"];
+			YouTubeChannelDetail::CommunityPost cur_post;
+			cur_post.message = get_text_from_object(post_renderer["contentText"]);
+			cur_post.author_name = get_text_from_object(post_renderer["authorText"]);
+			{
+				constexpr int target_height = 70;
+				int min_distance = 100000;
+				std::string best_icon;
+				for (auto icon : post_renderer["authorThumbnail"]["thumbnails"].array_items()) {
+					int cur_height = icon["height"].int_value();
+					if (cur_height >= 256) continue; // too large
+					if (min_distance > std::abs(target_height - cur_height)) {
+						min_distance = std::abs(target_height - cur_height);
+						best_icon = icon["url"].string_value();
+					}
+				}
+				if (best_icon.substr(0, 2) == "//") best_icon = "https:" + best_icon;
+				cur_post.author_icon_url = best_icon;
+			}
+			cur_post.time = get_text_from_object(post_renderer["publishedTimeText"]);
+			cur_post.vote_status = post_renderer["voteCount"]["accessibility"]["accessibilityData"]["label"].string_value();
+			if (post_renderer["backstageAttachment"]["backstageImageRenderer"] != Json()) {
+				auto tmp = post_renderer["backstageAttachment"]["backstageImageRenderer"]["image"]["thumbnails"].array_items();
+				if (tmp.size()) cur_post.image_url = tmp[0]["url"].string_value();
+			}
+			if (post_renderer["backstageAttachment"]["videoRenderer"] != Json()) {
+				auto video_renderer = post_renderer["backstageAttachment"]["videoRenderer"];
+				std::string video_id = video_renderer["videoId"].string_value();
+				YouTubeVideoSuccinct cur_video;
+				cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
+				cur_video.title = get_text_from_object(video_renderer["title"]);
+				cur_video.views_str = get_text_from_object(video_renderer["viewCountText"]);
+				cur_video.author = get_text_from_object(video_renderer["ownerText"]);
+				cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
+				cur_video.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
+				cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
+				cur_post.video = cur_video;
+			}
+			if (post_renderer["backstageAttachment"]["pollRenderer"] != Json()) {
+				auto poll_renderer = post_renderer["backstageAttachment"]["pollRenderer"];
+				cur_post.poll_total_votes = get_text_from_object(poll_renderer["totalVotes"]);
+				for (auto choice : poll_renderer["choices"].array_items())
+					cur_post.poll_choices.push_back(get_text_from_object(choice["text"]));
+			}
+			new_result.community_posts.push_back(cur_post);
+		} else if (post["continuationItemRenderer"] != Json()) {
+			new_result.community_continuation_token = post["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
+		}
+	}
 	
 	return new_result;
 }

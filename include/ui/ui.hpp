@@ -13,7 +13,7 @@
 #include "views/empty.hpp"
 #include "views/overlay.hpp"
 #include "views/custom.hpp"
-#include "views/specialized/comment.hpp"
+#include "views/specialized/post.hpp"
 #include "views/specialized/caption_overlay.hpp"
 #include "views/specialized/succinct_video.hpp"
 #include "views/specialized/succinct_channel.hpp"

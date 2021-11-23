@@ -35,6 +35,7 @@ void load_settings() {
 	var_full_screen_mode = load_int("full_screen_mode", 0);
 	var_night_mode = load_int("dark_theme", 0);
 	var_flash_mode = load_int("dark_theme_flash", 0);
+	var_community_image_size = std::min(COMMUNITY_IMAGE_SIZE_MAX, std::max(COMMUNITY_IMAGE_SIZE_MIN, load_int("community_image_size", COMMUNITY_IMAGE_SIZE_DEFAULT)));
 	var_network_framework = var_network_framework_changed = load_int("use_experimental_sslc", -1); // for back compability
 	if (var_network_framework < 0 || var_network_framework >= 3) var_network_framework = var_network_framework_changed = load_int("network_framework", -1);
 	if (var_network_framework < 0 || var_network_framework >= 3) var_network_framework = var_network_framework_changed = 2;
@@ -58,6 +59,7 @@ void save_settings() {
 		"<full_screen_mode>" + std::to_string(var_full_screen_mode) + "</full_screen_mode>\n" +
 		"<dark_theme>" + std::to_string(var_night_mode) + "</dark_theme>\n" + 
 		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n" + 
+		"<community_image_size>" + std::to_string(var_community_image_size) + "</community_image_size>\n" +
 		"<network_framework>" + std::to_string(var_network_framework_changed) + "</network_framework>\n" +
 		"<history_enabled>" + std::to_string(var_history_enabled) + "</history_enabled>\n" +
 		"<video_show_debug_info>" + std::to_string(var_video_show_debug_info) + "</video_show_debug_info>\n" +

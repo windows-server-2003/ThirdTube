@@ -33,6 +33,7 @@ int var_lcd_brightness = 100;
 int var_time_to_turn_off_lcd = 150;
 int var_num_of_app_start = 0;
 int var_system_region = 0;
+int var_community_image_size = COMMUNITY_IMAGE_SIZE_DEFAULT;
 double var_scroll_speed = 0.5;
 double var_battery_voltage = 0;
 char var_status[128];

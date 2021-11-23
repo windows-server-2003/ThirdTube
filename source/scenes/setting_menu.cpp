@@ -129,6 +129,15 @@ void Sem_init(void) {
 								misc_tasks_request(TASK_SAVE_SETTINGS);
 							}
 						}),
+					// Size of images in community posts
+					(new BarView(0, 0, 320, 40))
+						->set_values(COMMUNITY_IMAGE_SIZE_MIN, COMMUNITY_IMAGE_SIZE_MAX, var_community_image_size)
+						->set_title([] (const BarView &view) { return LOCALIZED(COMMUNITY_POST_IMAGE_SIZE) + " : " + std::to_string(var_community_image_size) + " px"; })
+						->set_while_holding([] (const BarView &view) {
+							var_community_image_size = view.value;
+							misc_tasks_request(TASK_CHANGE_BRIGHTNESS);
+						})
+						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
 					(new EmptyView(0, 0, 320, 10))
 				}),
 			// Tab #2 : Data

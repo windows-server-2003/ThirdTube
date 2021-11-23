@@ -80,6 +80,7 @@ public :
 		if (color >> 24) Draw_texture(var_square_image[0], color, x0, y0, get_width(), get_height());
 	}
 	void draw() const {
+		// Draw_line(x0, y0, 0xFF000000, x0 + get_width(), y0, 0xFF000000, 1);
 		if (is_visible) {
 			draw_background();
 			draw_();

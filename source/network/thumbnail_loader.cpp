@@ -308,7 +308,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 			if (requested_urls.count(next_url)) {
 				requested_urls[next_url].is_loaded = false;
 				requested_urls[next_url].error = true;
-				if (status_code / 100 != 4) {
+				if (status_code / 100 != 4 && status_code / 100 != 2) {
 					requested_urls[next_url].waiting_retry = true;
 					requested_urls[next_url].next_retry = time(NULL) + 3;
 				} else requested_urls[next_url].waiting_retry = false;

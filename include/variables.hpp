@@ -33,6 +33,12 @@ extern int var_lcd_brightness;
 extern int var_time_to_turn_off_lcd;
 extern int var_num_of_app_start;
 extern int var_system_region;
+
+#define COMMUNITY_IMAGE_SIZE_MIN 50
+#define COMMUNITY_IMAGE_SIZE_DEFAULT 200
+#define COMMUNITY_IMAGE_SIZE_MAX 280
+extern int var_community_image_size;
+
 extern double var_scroll_speed;
 extern double var_battery_voltage;
 extern char var_status[128];

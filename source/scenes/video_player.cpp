@@ -23,7 +23,6 @@
 #define TAB_SELECTOR_SELECTED_LINE_HEIGHT 3
 #define SUGGESTIONS_VERTICAL_INTERVAL (VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN)
 #define SUGGESTION_LOAD_MORE_MARGIN 30
-#define COMMENT_ICON_SIZE 48
 #define COMMENT_LOAD_MORE_MARGIN 30
 #define CONTROL_BUTTON_HEIGHT 20
 
@@ -107,7 +106,7 @@ namespace VideoPlayer {
 	std::map<std::string, YouTubeVideoDetail> video_info_cache;
 	int video_retry_left = 0;
 	
-	std::set<CommentView *> comment_thumbnail_loaded_list;
+	std::set<PostView *> comment_thumbnail_loaded_list;
 	std::vector<std::string> title_lines;
 	float title_font_size;
 	std::vector<std::string> description_lines;
@@ -481,7 +480,7 @@ void VideoPlayer_resume(std::string arg) {
 #define TITLE_MAX_WIDTH (320 - SMALL_MARGIN * 2)
 #define DESC_MAX_WIDTH (320 - SMALL_MARGIN * 2)
 #define SUGGESTION_TITLE_MAX_WIDTH (320 - (VIDEO_LIST_THUMBNAIL_WIDTH + SMALL_MARGIN))
-#define COMMENT_MAX_WIDTH (320 - (COMMENT_ICON_SIZE + 2 * SMALL_MARGIN))
+#define COMMENT_MAX_WIDTH (320 - (POST_ICON_SIZE + 2 * SMALL_MARGIN))
 #define REPLY_INDENT 25
 #define REPLY_MAX_WIDTH (320 - REPLY_INDENT - (REPLY_ICON_SIZE + 2 * SMALL_MARGIN))
 #define CAPTION_TIMESTAMP_WIDTH 60
@@ -554,7 +553,7 @@ static void update_comment_bottom_view() {
 	comment_all_view->views[2] = comments_bottom_view;
 }
 #define COMMENT_MAX_LINE_NUM 1000 // this limit exists due to performance reason (TODO : more efficient truncating)
-static CommentView *comment_to_view(const YouTubeVideoDetail::Comment &comment, int comment_index) {
+static PostView *comment_to_view(const YouTubeVideoDetail::Comment &comment, int comment_index) {
 	auto &cur_content = comment.content;
 	std::vector<std::string> cur_lines;
 	auto itr = cur_content.begin();
@@ -567,12 +566,15 @@ static CommentView *comment_to_view(const YouTubeVideoDetail::Comment &comment, 
 		if (next_itr != cur_content.end()) itr = std::next(next_itr);
 		else break;
 	}
-	return (new CommentView(0, 0, 320))
+	std::string author_url = comment.author.url;
+	return (new PostView(0, 0, 320))
+		->set_author_name(comment.author.name)
+		->set_author_icon_url(comment.author.icon_url)
 		->set_content_lines(cur_lines)
-		->set_get_yt_comment_object([comment_index](const CommentView &) -> YouTubeVideoDetail::Comment & { return cur_video_info.comments[comment_index]; })
-		->set_on_author_icon_pressed([] (const CommentView &view) { channel_url_pressed = view.get_yt_comment_object().author.url; })
-		->set_on_load_more_replies_pressed([] (CommentView &view) {
-			queue_async_task(load_more_replies, &view);
+		->set_has_more_replies([comment_index] () { return cur_video_info.comments[comment_index].has_more_replies(); })
+		->set_on_author_icon_pressed([author_url] (const PostView &view) { channel_url_pressed = author_url; })
+		->set_on_load_more_replies_pressed([comment_index] (PostView &view) {
+			queue_async_task(load_more_replies, (void *) comment_index);
 			view.is_loading_replies = true;
 		});
 }
@@ -862,15 +864,15 @@ static void load_more_comments(void *arg_) {
 }
 
 static void load_more_replies(void *arg_) {
-	CommentView *comment_view = (CommentView *) arg_;
-	// only load_more_comments() can invalidate this reference, so it's safe
-	YouTubeVideoDetail::Comment &comment = comment_view->get_yt_comment_object();
+	int comment_index = (int) arg_;
+	PostView *comment_view = dynamic_cast<PostView *>(comments_main_view->views[comment_index]);
+	YouTubeVideoDetail::Comment &comment = cur_video_info.comments[comment_index];
 	
 	add_cpu_limit(25);
 	auto new_comment = youtube_video_page_load_more_replies(comment);
 	remove_cpu_limit(25);
 	
-	std::vector<CommentView *> new_reply_views;
+	std::vector<PostView *> new_reply_views;
 	// wrap comments
 	Util_log_save("player/load-r", "truncate start");
 	for (size_t i = comment.replies.size(); i < new_comment.replies.size(); i++) {
@@ -887,10 +889,13 @@ static void load_more_replies(void *arg_) {
 			if (next_itr != cur_content.end()) itr = std::next(next_itr);
 			else break;
 		}
-		new_reply_views.push_back((new CommentView(REPLY_INDENT, 0, 320 - REPLY_INDENT))
+		std::string author_url = cur_reply.author.url;
+		new_reply_views.push_back((new PostView(REPLY_INDENT, 0, 320 - REPLY_INDENT))
+			->set_author_name(cur_reply.author.name)
+			->set_author_icon_url(cur_reply.author.icon_url)
 			->set_content_lines(cur_lines)
-			->set_get_yt_comment_object([comment_view, i](const CommentView &) -> YouTubeVideoDetail::Comment & { return comment_view->get_yt_comment_object().replies[i]; })
-			->set_on_author_icon_pressed([] (const CommentView &view) { channel_url_pressed = view.get_yt_comment_object().author.url; })
+			->set_has_more_replies([] () { return false; })
+			->set_on_author_icon_pressed([author_url] (const PostView &view) { channel_url_pressed = author_url; })
 			->set_is_reply(true)
 		);
 	}
@@ -1792,7 +1797,7 @@ Intent VideoPlayer_draw(void)
 		// thumbnail request update (this should be done while `small_resource_lock` is locked)
 		// YES, this section needs refactoring, seriously
 		if (cur_video_info.comments.size()) { // comments
-			std::vector<std::pair<float, CommentView *> > comments_list; // list of comment views whose author's thumbnails should be loaded
+			std::vector<std::pair<float, PostView *> > comments_list; // list of comment views whose author's thumbnails should be loaded
 			{
 				constexpr int LOW = -1000;
 				constexpr int HIGH = 1240;
@@ -1800,7 +1805,7 @@ Intent VideoPlayer_draw(void)
 				for (size_t i = 0; i < comments_main_view->views.size(); i++) {
 					float cur_height = comments_main_view->views[i]->get_height();
 					if (cur_y < HIGH && cur_y + cur_height >= LOW) {
-						auto parent_comment_view = dynamic_cast<CommentView *>(comments_main_view->views[i]);
+						auto parent_comment_view = dynamic_cast<PostView *>(comments_main_view->views[i]);
 						if (cur_y + parent_comment_view->get_self_height() >= LOW) comments_list.push_back({cur_y, parent_comment_view});
 						auto list = parent_comment_view->get_reply_pos_list(); // {y offset, reply view}
 						for (auto j : list) {
@@ -1817,7 +1822,7 @@ Intent VideoPlayer_draw(void)
 				}
 			}
 			
-			std::set<CommentView *> newly_loading_views, cancelling_views;
+			std::set<PostView *> newly_loading_views, cancelling_views;
 			for (auto i : comment_thumbnail_loaded_list) cancelling_views.insert(i);
 			for (auto i : comments_list) newly_loading_views.insert(i.second);
 			for (auto i : comment_thumbnail_loaded_list) newly_loading_views.erase(i);
@@ -1829,7 +1834,7 @@ Intent VideoPlayer_draw(void)
 				comment_thumbnail_loaded_list.erase(i);
 			}
 			for (auto i : newly_loading_views) {
-				i->author_icon_handle = thumbnail_request(i->get_yt_comment_object().author.icon_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::ICON);
+				i->author_icon_handle = thumbnail_request(i->author_icon_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::ICON);
 				comment_thumbnail_loaded_list.insert(i);
 			}
 			

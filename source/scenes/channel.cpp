@@ -25,7 +25,9 @@
 #define TAB_SELECTOR_SELECTED_LINE_HEIGHT 3
 #define SUBSCRIBE_BUTTON_WIDTH 90
 #define SUBSCRIBE_BUTTON_HEIGHT 25
+#define COMMUNITY_POST_MAX_WIDTH (320 - (POST_ICON_SIZE + 2 * SMALL_MARGIN))
 
+#define COMMUNITY_POST_MAX_LINES 100
 #define MAX_THUMBNAIL_LOAD_REQUEST 30
 
 #define TAB_NUM 2
@@ -45,11 +47,17 @@ namespace Channel {
 				VerticalListView *video_list_view;
 				TextView *video_load_more_view;
 			// playlists : Tab2View (if there are playlists loaded) or TextView (if they're not loaded or the channel has no playlist)
+			// annonymous VerticalListView
+				VerticalListView *community_post_list_view;
+				TextView *community_post_load_more_view;
 			VerticalListView *info_view;
 	
 	TextView *load_more_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))->set_x_centered(true);
+	float community_post_y = 0; // y coordinate of the upper bound of community posts list, updated every frames, used for thumbnail request updating
 	
 	std::string clicked_url;
+	
+	std::set<PostView *> community_thumbnail_loaded_list;
 	
 	Handle resource_lock;
 	std::string cur_channel_url;
@@ -62,6 +70,7 @@ static bool send_load_request(std::string url);
 static void load_channel(void *);
 static void load_channel_more(void *);
 static void load_channel_playlists(void *);
+static void load_channel_community_posts(void *);
 
 void Channel_init(void)
 {
@@ -86,14 +95,30 @@ void Channel_init(void)
 					!is_async_task_running(load_channel_more)) queue_async_task(load_channel_more, NULL);
 			}
 		});
+	community_post_list_view = (new VerticalListView(0, 0, 320));
+	community_post_list_view->set_on_drawn([] (View &view) { community_post_y = view.y0; });
+	community_post_load_more_view = (new TextView(0, 0, 320, 0));
+	community_post_load_more_view
+		->set_text((std::function<std::string ()>) [] () { 
+			return channel_info.error == "" && channel_info.has_community_posts_to_load() ? LOCALIZED(LOADING) : "";
+		})
+		->set_x_centered(true)
+		->set_on_drawn([] (View &) {
+			if (channel_info.error == "" && channel_info.has_community_posts_to_load()) {
+				if (!is_async_task_running(load_channel) &&
+					!is_async_task_running(load_channel_community_posts)) queue_async_task(load_channel_community_posts, NULL);
+			}
+		});
 	info_view = (new VerticalListView(0, 0, 320));
 	tab_view = (new Tab2View(0, 0, 320))->set_tab_texts<std::function<std::string ()> >({
 		[] () { return LOCALIZED(VIDEOS); },
 		[] () { return LOCALIZED(PLAYLISTS); },
+		[] () { return LOCALIZED(COMMUNITY); },
 		[] () { return LOCALIZED(INFO); }
 	})->set_views({
 		(new VerticalListView(0, 0, 320))->set_views({video_list_view, video_load_more_view}),
 		(new EmptyView(0, 0, 320, 0)),
+		(new VerticalListView(0, 0, 320))->set_views({community_post_list_view, community_post_load_more_view}),
 		info_view
 	});
 	
@@ -177,6 +202,49 @@ View *get_playlist_categories_tab_view(const std::vector<std::pair<std::string, 
 		->set_text((std::function<std::string ()>) [] () { return LOCALIZED(EMPTY); })
 		->set_x_centered(true);
 }
+View *community_post_2_view(const YouTubeChannelDetail::CommunityPost &post) {
+	PostView *res = new PostView(0, 0, 320);
+	
+	auto &cur_content = post.message;
+	std::vector<std::string> content_lines;
+	auto itr = cur_content.begin();
+	while (itr != cur_content.end()) {
+		if (content_lines.size() >= COMMUNITY_POST_MAX_LINES) break;
+		auto next_itr = std::find(itr, cur_content.end(), '\n');
+		auto tmp = truncate_str(std::string(itr, next_itr), COMMUNITY_POST_MAX_WIDTH, COMMUNITY_POST_MAX_LINES - content_lines.size(), 0.5, 0.5);
+		content_lines.insert(content_lines.end(), tmp.begin(), tmp.end());
+		
+		if (next_itr != cur_content.end()) itr = std::next(next_itr);
+		else break;
+	}
+	if (post.poll_choices.size()) {
+		content_lines.push_back("");
+		for (auto choice : post.poll_choices) content_lines.push_back(" - " + choice);
+	}
+	
+	res
+		->set_author_name(post.author_name)
+		->set_author_icon_url(post.author_icon_url)
+		->set_time_str(post.time)
+		->set_additional_image_url(post.image_url)
+		->set_content_lines(content_lines)
+		->set_has_more_replies([] () { return false; });
+	
+	if (post.poll_choices.size()) res->lines_shown = content_lines.size();
+	if (post.video.title != "") {
+		std::string video_url = post.video.url;
+		res->additional_video_view = (new SuccinctVideoView(0, 0, 320 - POST_ICON_SIZE - SMALL_MARGIN * 2, VIDEO_LIST_THUMBNAIL_HEIGHT * 0.8));
+		res->additional_video_view
+			->set_title_lines(truncate_str(post.video.title, res->additional_video_view->get_title_width() - SMALL_MARGIN, 2, 0.5, 0.5))
+			->set_thumbnail_url(post.video.thumbnail_url)
+			->set_auxiliary_lines({post.video.author})
+			->set_bottom_right_overlay(post.video.duration_text)
+			->set_get_background_color(View::STANDARD_BACKGROUND)
+			->set_on_view_released([video_url] (View &view) { clicked_url = video_url; });
+	}
+	
+	return res;
+}
 
 static void load_channel(void *) {
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
@@ -195,7 +263,7 @@ static void load_channel(void *) {
 		remove_cpu_limit(25);
 	}
 	
-	// wrap and truncate here
+	// wrap and truncate here to avoid taking time in locked state
 	Util_log_save("channel", "truncate start");
 	std::vector<View *> video_views;
 	for (auto video : result.videos) video_views.push_back(video2view(video));
@@ -212,6 +280,11 @@ static void load_channel(void *) {
 			} else cur_str.push_back(c);
 		}
 	}
+	View *new_playlist_view = NULL;
+	if (!result.has_playlist_to_load()) new_playlist_view = get_playlist_categories_tab_view(result.playlists);
+	std::vector<View *> new_community_posts_view;
+	for (auto post : result.community_posts)
+		new_community_posts_view.push_back(community_post_2_view(post));
 	Util_log_save("channel", "truncate end");
 	
 	// update metadata if it's subscribed
@@ -285,7 +358,21 @@ static void load_channel(void *) {
 						!is_async_task_running(load_channel_playlists)) queue_async_task(load_channel_playlists, NULL);
 				}
 			});
-	} else tab_view->views[1] = get_playlist_categories_tab_view(result.playlists); // possible if the channel info is loaded from cache
+	} else tab_view->views[1] = new_playlist_view; // possible if the channel info is loaded from cache
+	// community post
+	for (auto view : community_thumbnail_loaded_list) view->cancel_all_thumbnail_requests();
+	community_thumbnail_loaded_list.clear();
+	community_post_list_view->recursive_delete_subviews();
+	community_post_list_view->set_views(new_community_posts_view);
+	if (result.has_community_posts_to_load()) {
+		community_post_load_more_view
+			->update_y_range(0, DEFAULT_FONT_INTERVAL * 2)
+			->set_is_visible(true);
+	} else {
+		community_post_load_more_view
+			->update_y_range(0, 0)
+			->set_is_visible(false);
+	}
 	// video info
 	info_view->recursive_delete_subviews();
 	info_view->set_views({
@@ -359,6 +446,41 @@ static void load_channel_playlists(void *) {
 	var_need_reflesh = true;
 	svcReleaseMutex(resource_lock);
 }
+static void load_channel_community_posts(void *) {
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	auto prev_result = channel_info;
+	svcReleaseMutex(resource_lock);
+	
+	auto new_result = youtube_channel_load_community(prev_result);
+	
+	Util_log_save("channel-com", "truncate start");
+	std::vector<View *> new_post_views;
+	for (size_t i = prev_result.community_posts.size(); i < new_result.community_posts.size(); i++)
+		new_post_views.push_back(community_post_2_view(new_result.community_posts[i]));
+	Util_log_save("channel-com", "truncate end");
+	
+	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (new_result.error != "") channel_info.error = new_result.error;
+	else {
+		channel_info = new_result;
+		channel_info_cache[channel_info.url_original] = channel_info;
+	}
+	community_post_list_view->views.insert(community_post_list_view->views.end(), new_post_views.begin(), new_post_views.end());
+	if (new_result.has_community_posts_to_load()) {
+		community_post_load_more_view
+			->update_y_range(0, DEFAULT_FONT_INTERVAL * 2)
+			->set_is_visible(true);
+	} else {
+		community_post_load_more_view
+			->update_y_range(0, 0)
+			->set_is_visible(false);
+	}
+	
+	var_need_reflesh = true;
+	svcReleaseMutex(resource_lock);
+	
+}
 static bool send_load_request(std::string url) {
 	if (!is_async_task_running(load_channel)) {
 		remove_all_async_tasks_with_type(load_channel_more);
@@ -431,6 +553,61 @@ Intent Channel_draw(void)
 		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		main_view->update(key);
+		
+		// community post thumbnail requests update
+		if (channel_info.community_posts.size()) {
+			std::vector<std::pair<float, PostView *> > should_be_loaded;
+			{
+				constexpr int LOW = -1000;
+				constexpr int HIGH = 1240;
+				float cur_y = community_post_y;
+				for (size_t i = 0; i < community_post_list_view->views.size(); i++) {
+					float cur_height = community_post_list_view->views[i]->get_height();
+					if (cur_y < HIGH && cur_y + cur_height >= LOW) {
+						auto parent_post_view = dynamic_cast<PostView *>(community_post_list_view->views[i]);
+						if (cur_y + parent_post_view->get_self_height() >= LOW) should_be_loaded.push_back({cur_y, parent_post_view});
+						auto list = parent_post_view->get_reply_pos_list(); // {y offset, reply view}
+						for (auto j : list) {
+							float cur_reply_height = j.second->get_height();
+							if (cur_y + j.first < HIGH && cur_y + j.first + cur_reply_height > LOW) should_be_loaded.push_back({cur_y + j.first, j.second});
+						}
+					}
+					cur_y += cur_height;
+				}
+				if (should_be_loaded.size() > MAX_THUMBNAIL_LOAD_REQUEST) {
+					int leftover = should_be_loaded.size() - MAX_THUMBNAIL_LOAD_REQUEST;
+					should_be_loaded.erase(should_be_loaded.begin(), should_be_loaded.begin() + leftover / 2);
+					should_be_loaded.erase(should_be_loaded.end() - (leftover - leftover / 2), should_be_loaded.end());
+				}
+			}
+			
+			std::set<PostView *> newly_loading_views, cancelling_views;
+			for (auto i : community_thumbnail_loaded_list) cancelling_views.insert(i);
+			for (auto i : should_be_loaded) newly_loading_views.insert(i.second);
+			for (auto i : community_thumbnail_loaded_list) newly_loading_views.erase(i);
+			for (auto i : should_be_loaded) cancelling_views.erase(i.second);
+			
+			for (auto i : cancelling_views) {
+				i->cancel_all_thumbnail_requests();
+				community_thumbnail_loaded_list.erase(i);
+			}
+			for (auto i : newly_loading_views) {
+				i->author_icon_handle = thumbnail_request(i->author_icon_url, SceneType::CHANNEL, 0, ThumbnailType::ICON);
+				if (i->additional_image_url != "") i->additional_image_handle = thumbnail_request(i->additional_image_url, SceneType::CHANNEL, 0, ThumbnailType::DEFAULT);
+				if (i->additional_video_view) i->additional_video_view->thumbnail_handle = 
+					thumbnail_request(i->additional_video_view->thumbnail_url, SceneType::CHANNEL, 0, ThumbnailType::VIDEO_THUMBNAIL);
+				community_thumbnail_loaded_list.insert(i);
+			}
+			
+			std::vector<std::pair<int, int> > priority_list;
+			auto priority = [&] (float i) { return 500 + (i < 0 ? i : 240 - i) / 100; };
+			for (auto i : should_be_loaded) {
+				priority_list.push_back({i.second->author_icon_handle, priority(i.first)});
+				if (i.second->additional_image_handle != -1) priority_list.push_back({i.second->additional_image_handle, priority(i.first)});
+				if (i.second->additional_video_view) priority_list.push_back({i.second->additional_video_view->thumbnail_handle, priority(i.first)});
+			}
+			thumbnail_set_priorities(priority_list);
+		}
 		svcReleaseMutex(resource_lock);
 		
 		if (clicked_url != "") {

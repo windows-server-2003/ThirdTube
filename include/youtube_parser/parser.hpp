@@ -173,13 +173,30 @@ struct YouTubeChannelDetail {
 	
 	std::vector<std::pair<std::string, std::vector<YouTubePlaylistSuccinct> > > playlists; // {category title, list of playlists}
 	
+	struct CommunityPost {
+		std::string author_name;
+		std::string author_icon_url;
+		std::string time;
+		std::string vote_status;
+		std::string message;
+		std::string image_url; // "" if no image
+		std::string poll_total_votes;
+		std::vector<std::string> poll_choices;
+		YouTubeVideoSuccinct video;
+	};
+	std::vector<CommunityPost> community_posts;
+	bool community_loaded = false;
+	std::string community_continuation_token;
+	
 	bool has_continue() const { return innertube_key != "" && continue_token != ""; }
 	bool has_playlist_to_load() const { return innertube_key != "" && playlist_tab_browse_id != "" && playlist_tab_params != ""; }
+	bool has_community_posts_to_load() const { return !community_loaded || (innertube_key != "" && community_continuation_token != ""); }
 };
 YouTubeChannelDetail youtube_parse_channel_page(std::string url);
 // takes the previous result, returns the new result with both old items and new items
 YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result);
 YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &prev_result);
+YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &prev_result);
 
 void youtube_change_content_language(std::string language_code);
 
