@@ -185,6 +185,7 @@ Intent History_draw(void)
 			Util_log_draw();
 
 		Draw_top_ui();
+		if (var_debug_mode) Draw_debug_info();
 		
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		

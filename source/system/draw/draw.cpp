@@ -742,9 +742,6 @@ void Draw_top_ui(void)
 		Draw_texture(battery_charge_icon_image[0], DEF_DRAW_NO_COLOR, 295.0, 0.0, 20.0, 15.0);
 	Draw(var_status, 0.0, 0.0, 0.45, 0.45, DEF_DRAW_GREEN);
 	Draw(std::to_string(var_battery_level_raw), 322.5, 1.25, 0.4, 0.4, DEF_DRAW_BLACK);
-
-	if (var_debug_mode)
-		Draw_debug_info();
 }
 
 void Draw_bot_ui(void)

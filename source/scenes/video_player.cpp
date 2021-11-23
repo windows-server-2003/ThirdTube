@@ -1740,6 +1740,7 @@ Intent VideoPlayer_draw(void)
 			Util_log_draw();
 
 		if (!var_full_screen_mode || !network_decoder.ready) Draw_top_ui();
+		if (var_debug_mode) Draw_debug_info();
 		caption_overlay_view->cur_timestamp = vid_current_pos;
 		caption_overlay_view->draw();
 
