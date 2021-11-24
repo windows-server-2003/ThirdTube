@@ -48,6 +48,7 @@ namespace Channel {
 				TextView *video_load_more_view;
 			// playlists : Tab2View (if there are playlists loaded) or TextView (if they're not loaded or the channel has no playlist)
 			// annonymous VerticalListView
+				// an EmptyView for margin
 				VerticalListView *community_post_list_view;
 				TextView *community_post_load_more_view;
 			VerticalListView *info_view;
@@ -118,7 +119,11 @@ void Channel_init(void)
 	})->set_views({
 		(new VerticalListView(0, 0, 320))->set_views({video_list_view, video_load_more_view}),
 		(new EmptyView(0, 0, 320, 0)),
-		(new VerticalListView(0, 0, 320))->set_views({community_post_list_view, community_post_load_more_view}),
+		(new VerticalListView(0, 0, 320))->set_views({
+			(new EmptyView(0, 0, 320, SMALL_MARGIN)),
+			community_post_list_view,
+			community_post_load_more_view
+		}),
 		info_view
 	});
 	
