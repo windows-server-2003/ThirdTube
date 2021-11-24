@@ -413,6 +413,8 @@ void VideoPlayer_exit(void) {
 	threadFree(livestream_initer_thread);
 	stream_downloader.delete_all();
 	
+	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	
 	// clean up views
 	suggestion_view->recursive_delete_subviews();
 	delete suggestion_view;
@@ -444,6 +446,8 @@ void VideoPlayer_exit(void) {
 	playlist_view->recursive_delete_subviews();
 	delete playlist_view;
 	playlist_view = NULL;
+	
+	svcReleaseMutex(small_resource_lock);
 	
 	bool new_3ds;
 	APT_CheckNew3DS(&new_3ds);
@@ -738,6 +742,10 @@ static void load_video_page(void *arg) {
 	
 	// acquire lock and perform actual replacements
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	if (!vid_already_init) { // app shut down while loading
+		svcReleaseMutex(small_resource_lock);
+		return;
+	}
 	cur_video_info = tmp_video_info;
 	video_info_cache[url] = tmp_video_info;
 	description_lines = description_lines_tmp;
@@ -840,6 +848,10 @@ static void load_more_suggestions(void *arg_) {
 	Util_log_save("player/load-s", "truncate/view creation end");
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	if (!vid_already_init) { // app shut down while loading
+		svcReleaseMutex(small_resource_lock);
+		return;
+	}
 	if (new_result.error != "") cur_video_info.error = new_result.error;
 	else {
 		cur_video_info = new_result;
@@ -865,6 +877,10 @@ static void load_more_comments(void *arg_) {
 	Util_log_save("player/load-c", "truncate/views creation end");
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	if (!vid_already_init) { // app shut down while loading
+		svcReleaseMutex(small_resource_lock);
+		return;
+	}
 	cur_video_info = new_result;
 	video_info_cache[cur_video_info.url] = new_result;
 	comments_main_view->views.insert(comments_main_view->views.end(), new_comment_views.begin(), new_comment_views.end());
@@ -914,6 +930,10 @@ static void load_more_replies(void *arg_) {
 	Util_log_save("player/load-r", "truncate end");
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	if (!vid_already_init) { // app shut down while loading
+		svcReleaseMutex(small_resource_lock);
+		return;
+	}
 	comment = new_comment; // do not apply to the cache because it's a mess to also save the folding status
 	comment_view->replies.insert(comment_view->replies.end(), new_reply_views.begin(), new_reply_views.end());
 	comment_view->replies_shown = comment_view->replies.size();
@@ -1002,6 +1022,10 @@ static void load_caption(void *arg_) {
 	
 	
 	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	if (!vid_already_init) { // app shut down while loading
+		svcReleaseMutex(small_resource_lock);
+		return;
+	}
 	caption_main_view->recursive_delete_subviews();
 	caption_main_view->reset();
 	caption_main_view->set_views(caption_main_views);

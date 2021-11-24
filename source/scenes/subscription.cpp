@@ -107,6 +107,8 @@ void Subscription_exit(void) {
 	thread_suspend = false;
 	exiting = true;
 	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	
 	main_view->recursive_delete_subviews();
 	delete main_view;
 	main_view = NULL;
@@ -114,6 +116,8 @@ void Subscription_exit(void) {
 	feed_tab_view = NULL;
 	feed_videos_view = NULL;
 	channels_tab_view = NULL;
+	
+	svcReleaseMutex(resource_lock);
 	
 	Util_log_save("subsc/exit", "Exited.");
 }
@@ -226,6 +230,10 @@ static void load_subscription_feed(void *) {
 	misc_tasks_request(TASK_SAVE_SUBSCRIPTION);
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (exiting) { // app shut down while loading
+		svcReleaseMutex(resource_lock);
+		return;
+	}
 	update_subscribed_channels(get_subscribed_channels());
 	
 	for (auto view : feed_videos_view->views) thumbnail_cancel_request(dynamic_cast<SuccinctVideoView *>(view)->thumbnail_handle);

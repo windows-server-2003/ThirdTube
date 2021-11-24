@@ -132,6 +132,8 @@ void Channel_exit(void)
 	thread_suspend = false;
 	exiting = true;
 	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	
 	delete main_view;
 	main_view = NULL;
 	delete banner_view;
@@ -145,6 +147,8 @@ void Channel_exit(void)
 	info_view = NULL;
 	delete load_more_view;
 	load_more_view = NULL;
+	
+	svcReleaseMutex(resource_lock);
 	
 	Util_log_save("search/exit", "Exited.");
 }
@@ -305,6 +309,10 @@ static void load_channel(void *) {
 	
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (exiting) { // app shut down while loading
+		svcReleaseMutex(resource_lock);
+		return;
+	}
 	channel_info = result;
 	channel_info_cache[url] = result;
 	
@@ -406,6 +414,10 @@ static void load_channel_more(void *) {
 	
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (exiting) { // app shut down while loading
+		svcReleaseMutex(resource_lock);
+		return;
+	}
 	if (new_result.error != "") channel_info.error = new_result.error;
 	else {
 		channel_info = new_result;
@@ -435,6 +447,10 @@ static void load_channel_playlists(void *) {
 	
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (exiting) { // app shut down while loading
+		svcReleaseMutex(resource_lock);
+		return;
+	}
 	if (new_result.error != "") channel_info.error = new_result.error;
 	else {
 		channel_info = new_result;
@@ -462,6 +478,10 @@ static void load_channel_community_posts(void *) {
 	
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (exiting) { // app shut down while loading
+		svcReleaseMutex(resource_lock);
+		return;
+	}
 	if (new_result.error != "") channel_info.error = new_result.error;
 	else {
 		channel_info = new_result;

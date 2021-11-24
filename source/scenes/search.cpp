@@ -111,6 +111,26 @@ void Search_exit(void) {
 	thread_suspend = false;
 	exiting = true;
 	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	
+	top_bar_view->recursive_delete_subviews();
+	delete top_bar_view;
+	top_bar_view = NULL;
+	result_view->recursive_delete_subviews();
+	delete result_view;
+	result_view = NULL;
+	toast_view->recursive_delete_subviews();
+	delete toast_view;
+	toast_view = NULL;
+	
+	search_box_view = NULL;
+	url_button_view = NULL;
+	result_list_view = NULL;
+	result_bottom_view = NULL;
+	
+	svcReleaseMutex(resource_lock);
+	
+	
 	Util_log_save("search/exit", "Exited.");
 }
 
@@ -216,6 +236,10 @@ static void load_search_results(void *) {
 	Util_log_save("search", "truncate/view creation end");
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (exiting) { // app shut down while loading
+		svcReleaseMutex(resource_lock);
+		return;
+	}
 	search_result = new_result;
 	result_list_view->views = new_result_views;
 	update_result_bottom_view();
@@ -239,6 +263,10 @@ static void load_more_search_results(void *) {
 	
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (exiting) { // app shut down while loading
+		svcReleaseMutex(resource_lock);
+		return;
+	}
 	if (new_result.error != "") search_result.error = new_result.error;
 	else {
 		search_result = new_result;
@@ -267,6 +295,10 @@ static void access_input_url(void *) {
 	}
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	if (exiting) { // app shut down while loading
+		svcReleaseMutex(resource_lock);
+		return;
+	}
 	if (page_type != YouTubePageType::INVALID) {
 		url_jump_request_type = page_type;
 		url_jump_request = url;
