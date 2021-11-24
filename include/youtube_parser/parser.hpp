@@ -125,6 +125,8 @@ struct YouTubeVideoDetail {
 		YouTubeChannelSuccinct author;
 		std::string content;
 		std::string id;
+		std::string publish_date;
+		std::string upvotes_str;
 		
 		int reply_num;
 		std::vector<Comment> replies;
@@ -177,7 +179,7 @@ struct YouTubeChannelDetail {
 		std::string author_name;
 		std::string author_icon_url;
 		std::string time;
-		std::string vote_status;
+		std::string upvotes_str;
 		std::string message;
 		std::string image_url; // "" if no image
 		std::string poll_total_votes;

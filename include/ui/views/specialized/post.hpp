@@ -19,6 +19,7 @@ struct PostView : public FixedWidthView {
 private :
 	std::string author_name;
 	std::string time_str;
+	std::string upvote_str;
 	std::vector<std::string> content_lines;
 	bool icon_holding = false;
 	bool show_more_holding = false;
@@ -99,6 +100,7 @@ public :
 		float main_height = std::max(left_height(), right_height());
 		if (additional_image_url != "") main_height += SMALL_MARGIN * 2 + COMMUNITY_IMAGE_SIZE;
 		if (additional_video_view) main_height += additional_video_view->get_height() + SMALL_MARGIN * 2;
+		main_height += 16 + SMALL_MARGIN * 2;
 		float reply_height = 0;
 		if (replies_shown) reply_height += SMALL_MARGIN + DEFAULT_FONT_INTERVAL + SMALL_MARGIN; // fold replies
 		for (size_t i = 0; i < replies_shown; i++) reply_height += replies[i]->get_height();
@@ -125,6 +127,10 @@ public :
 	}
 	PostView *set_time_str(const std::string &time_str) {
 		this->time_str = time_str;
+		return this;
+	}
+	PostView *set_upvote_str(const std::string &upvote_str) {
+		this->upvote_str = upvote_str;
 		return this;
 	}
 	PostView *set_author_icon_url(const std::string &icon_url) { // mandatory

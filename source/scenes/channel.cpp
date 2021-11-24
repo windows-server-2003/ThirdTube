@@ -226,6 +226,7 @@ View *community_post_2_view(const YouTubeChannelDetail::CommunityPost &post) {
 		->set_author_name(post.author_name)
 		->set_author_icon_url(post.author_icon_url)
 		->set_time_str(post.time)
+		->set_upvote_str(post.upvotes_str)
 		->set_additional_image_url(post.image_url)
 		->set_content_lines(content_lines)
 		->set_has_more_replies([] () { return false; });

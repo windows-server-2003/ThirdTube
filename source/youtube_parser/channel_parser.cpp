@@ -102,7 +102,6 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 		int min_width = 1000000000;
 		for (auto icon : initial_data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"].array_items()) {
 			int cur_width = icon["width"].int_value();
-			if (cur_width > 1024) continue;
 			if (min_width > cur_width) {
 				min_width = cur_width;
 				res.icon_url = icon["url"].string_value();
@@ -110,9 +109,6 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 		}
 		if (res.icon_url.substr(0, 2) == "//") res.icon_url = "https:" + res.icon_url;
 	}
-	// debug(res.banner_url);
-	// debug(res.icon_url);
-	// debug(res.description);
 	
 	{
 		const std::string prefix = "\"INNERTUBE_API_KEY\":\"";
@@ -355,7 +351,7 @@ YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &
 				cur_post.author_icon_url = best_icon;
 			}
 			cur_post.time = get_text_from_object(post_renderer["publishedTimeText"]);
-			cur_post.vote_status = post_renderer["voteCount"]["accessibility"]["accessibilityData"]["label"].string_value();
+			cur_post.upvotes_str = get_text_from_object(post_renderer["voteCount"]);
 			if (post_renderer["backstageAttachment"]["backstageImageRenderer"] != Json()) {
 				auto tmp = post_renderer["backstageAttachment"]["backstageImageRenderer"]["image"]["thumbnails"].array_items();
 				if (tmp.size()) cur_post.image_url = tmp[0]["url"].string_value();

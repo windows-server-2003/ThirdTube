@@ -48,3 +48,5 @@ extern std::string var_lang;
 extern std::string var_lang_content;
 extern std::string var_model;
 extern C2D_Image var_square_image[1];
+extern C2D_Image var_texture_thumb_up[2];
+extern C2D_Image var_texture_thumb_down[2];

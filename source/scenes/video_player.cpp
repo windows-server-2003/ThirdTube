@@ -363,7 +363,13 @@ void VideoPlayer_init(void) {
 
 	result = Draw_load_texture("romfs:/gfx/draw/video_player/control.t3x", 62, vid_control, 0, 2);
 	Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
-
+	
+	result = Draw_load_texture("romfs:/gfx/draw/thumb_up.t3x", 63, var_texture_thumb_up, 0, 2);
+	Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+	
+	result = Draw_load_texture("romfs:/gfx/draw/thumb_down.t3x", 64, var_texture_thumb_down, 0, 2);
+	Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+	
 	vid_x = 0;
 	vid_y = 15;
 	vid_frametime = 0;
@@ -446,6 +452,8 @@ void VideoPlayer_exit(void) {
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
+	Draw_free_texture(63);
+	Draw_free_texture(64);
 
 	for(int i = 0; i < 8; i++)
 		Draw_c2d_image_free(vid_image[i]);
@@ -570,6 +578,8 @@ static PostView *comment_to_view(const YouTubeVideoDetail::Comment &comment, int
 	return (new PostView(0, 0, 320))
 		->set_author_name(comment.author.name)
 		->set_author_icon_url(comment.author.icon_url)
+		->set_time_str(comment.publish_date)
+		->set_upvote_str(comment.upvotes_str)
 		->set_content_lines(cur_lines)
 		->set_has_more_replies([comment_index] () { return cur_video_info.comments[comment_index].has_more_replies(); })
 		->set_on_author_icon_pressed([author_url] (const PostView &view) { channel_url_pressed = author_url; })
@@ -893,6 +903,8 @@ static void load_more_replies(void *arg_) {
 		new_reply_views.push_back((new PostView(REPLY_INDENT, 0, 320 - REPLY_INDENT))
 			->set_author_name(cur_reply.author.name)
 			->set_author_icon_url(cur_reply.author.icon_url)
+			->set_time_str(cur_reply.publish_date)
+			->set_upvote_str(cur_reply.upvotes_str)
 			->set_content_lines(cur_lines)
 			->set_has_more_replies([] () { return false; })
 			->set_on_author_icon_pressed([author_url] (const PostView &view) { channel_url_pressed = author_url; })
@@ -1646,8 +1658,17 @@ static void draw_video_content(Hid_info key) {
 				Draw_right(cur_video_info.publish_date, 320 - SMALL_MARGIN * 2, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 				y_offset += DEFAULT_FONT_INTERVAL;
 				
-				Draw(LOCALIZED(YOUTUBE_LIKE) + ":" + cur_video_info.like_count_str + " " + LOCALIZED(YOUTUBE_DISLIKE) + ":" + cur_video_info.dislike_count_str,
-					SMALL_MARGIN, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
+				{
+					float x = SMALL_MARGIN;
+					Draw_texture(var_texture_thumb_up[var_night_mode], x, y_offset, 16, 16);
+					x += 16 + SMALL_MARGIN;
+					Draw(cur_video_info.like_count_str, x, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
+					x += Draw_get_width(cur_video_info.like_count_str, 0.5, 0.5) + SMALL_MARGIN * 2;
+					x = (int) x;
+					Draw_texture(var_texture_thumb_down[var_night_mode], x, y_offset, 16, 16);
+					x += 16 + SMALL_MARGIN;
+					Draw(cur_video_info.dislike_count_str, x, y_offset, 0.5, 0.5, LIGHT0_TEXT_COLOR);
+				}
 				y_offset += DEFAULT_FONT_INTERVAL;
 				
 				y_offset += SMALL_MARGIN;

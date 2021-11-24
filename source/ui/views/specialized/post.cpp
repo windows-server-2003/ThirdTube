@@ -55,6 +55,10 @@ void PostView::draw_() const {
 		additional_video_view->draw(content_x_pos(), cur_y);
 		cur_y += SMALL_MARGIN + additional_video_view->get_height();
 	}
+	cur_y += SMALL_MARGIN;
+	Draw_texture(var_texture_thumb_up[var_night_mode], content_x_pos(), cur_y, 16, 16);
+	Draw(upvote_str, content_x_pos() + 16 + SMALL_MARGIN, cur_y + 1, 0.44, 0.44, LIGHT1_TEXT_COLOR);
+	cur_y += 16 + SMALL_MARGIN;
 	
 	if (replies_shown) { // hide replies
 		cur_y += SMALL_MARGIN;
@@ -109,6 +113,7 @@ void PostView::update_(Hid_info key) {
 		additional_video_view->update(key, content_x_pos(), cur_y);
 		cur_y += additional_video_view->get_height() + SMALL_MARGIN;
 	}
+	cur_y += 16 + SMALL_MARGIN * 2;
 	
 	if (replies_shown) {
 		cur_y += SMALL_MARGIN;

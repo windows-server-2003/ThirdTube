@@ -43,3 +43,5 @@ std::string var_lang = "en";
 std::string var_lang_content = "en";
 std::string var_model = "Unknown";
 C2D_Image var_square_image[1];
+C2D_Image var_texture_thumb_up[2];
+C2D_Image var_texture_thumb_down[2];

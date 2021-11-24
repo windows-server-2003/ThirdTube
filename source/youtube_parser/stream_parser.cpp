@@ -455,6 +455,8 @@ YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(Json comment_r
 	cur_comment.reply_num = comment_renderer["replyCount"].int_value(); // Json.int_value() defaults to zero, so... it works
 	cur_comment.author.name = get_text_from_object(comment_renderer["authorText"]);
 	cur_comment.author.url = "https://m.youtube.com" + comment_renderer["authorEndpoint"]["browseEndpoint"]["canonicalBaseUrl"].string_value();
+	cur_comment.publish_date = get_text_from_object(comment_renderer["publishedTimeText"]);
+	cur_comment.upvotes_str = get_text_from_object(comment_renderer["voteCount"]);
 	{
 		constexpr int target_height = 70;
 		int min_distance = 100000;
