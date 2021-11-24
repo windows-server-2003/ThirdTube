@@ -42,6 +42,9 @@ public :
 	void reset_holding_status_() override {
 		holding_button = -1;
 	}
+	void on_scroll() override {
+		holding_button = -1;
+	}
 	
 	SelectorView *set_texts(const std::vector<UI::FlexibleString<SelectorView> > &button_texts, int init_selected) { // mandatory
 		this->button_num = button_texts.size();
