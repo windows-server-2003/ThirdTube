@@ -280,10 +280,10 @@ void VideoPlayer_init(void) {
 		->set_views({
 			(new EmptyView(0, 0, 320, 0)), // margin at the top(using ScrollView's auto margin)
 			(new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
-				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CUR_PLAYING_VIDEO); })
+				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CUR_PLAYING_VIDEO); }),
 			cur_playing_video_view,
 			(new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
-				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(BUFFERING_PROGRESS); })
+				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(BUFFERING_PROGRESS); }),
 			download_progress_view,
 			video_quality_selector_view,
 			(new TextView(SMALL_MARGIN * 2, 0, 100, CONTROL_BUTTON_HEIGHT))
@@ -873,8 +873,15 @@ static void load_video_page(void *arg) {
 		double playlist_view_scroll = playlist_list_view->get_offset(); // this call should not need mutex locking
 		std::vector<View *> new_playlist_views;
 		for (auto video : tmp_video_info.playlist.videos) new_playlist_views.push_back(suggestion_to_view(YouTubeSuccinctItem(video)));
+		if (tmp_video_info.playlist.id != "" && tmp_video_info.playlist.id == playing_video_info.playlist.id) {
+			for (size_t i = 0; i < tmp_video_info.playlist.videos.size(); i++) {
+				if (youtube_get_video_id_by_url(tmp_video_info.playlist.videos[i].url) == playing_video_info.id) {
+					new_playlist_views[i]->set_get_background_color([] (const View &) { return COLOR_LIGHT_BLUE; });
+				}
+			}
+		}
 		if (tmp_video_info.playlist.selected_index >= 0 && tmp_video_info.playlist.selected_index < (int) new_playlist_views.size()) {
-			new_playlist_views[tmp_video_info.playlist.selected_index]->set_get_background_color([] (const View &) { return 0xFFAAEEAA; });
+			new_playlist_views[tmp_video_info.playlist.selected_index]->set_get_background_color([] (const View &) { return COLOR_LIGHT_GREEN; });
 			double selected_y = tmp_video_info.playlist.selected_index * SUGGESTIONS_VERTICAL_INTERVAL;
 			if (playlist_view_scroll < selected_y - (CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT))
 				playlist_view_scroll = selected_y - (CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT) + SUGGESTIONS_VERTICAL_INTERVAL;
@@ -992,6 +999,16 @@ static void load_video_page(void *arg) {
 				if (network_decoder.ready) network_decoder.interrupt = true;
 			}
 		});
+		// update playlist tab
+		if (cur_video_info.playlist.id != "" && cur_video_info.playlist.id == tmp_video_info.playlist.id) {
+			for (size_t i = 0; i < cur_video_info.playlist.videos.size(); i++) {
+				if ((int) i == cur_video_info.playlist.selected_index)
+					playlist_list_view->views[i]->set_get_background_color([] (const View &) { return COLOR_LIGHT_BLUE; });
+				else if (youtube_get_video_id_by_url(tmp_video_info.playlist.videos[i].url) == tmp_video_info.id)
+					playlist_list_view->views[i]->set_get_background_color([] (const View &) { return COLOR_LIGHT_GREEN; });
+				else playlist_list_view->views[i]->set_get_background_color(View::STANDARD_BACKGROUND);
+			}
+		}
 		svcReleaseMutex(small_resource_lock);
 	}
 }

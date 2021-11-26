@@ -375,11 +375,7 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	extract_stream(res, html);
 	extract_metadata(res, html);
 	
-	if (res.id.size() != 11) {
-		auto pos = url.find("?v=");
-		if (pos == std::string::npos) pos = url.find("&v=");
-		if (pos != std::string::npos) res.id = url.substr(pos + 3, 11);
-	}
+	if (res.id.size() != 11) res.id = youtube_get_video_id_by_url(url);
 	res.succinct_thumbnail_url = youtube_get_video_thumbnail_url_by_id(res.id);
 #	ifndef _WIN32
 	if (res.title != "" && res.id != "") {
@@ -643,6 +639,12 @@ YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &pre
 }
 
 
+std::string youtube_get_video_id_by_url(const std::string &url) {
+	auto pos = url.find("?v=");
+	if (pos == std::string::npos) pos = url.find("&v=");
+	if (pos != std::string::npos) return url.substr(pos + 3, 11);
+	return "";
+}
 std::string youtube_get_video_thumbnail_url_by_id(const std::string &id) {
 	return "https://i.ytimg.com/vi/" + id + "/default.jpg";
 }

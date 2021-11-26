@@ -152,7 +152,7 @@ struct YouTubeVideoDetail {
 	YouTubeVideoSuccinct get_next_video() const {
 		if (playlist.videos.size() && playlist.selected_index != (int) playlist.videos.size() - 1) return playlist.videos[std::max(0, playlist.selected_index + 1)];
 		for (auto suggestion : suggestions) if (suggestion.type == YouTubeSuccinctItem::VIDEO) return suggestion.video;
-		else return YouTubeVideoSuccinct();
+		return YouTubeVideoSuccinct();
 	}
 	bool has_more_suggestions() const { return continue_key != "" && suggestions_continue_token != ""; }
 	bool has_more_comments() const { return comment_continue_type != -1; }
@@ -215,6 +215,7 @@ YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &
 void youtube_change_content_language(std::string language_code);
 
 // util function
+std::string youtube_get_video_id_by_url(const std::string &url);
 std::string youtube_get_video_thumbnail_url_by_id(const std::string &id);
 std::string youtube_get_video_url_by_id(const std::string &id);
 std::string get_video_id_from_thumbnail_url(const std::string &url);
