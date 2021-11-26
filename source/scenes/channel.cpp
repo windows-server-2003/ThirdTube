@@ -53,7 +53,7 @@ namespace Channel {
 				TextView *community_post_load_more_view;
 			VerticalListView *info_view;
 	
-	TextView *load_more_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))->set_x_centered(true);
+	TextView *load_more_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))->set_x_alignment(TextView::XAlign::CENTER);
 	float community_post_y = 0; // y coordinate of the upper bound of community posts list, updated every frames, used for thumbnail request updating
 	
 	std::string clicked_url;
@@ -89,7 +89,7 @@ void Channel_init(void)
 		->set_text((std::function<std::string ()>) [] () { return
 			channel_info.error != "" ? channel_info.error : channel_info.has_continue() ? LOCALIZED(LOADING) : "";
 		})
-		->set_x_centered(true)
+		->set_x_alignment(TextView::XAlign::CENTER)
 		->set_on_drawn([] (const View &) {
 			if (channel_info.has_continue() && channel_info.error == "") {
 				if (!is_async_task_running(load_channel) &&
@@ -103,7 +103,7 @@ void Channel_init(void)
 		->set_text((std::function<std::string ()>) [] () { 
 			return channel_info.error == "" && channel_info.has_community_posts_to_load() ? LOCALIZED(LOADING) : "";
 		})
-		->set_x_centered(true)
+		->set_x_alignment(TextView::XAlign::CENTER)
 		->set_on_drawn([] (View &) {
 			if (channel_info.error == "" && channel_info.has_community_posts_to_load()) {
 				if (!is_async_task_running(load_channel) &&
@@ -209,7 +209,7 @@ View *get_playlist_categories_tab_view(const std::vector<std::pair<std::string, 
 		return res_view;
 	} else return (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
 		->set_text((std::function<std::string ()>) [] () { return LOCALIZED(EMPTY); })
-		->set_x_centered(true);
+		->set_x_alignment(TextView::XAlign::CENTER);
 }
 View *community_post_2_view(const YouTubeChannelDetail::CommunityPost &post) {
 	PostView *res = new PostView(0, 0, 320);
@@ -365,7 +365,7 @@ static void load_channel(void *) {
 	if (result.has_playlist_to_load()) {
 		tab_view->views[1] = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))
 			->set_text((std::function<std::string ()>) [] () { return channel_info.error != "" ? channel_info.error : LOCALIZED(LOADING); })
-			->set_x_centered(true)
+			->set_x_alignment(TextView::XAlign::CENTER)
 			->set_on_drawn([] (const View &) {
 				if (channel_info.error == "" && channel_info.has_playlist_to_load()) {
 					if (!is_async_task_running(load_channel) &&

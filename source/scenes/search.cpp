@@ -77,14 +77,14 @@ void Search_init(void) {
 	
 	url_button_view = (new TextView(0, SEARCH_BOX_MARGIN, URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2));
 	url_button_view->set_text_offset(0, -1);
-	url_button_view->set_x_centered(true);
+	url_button_view->set_x_alignment(TextView::XAlign::CENTER);
 	url_button_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(URL); });
 	url_button_view->set_background_color(LIGHT1_BACK_COLOR);
 	url_button_view->set_on_view_released([] (View &) { url_input_request = true; });
 	
 	toast_view = (new TextView((320 - 150) / 2, 190, 150, DEFAULT_FONT_INTERVAL + SMALL_MARGIN));
 	toast_view->set_is_visible(false);
-	toast_view->set_x_centered(true);
+	toast_view->set_x_alignment(TextView::XAlign::CENTER);
 	toast_view->set_text_offset(0, -1);
 	toast_view->set_get_background_color([] (const View &) { return 0x50000000; });
 	toast_view->set_get_text_color([] () { return (u32) -1; });
@@ -151,13 +151,13 @@ static void set_loading_bottom_view() {
 	delete result_bottom_view;
 	result_bottom_view = (new TextView(0, 0, 320, 30))
 		->set_text((std::function<std::string ()>) [] () { return LOCALIZED(LOADING); })
-		->set_x_centered(true);
+		->set_x_alignment(TextView::XAlign::CENTER);
 	result_view->views[1] = result_bottom_view;
 }
 static void update_result_bottom_view() {
 	delete result_bottom_view;
 	if (search_result.error != "" || search_result.has_continue()) {
-		TextView *cur_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))->set_x_centered(true);
+		TextView *cur_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))->set_x_alignment(TextView::XAlign::CENTER);
 		if (search_result.error != "") cur_view->set_text(search_result.error);
 		else cur_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(LOADING); });
 		result_bottom_view = cur_view;

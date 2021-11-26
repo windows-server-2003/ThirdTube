@@ -69,6 +69,8 @@ struct YouTubeVideoDetail {
 	std::string title;
 	std::string description;
 	YouTubeChannelSuccinct author;
+	std::string id;
+	std::string succinct_thumbnail_url;
 	std::string audio_stream_url;
 	std::map<int, std::string> video_stream_urls; // first : video size (144p, 240p, 360p ...)
 	std::string both_stream_url;
@@ -142,6 +144,16 @@ struct YouTubeVideoDetail {
 	int comment_continue_type; // -1 : unavailable, 0 : using watch_comments, 1 : using innertube
 	bool comments_disabled;
 	
+	bool has_next_video() const {
+		if (playlist.videos.size() && playlist.selected_index != (int) playlist.videos.size() - 1) return true;
+		for (auto suggestion : suggestions) if (suggestion.type == YouTubeSuccinctItem::VIDEO) return true;
+		return false;
+	}
+	YouTubeVideoSuccinct get_next_video() const {
+		if (playlist.videos.size() && playlist.selected_index != (int) playlist.videos.size() - 1) return playlist.videos[std::max(0, playlist.selected_index + 1)];
+		for (auto suggestion : suggestions) if (suggestion.type == YouTubeSuccinctItem::VIDEO) return suggestion.video;
+		else return YouTubeVideoSuccinct();
+	}
 	bool has_more_suggestions() const { return continue_key != "" && suggestions_continue_token != ""; }
 	bool has_more_comments() const { return comment_continue_type != -1; }
 	bool needs_timestamp_adjusting() const { return is_livestream && livestream_type == LivestreamType::PREMIERE; }

@@ -160,7 +160,7 @@ void Sem_init(void) {
 					// Erase history
 					(new TextView(10, 0, 120, DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 2))
 						->set_text((std::function<std::string ()>) [] () { return LOCALIZED(REMOVE_ALL_HISTORY); })
-						->set_x_centered(true)
+						->set_x_alignment(TextView::XAlign::CENTER)
 						->set_text_offset(0, -2)
 						->set_get_background_color([] (const View &view) {
 							int red = std::min<int>(0xFF, 0xD0 + 0x30 * view.touch_darkness);
@@ -173,14 +173,14 @@ void Sem_init(void) {
 								->set_views({
 									(new TextView(0, 0, 200, 30))
 										->set_text_lines(split_string(LOCALIZED(REMOVE_ALL_HISTORY_CONFIRM), '\n'))
-										->set_x_centered(true)
+										->set_x_alignment(TextView::XAlign::CENTER)
 										->set_text_offset(0, -1),
 									(new HorizontalRuleView(0, 0, 200, 1)),
 									(new HorizontalListView(0, 0, 25))->set_views({
 										(new TextView(0, 0, 100, 25))
 											->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CANCEL); })
 											->set_text_offset(0, -1)
-											->set_x_centered(true)
+											->set_x_alignment(TextView::XAlign::CENTER)
 											->set_get_background_color(View::STANDARD_BACKGROUND)
 											->set_on_view_released([] (View &view) {
 												popup_view->set_is_visible(false);
@@ -189,7 +189,7 @@ void Sem_init(void) {
 										(new TextView(0, 0, 100, 25))
 											->set_text((std::function<std::string ()>) [] () { return LOCALIZED(OK); })
 											->set_text_offset(0, -1)
-											->set_x_centered(true)
+											->set_x_alignment(TextView::XAlign::CENTER)
 											->set_get_background_color(View::STANDARD_BACKGROUND)
 											->set_on_view_released([] (View &view) {
 												history_erase_all();
@@ -200,7 +200,7 @@ void Sem_init(void) {
 												float tabbed_content_y_high = CONTENT_Y_HIGH - main_tab_view->tab_selector_height;
 												toast_view
 													->set_text((std::function<std::string ()>) [] () { return LOCALIZED(ALL_HISTORY_REMOVED); })
-													->set_x_centered(true)
+													->set_x_alignment(TextView::XAlign::CENTER)
 													->set_text_offset(0, -1)
 													->set_get_text_color([] () { return (u32) -1; })
 													->update_y_range(tabbed_content_y_high - 20, tabbed_content_y_high - 5)

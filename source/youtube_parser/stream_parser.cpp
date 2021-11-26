@@ -204,6 +204,7 @@ static void extract_like_dislike_counts(Json buttons, YouTubeVideoDetail &res) {
 		if (content.size() && !isdigit(content[0])) content = "hidden";
 		if (button["slimMetadataToggleButtonRenderer"]["isLike"].bool_value()) res.like_count_str = content;
 		else if (button["slimMetadataToggleButtonRenderer"]["isDislike"].bool_value()) res.dislike_count_str = content;
+		if (button["slimMetadataToggleButtonRenderer"]["target"]["videoId"] != Json()) res.id = button["slimMetadataToggleButtonRenderer"]["target"]["videoId"].string_value();
 	}
 }
 
@@ -374,28 +375,27 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	extract_stream(res, html);
 	extract_metadata(res, html);
 	
-	
-#	ifndef _WIN32
-	if (res.title != "") {
-		std::string video_id;
+	if (res.id.size() != 11) {
 		auto pos = url.find("?v=");
 		if (pos == std::string::npos) pos = url.find("&v=");
-		if (pos != std::string::npos) {
-			video_id = url.substr(pos + 3, 11);
-			HistoryVideo video;
-			video.id = video_id;
-			video.title = res.title;
-			video.author_name = res.author.name;
-			video.length_text = Util_convert_seconds_to_time((double) res.duration_ms / 1000);
-			video.my_view_count = 1;
-			video.last_watch_time = time(NULL);
-			add_watched_video(video);
-			misc_tasks_request(TASK_SAVE_HISTORY);
-		}
+		if (pos != std::string::npos) res.id = url.substr(pos + 3, 11);
+	}
+	res.succinct_thumbnail_url = youtube_get_video_thumbnail_url_by_id(res.id);
+#	ifndef _WIN32
+	if (res.title != "" && res.id != "") {
+		HistoryVideo video;
+		video.id = res.id;
+		video.title = res.title;
+		video.author_name = res.author.name;
+		video.length_text = Util_convert_seconds_to_time((double) res.duration_ms / 1000);
+		video.my_view_count = 1;
+		video.last_watch_time = time(NULL);
+		add_watched_video(video);
+		misc_tasks_request(TASK_SAVE_HISTORY);
 	}
 #	endif
 	
-	debug(res.title);
+	debug(res.title != "" ? res.title : "preason : " + res.playability_reason);
 	return res;
 }
 
