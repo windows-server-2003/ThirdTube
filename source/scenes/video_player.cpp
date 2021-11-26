@@ -1574,7 +1574,9 @@ static void decode_thread(void* arg) {
 					vid_pausing = true;
 					if (!eof_reached) { // the first time it reaches EOF
 						svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
-						if (playing_video_info.has_next_video()) send_change_video_request_wo_lock(playing_video_info.get_next_video().url, true, false, false);
+						if ((var_autoplay_level == 2 && playing_video_info.has_next_video()) ||
+							(var_autoplay_level == 1 && playing_video_info.has_next_video_in_playlist()))
+								send_change_video_request_wo_lock(playing_video_info.get_next_video().url, true, false, false);
 						svcReleaseMutex(small_resource_lock);
 					}
 					eof_reached = true;

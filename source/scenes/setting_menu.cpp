@@ -140,7 +140,25 @@ void Sem_init(void) {
 						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
 					(new EmptyView(0, 0, 320, 10))
 				}),
-			// Tab #2 : Data
+			// Tab #2 : UI/Display
+			(new ScrollView(0, 0, 320, 0))
+				->set_views({
+					// Autoplay
+					(new SelectorView(0, 0, 320, 35))
+						->set_texts({
+							(std::function<std::string ()>) []() { return LOCALIZED(OFF); },
+							(std::function<std::string ()>) []() { return LOCALIZED(ONLY_IN_PLAYLIST); },
+							(std::function<std::string ()>) []() { return LOCALIZED(ON); }
+						}, var_autoplay_level)
+						->set_title([](const SelectorView &) { return LOCALIZED(AUTOPLAY); })
+						->set_on_change([](const SelectorView &view) {
+							if (var_autoplay_level != view.selected_button) {
+								var_autoplay_level = view.selected_button;
+								misc_tasks_request(TASK_CHANGE_BRIGHTNESS);
+							}
+						}),
+				}),
+			// Tab #3 : Data
 			(new ScrollView(0, 0, 320, 0))
 				->set_views({
 					// History recording
@@ -221,7 +239,7 @@ void Sem_init(void) {
 						}),
 					(new EmptyView(0, 0, 320, 10))
 				}),
-			// Tab #3 : Advanced
+			// Tab #4 : Advanced
 			(new ScrollView(0, 0, 320, 0))
 				->set_views({
 					// Eco mode
@@ -282,6 +300,7 @@ void Sem_init(void) {
 		}, 0)
 		->set_tab_texts({
 			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_DISPLAY_UI); },
+			(std::function<std::string ()>) [] () { return LOCALIZED(PLAYBACK); },
 			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_DATA); },
 			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_ADVANCED); }
 		});

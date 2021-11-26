@@ -10,6 +10,7 @@ bool var_flash_mode = false;
 bool var_wifi_enabled = false;
 bool var_high_resolution_mode = true;
 bool var_history_enabled = true;
+int var_autoplay_level = 2; // 0 : never, 1 : only in a playlist, 2 : always
 int var_network_framework = 1;
 int var_network_framework_changed = 1;
 bool var_show_fps = false;
