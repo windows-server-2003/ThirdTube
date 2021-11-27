@@ -215,7 +215,7 @@ Result_with_string NetworkMultipleDecoder::seek(s64 microseconds) {
 		decoder.clear_buffer();
 		decoder.change_ffmpeg_data(fragments[(int) seq_using], adjust_timestamp ? seq_using * fragment_len : 0);
 		// trying to seek to a point too close to the end somehow causes ffmpeg to read the entire stream again ?
-		microseconds = std::max(0.0, std::min((double) microseconds, (get_duration() - 2) * 1000000));
+		microseconds = std::max(0.0, std::min((double) microseconds, (get_duration() - 1) * 1000000));
 		result = decoder.seek(microseconds);
 	}
 	return result;

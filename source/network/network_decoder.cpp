@@ -764,9 +764,17 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 	
 	clear_buffer();
 	
+	s64 min_ts = std::max<s64>(0, microseconds - 1000000);
+	s64 max_ts = microseconds + 500000;
+	
 	if (video_audio_seperate) {
-		int ffmpeg_result = avformat_seek_file(format_context[VIDEO], -1, microseconds - 1000000, microseconds, microseconds + 1000000, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?
-		if(ffmpeg_result < 0) {
+		int ffmpeg_result = avformat_seek_file(format_context[VIDEO], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?
+		for (int i = 2; i <= 3 && ffmpeg_result < 0; i++) { // retry with wider range backward
+			min_ts = std::max<s64>(0, microseconds - i * 1000000);
+			ffmpeg_result = avformat_seek_file(format_context[VIDEO], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME);
+			if (ffmpeg_result >= 0) Util_log_save("seek", "succeeded at " + std::to_string(ffmpeg_result));
+		}
+		if (ffmpeg_result < 0) {
 			result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
 			result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 			result.error_description = "avformat_seek_file() for video failed " + std::to_string(ffmpeg_result);
@@ -794,7 +802,12 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 		if (result.code != 0) return result;
 		return result;
 	} else {
-		int ffmpeg_result = avformat_seek_file(format_context[BOTH], -1, microseconds - 1000000, microseconds, microseconds + 1000000, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?
+		int ffmpeg_result = avformat_seek_file(format_context[BOTH], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?
+		for (int i = 2; i <= 3 && ffmpeg_result < 0; i++) { // retry with wider range backward
+			min_ts = std::max<s64>(0, microseconds - i * 1000000);
+			ffmpeg_result = avformat_seek_file(format_context[BOTH], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME);
+			if (ffmpeg_result >= 0) Util_log_save("seek", "succeeded at " + std::to_string(ffmpeg_result));
+		}
 		if(ffmpeg_result < 0) {
 			result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
 			result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
