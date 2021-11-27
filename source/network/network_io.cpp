@@ -564,6 +564,8 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_receive_data_callback_func);
 			curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_receive_headers_callback_func);
 			curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, curl_set_socket_options);
+			session_list.curl_errbuf = (char *) malloc(CURL_ERROR_SIZE);
+			curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, session_list.curl_errbuf);
 			// curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
 		}
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &res.data);
@@ -587,7 +589,7 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 			curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &redirected_url);
 			res.redirected_url = redirected_url;
 			if (res.redirected_url != url) Util_log_save("curl", "redir : " + res.redirected_url);
-		} else Util_log_save("curl", "deep fail");
+		} else Util_log_save("curl", std::string("deep fail : ") + curl_easy_strerror(curl_code) + " / " + session_list.curl_errbuf);
 		
 		curl_slist_free_all(request_headers_list);
 	}

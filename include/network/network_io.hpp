@@ -39,6 +39,7 @@ private :
 	void deinit(); // will be called for each instance when the app exits
 public :
 	CURL* curl = NULL;
+	char *curl_errbuf;
 	// should not be used from outside network_io.cpp
 	std::map<std::string, NetworkSession> sessions; 
 	std::vector<u8> *buffer;

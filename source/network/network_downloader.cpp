@@ -268,10 +268,13 @@ void NetworkStreamDownloader::downloader_thread() {
 				}
 				if (cur_stream->ready && result.data.size() != expected_len) {
 					Util_log_save(LOG_THREAD_STR, "size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(result.data.size()));
-					cur_stream->error = true;
+					if (cur_stream->retry_cnt_left) {
+						cur_stream->retry_cnt_left--;
+					} else cur_stream->error = true;
 					result.finalize();
 					continue;
 				}
+				cur_stream->retry_cnt_left = NetworkStream::RETRY_CNT_MAX;
 				cur_stream->set_data(block_reading, result.data);
 				cur_stream->ready = true;
 			} else {

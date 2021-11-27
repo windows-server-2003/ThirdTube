@@ -9,6 +9,7 @@
 struct NetworkStream {
 	static constexpr u64 BLOCK_SIZE = 0x40000; // 256 KiB
 	static constexpr u64 MAX_CACHE_BLOCKS = 12 * 1000 * 1000 / BLOCK_SIZE;
+	static constexpr int RETRY_CNT_MAX = 1;
 	
 	u64 block_num = 0;
 	std::string url;
@@ -23,6 +24,7 @@ struct NetworkStream {
 	volatile bool suspend_request = false;
 	volatile bool quit_request = false;
 	volatile bool error = false;
+	volatile int retry_cnt_left = RETRY_CNT_MAX;
 	volatile u64 read_head = 0;
 	const char * volatile network_waiting_status = NULL;
 	bool disable_interrupt = false;
