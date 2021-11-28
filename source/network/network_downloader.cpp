@@ -10,6 +10,10 @@
 NetworkStream::NetworkStream(std::string url, bool whole_download, NetworkSessionList *session_list) : url(url), whole_download(whole_download), session_list(session_list) {
 	svcCreateMutex(&downloaded_data_lock, false);
 }
+NetworkStream::~NetworkStream() {
+	svcCloseHandle(downloaded_data_lock);
+	downloaded_data_lock = 0;
+}
 bool NetworkStream::is_data_available(u64 start, u64 size) {
 	if (!ready) return false;
 	if (start + size > len) return false;

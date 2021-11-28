@@ -455,6 +455,11 @@ void NetworkDecoder::deinit() {
 	free(sw_video_output_tmp);
 	sw_video_output_tmp = NULL;
 	
+	if (buffered_pts_list_lock) {
+		svcCloseHandle(buffered_pts_list_lock);
+		buffered_pts_list_lock = 0;
+	}
+	
 	// ffmpeg data should not be freed, but to prevent accesses to them, we set NULLs here
 	for (int type = 0; type < 2; type++) {
 		network_stream[type] = NULL;
@@ -519,11 +524,19 @@ Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
 
 Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	Result_with_string result;
+	Result libctru_result;
 	
 	hw_decoder_enabled = request_hw_decoder;
 	interrupt = false;
 	
-	svcCreateMutex(&buffered_pts_list_lock, false);
+	libctru_result = svcCreateMutex(&buffered_pts_list_lock, false);
+	if (libctru_result != 0) {
+		Util_log_save("debug", "decoder mutex fail");
+		usleep(1000000);
+		result.code = libctru_result;
+		result.error_description = "Failed to create mutex";
+		return result;
+	}
 	
 	if (!audio_only) {
 		result = init_output_buffer(request_hw_decoder);
