@@ -758,15 +758,18 @@ static void load_video_page(void *arg) {
 			{
 				TextView *play_button = (new TextView(0, 0, 160 - SMALL_MARGIN, 20));
 				play_button
-					->set_text((std::function<std::string ()>) [] () { return LOCALIZED(PLAY); })
+					->set_text((std::function<std::string ()>) [] () { return cur_video_info.id == playing_video_info.id ? LOCALIZED(PLAYING) : LOCALIZED(PLAY); })
 					->set_x_alignment(TextView::XAlign::CENTER);
 				if (tmp_video_info.is_playable()) {
 					play_button
 						->set_on_view_released([url] (View &) {
-							send_change_video_request_wo_lock(url, true, false, false);
+							if (cur_video_info.id != playing_video_info.id) send_change_video_request_wo_lock(url, true, false, false);
 						})
-						->set_get_background_color(View::STANDARD_BACKGROUND);
-				} else play_button->set_get_background_color([] (const View &) { return LIGHT2_BACK_COLOR; });
+						->set_get_background_color([] (const View &view) -> u32 {
+							if (cur_video_info.id == playing_video_info.id) return 0xFFFFBBBB;
+							return View::STANDARD_BACKGROUND(view);
+						});
+				} else play_button->set_get_background_color([] (const View &) { return LIGHT1_BACK_COLOR; });
 				
 				TextView *reload_button = (new TextView(0, 0, 160 - SMALL_MARGIN, 20));
 				reload_button
