@@ -641,5 +641,24 @@ std::string NetworkResult::get_header(std::string key) {
 	}
 }
 
+static bool exclusive_state_entered = false;
+void lock_network_state() {
+	int res = 0;
+	if (!exclusive_state_entered) {
+		Util_log_save("init", "ndmuInit()...", ndmuInit());
+		res = NDMU_EnterExclusiveState(NDM_EXCLUSIVE_STATE_INFRASTRUCTURE);
+		if (R_SUCCEEDED(res)) res = NDMU_LockState(); // prevents ndm from switching to StreetPass when the lid is closed
+		exclusive_state_entered = R_SUCCEEDED(res);
+	}
+}
+void unlock_network_state() {
+	int res = 0;
+	if (exclusive_state_entered) {
+		res = NDMU_UnlockState();
+		if (R_SUCCEEDED(res)) res = NDMU_LeaveExclusiveState();
+		ndmuExit();
+		exclusive_state_entered = R_FAILED(res);
+	}
+}
 
 

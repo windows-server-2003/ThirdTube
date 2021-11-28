@@ -59,6 +59,9 @@ NetworkResult Access_http_post(NetworkSessionList &session_list, const std::stri
 
 std::string url_get_host_name(const std::string &url);
 
+void lock_network_state();
+void unlock_network_state();
+
 #define HTTP_STATUS_CODE_OK 200
 #define HTTP_STATUS_CODE_NO_CONTENT 204
 #define HTTP_STATUS_CODE_PARTIAL_CONTENT 206
