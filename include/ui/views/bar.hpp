@@ -6,7 +6,7 @@ struct BarView : public FixedSizeView {
 private :
 	UI::FlexibleString<BarView> title;
 public :
-	using CallBackFuncType = std::function<void (const BarView &value)>;
+	using CallBackFuncType = std::function<void (BarView &value)>;
 	BarView (double x0, double y0, double width, double height) : View(x0, y0), FixedSizeView(x0, y0, width, height) {}
 	virtual ~BarView () {}
 	

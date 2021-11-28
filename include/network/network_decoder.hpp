@@ -8,7 +8,12 @@
 extern "C" {
 #include "libavcodec/avcodec.h"
 #include "libavformat/avformat.h"
+#include "libavfilter/avfilter.h"
+#include "libavfilter/buffersrc.h"
+#include "libavfilter/buffersink.h"
 #include "libswresample/swresample.h"
+#include "libavutil/opt.h"
+#include "libavutil/log.h"
 }
 
 namespace network_decoder_ {
@@ -99,6 +104,17 @@ public :
 	Result_with_string reinit();
 	double get_duration();
 };
+class NetworkDecoderFilterData {
+public :
+	AVFilterGraph *audio_filter_graph = NULL;
+	AVFilterContext *audio_filter_src = NULL;
+	AVFilterContext *audio_filter_sink = NULL;
+	AVFrame *output_frame;
+	
+	void deinit();
+	Result_with_string init(AVCodecContext *audio_context, double volume, double tempo, double pitch);
+	Result_with_string process_audio_frame(AVFrame *input); // filtered frame goes to output_frame. It should NOT be freed
+};
 
 class NetworkDecoder {
 private :
@@ -137,6 +153,9 @@ public :
 	volatile bool need_reinit = false;
 	volatile bool ready = false;
 	double timestamp_offset = 0;
+	NetworkDecoderFilterData filter;
+	
+	AVCodecContext *get_audio_context() { return decoder_context[AUDIO]; }
 	const char *get_network_waiting_status() {
 		if (network_stream[VIDEO] && network_stream[VIDEO]->network_waiting_status) return network_stream[VIDEO]->network_waiting_status;
 		if (network_stream[AUDIO] && network_stream[AUDIO]->network_waiting_status) return network_stream[AUDIO]->network_waiting_status;

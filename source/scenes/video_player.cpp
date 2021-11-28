@@ -285,7 +285,6 @@ void VideoPlayer_init(void) {
 			(new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
 				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(BUFFERING_PROGRESS); }),
 			download_progress_view,
-			video_quality_selector_view,
 			(new TextView(SMALL_MARGIN * 2, 0, 100, CONTROL_BUTTON_HEIGHT))
 				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(RELOAD); })
 				->set_x_alignment(TextView::XAlign::CENTER)
@@ -298,6 +297,46 @@ void VideoPlayer_init(void) {
 						send_change_video_request_wo_lock(cur_playing_url, true, false, true);
 						video_retry_left = MAX_RETRY_CNT;
 					}
+				}),
+			video_quality_selector_view,
+			(new BarView(0, 0, 320, 40)) // preamp
+				->set_values(std::log(0.25), std::log(4), 0) // exponential scale
+				->set_title([] (const BarView &view) { return LOCALIZED(PREAMP) + " : " + std::to_string((int) std::round(std::exp(view.value) * 100)) + "%"; })
+				->set_while_holding([] (BarView &view) {
+					double volume = std::exp(view.value);
+					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.value = 0;
+					// volume change is needs a reconstruction of the filter graph, so don't update volume too often
+					static int cnt = 0;
+					if (++cnt >= 15) cnt = 0, network_decoder.preamp_change_request = volume;
+				})
+				->set_on_release([] (BarView &view) {
+					double volume = std::exp(view.value);
+					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.value = 0;
+					network_decoder.preamp_change_request = volume;
+				}),
+			(new BarView(0, 0, 320, 40)) // speed
+				->set_values(0.3, 1.5, 1.0)
+				->set_title([] (const BarView &view) { return LOCALIZED(SPEED) + " : " + std::to_string((int) std::round(view.value * 100)) + "%"; })
+				->set_while_holding([] (BarView &view) {
+					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
+					static int cnt = 0;
+					if (++cnt >= 15) cnt = 0, network_decoder.tempo_change_request = view.value;
+				})
+				->set_on_release([] (BarView &view) {
+					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
+					network_decoder.tempo_change_request = view.value;
+				}),
+			(new BarView(0, 0, 320, 40)) // pitch
+				->set_values(0.5, 2.0, 1.0)
+				->set_title([] (const BarView &view) { return LOCALIZED(PITCH) + " : " + std::to_string((int) std::round(view.value * 100)) + "%"; })
+				->set_while_holding([] (BarView &view) {
+					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
+					static int cnt = 0;
+					if (++cnt >= 15) cnt = 0, network_decoder.pitch_change_request = view.value;
+				})
+				->set_on_release([] (BarView &view) {
+					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
+					network_decoder.pitch_change_request = view.value;
 				}),
 			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN)),
 			debug_info_view

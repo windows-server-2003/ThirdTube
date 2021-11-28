@@ -48,12 +48,20 @@ private :
 	volatile int seq_head = 0; // the latest sequence id available
 	volatile double duration_first_fragment = 0; // for some reason, the first fragment of a livestream differs in length from other fragments
 	
+	double cur_preamp = 1.0;
+	double cur_tempo = 1.0;
+	double cur_pitch = 1.0;
+	
+	void check_filter_update();
 	void recalc_buffered_head();
 public :
 	volatile bool &hw_decoder_enabled = decoder.hw_decoder_enabled;
 	volatile bool &interrupt = decoder.interrupt;
 	volatile bool &need_reinit = decoder.need_reinit;
 	volatile const bool &ready = decoder.ready;
+	volatile double preamp_change_request = -1;
+	volatile double tempo_change_request = -1;
+	volatile double pitch_change_request = -1;
 	const char *get_network_waiting_status() { return decoder.get_network_waiting_status(); }
 	
 	NetworkMultipleDecoder ();
@@ -102,6 +110,7 @@ public :
 	
 	// decode the previously read audio packet
 	Result_with_string decode_audio(int *size, u8 **data, double *cur_pos) {
+		check_filter_update();
 		auto res = decoder.decode_audio(size, data, cur_pos);
 		return res;
 	}

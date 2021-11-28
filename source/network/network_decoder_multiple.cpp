@@ -11,6 +11,7 @@ void NetworkMultipleDecoder::deinit() {
 	inited = false;
 	
 	decoder.deinit();
+	decoder.filter.deinit();
 	for (auto &i : fragments) i.second.deinit(true);
 	fragments.clear();
 	if (video_audio_seperate) {
@@ -110,6 +111,8 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	fragments[fragment_id] = tmp_ffmpeg_data;
 	result = decoder.change_ffmpeg_data(fragments[fragment_id], adjust_timestamp ? fragment_id * fragment_len : 0);
 	if (result.code != 0) goto cleanup;
+	result = decoder.filter.init(decoder.get_audio_context(), cur_preamp, cur_tempo, cur_pitch);
+	if (result.code != 0) goto cleanup;
 	result = decoder.init(request_hw_decoder);
 	if (result.code != 0) goto cleanup;
 	
@@ -129,6 +132,7 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	
 	cleanup :
 	tmp_ffmpeg_data.deinit(false);
+	decoder.filter.deinit();
 	if (video_session_list.inited) video_session_list.close_sessions();
 	if (audio_session_list.inited) audio_session_list.close_sessions();
 	if (both_session_list.inited) both_session_list.close_sessions();
@@ -137,6 +141,19 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 }
 Result_with_string NetworkMultipleDecoder::init(std::string both_url, NetworkStreamDownloader &downloader, int fragment_len, bool adjust_timestamp, bool request_hw_decoder) {
 	return init(both_url, both_url, downloader, fragment_len, adjust_timestamp, request_hw_decoder);
+}
+
+void NetworkMultipleDecoder::check_filter_update() {
+	if (preamp_change_request > 0 || tempo_change_request > 0 || pitch_change_request> 0) {
+		if (preamp_change_request > 0) cur_preamp = preamp_change_request;
+		if (tempo_change_request > 0) cur_tempo = tempo_change_request;
+		if (pitch_change_request > 0) cur_pitch = pitch_change_request;
+		decoder.filter.deinit();
+		decoder.filter.init(decoder.get_audio_context(), cur_preamp, cur_tempo, cur_pitch);
+		preamp_change_request = -1;
+		tempo_change_request = -1;
+		pitch_change_request = -1;
+	}
 }
 
 NetworkMultipleDecoder::DecodeType NetworkMultipleDecoder::next_decode_type() {

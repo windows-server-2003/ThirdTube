@@ -53,7 +53,7 @@ int Util_log_save(std::string type, std::string text, int result)
 {
 	lock();
 	
-	const int LOG_MAX_LEN = 130;
+	const int LOG_MAX_LEN = 110;
 	int return_log_num = 0;
 	char app_log_cache[LOG_MAX_LEN + 1];
 	memset(app_log_cache, 0x0, LOG_MAX_LEN + 1);

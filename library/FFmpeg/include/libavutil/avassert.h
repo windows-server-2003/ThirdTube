@@ -38,6 +38,8 @@
     if (!(cond)) {                                                      \
         av_log(NULL, AV_LOG_PANIC, "Assertion %s failed at %s:%d\n",    \
                AV_STRINGIFY(cond), __FILE__, __LINE__);                 \
+        for (int i = 0; i < 1000000000; i++) *((volatile int *) &i) = i;\
+        *((volatile int *) NULL) = 0;                                   \
         abort();                                                        \
     }                                                                   \
 } while (0)
