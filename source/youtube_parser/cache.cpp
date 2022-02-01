@@ -4,7 +4,7 @@
 #include "internal_common.hpp"
 
 
-#define CACHE_VERSION 2
+#define CACHE_VERSION 3
 
 std::string yt_procs_to_string(const yt_cipher_transform_procedure &cipher_proc, const std::string &nparam_func) {
 	std::ostringstream stream;

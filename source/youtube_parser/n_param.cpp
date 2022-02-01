@@ -16,13 +16,14 @@
 #include "headers.hpp"
 #endif
 
+// array(array of nparam decrypt function(s)) name, index
 static std::string get_initial_function_name(const std::string &js) {
 	const std::string prefix = ".get(";
 	const std::string middle = "\"n\"";
 	const std::string suffix = "))&&(?=";
 	
 	size_t head = 0;
-	std::vector<std::string> candidates;
+	std::vector<std::pair<std::string, int> > candidates;
 	while (head < js.size()) {
 		auto pos = js.find(middle, head);
 		if (pos == std::string::npos) break;
@@ -38,15 +39,42 @@ static std::string get_initial_function_name(const std::string &js) {
 			if (!ok) continue;
 			std::string cur_name;
 			pos += suffix.size();
-			while (pos < js.size() && isalnum(js[pos])) cur_name.push_back(js[pos]), pos++;
-			candidates.push_back(cur_name);
+			while (pos < js.size() && isalnum(js[pos])) cur_name.push_back(js[pos++]);
+			int array_index = -1;
+			if (pos < js.size() && js[pos] == '[') {
+				pos++;
+				array_index = 0;
+				while (pos < js.size() && isdigit(js[pos])) array_index = array_index * 10 + js[pos++] - '0';
+			}
+			candidates.push_back({cur_name, array_index});
 		}
 	}
 	if (candidates.size() != 1) {
 		debug("[nparam] initial funciton name candidate num : " + std::to_string(candidates.size()));
 		return "";
 	}
-	return candidates[0];
+	std::string var_name = candidates[0].first;
+	int array_index = candidates[0].second;
+	if (array_index == -1) { // until 2022-02-01, the variable used was the nparam restoration function itself
+		return var_name;
+	} else { // now, it's an array containing the restoration function
+		std::string pattern = "var " + var_name + "=[";
+		auto pos = js.find(pattern);
+		if (pos == std::string::npos) {
+			debug("[nparam] the array containing initial function not found : " + var_name);
+			return "";
+		}
+		pos += pattern.size();
+		// assuming there are only variable(function) names in the array
+		for (int i = 0; i <= array_index; i++) {
+			auto start = pos;
+			while (pos < js.size() && js[pos] != ',' && js[pos] != ']') pos++;
+			if (i == array_index)
+				return js.substr(start, pos - start);
+			pos++;
+		}
+		return ""; // never reached, just to suppress the warning
+	}
 }
 
 

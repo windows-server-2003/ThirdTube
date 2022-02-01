@@ -125,6 +125,11 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 		tmp["url"] = url;
 		i = Json(tmp);
 	}
+	for (auto &i : formats) { // something like %2C still appears in the url, so decode them back
+		auto tmp = i.object_items();
+		tmp["url"] = url_decode(tmp["url"].string_value());
+		i = Json(tmp);
+	}
 	
 	res.stream_fragment_len = -1;
 	res.is_livestream = false;
