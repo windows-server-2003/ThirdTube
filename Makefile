@@ -35,9 +35,10 @@ TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
 SOURCES		:=	source source/system source/system/util source/system/draw source/youtube_parser library/json11 library/duktape source/scenes source/ui source/ui/views source/ui/views/specialized source/network
 DATA		:=	data
-INCLUDES	:=	include library library/FFmpeg/include library/libctru/include library/libcurl/include 
+INCLUDES	:=	include
 GRAPHICS	:=	gfx
 ROMFS		:=	romfs
+LIBRARY := library
 GFXBUILD	:=	$(ROMFS)/gfx
 #---------------------------------------------------------------------------------
 APP_VER					:= 65
@@ -62,7 +63,7 @@ CFLAGS	:= -Wall -Wextra -Wno-unused -Wno-psabi -O2 -mword-relocations \
 		-fomit-frame-pointer -ffunction-sections -fdata-sections \
 		$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) -DARM11 -D_3DS -DCURL_STATICLIB
+CFLAGS	+=	$(INCLUDE) -DARM11 -D__3DS__ -DCURL_STATICLIB
 
 CXXFLAGS	:= $(CFLAGS) -fno-exceptions -std=gnu++14
 
@@ -75,7 +76,8 @@ LIBS	:= -lavfilter -lswresample -lavformat -lswscale -lavcodec -lavutil -lcurl -
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS := library/FFmpeg/lib library/libctru/lib library/libcurl/lib
+LIBDIRS := library/FFmpeg library/libctru
+LIBDIRS_DEVKITPRO := libctru portlibs/3ds
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -141,10 +143,12 @@ export HFILES	:=	$(PICAFILES:.v.pica=_shbin.h) $(SHLISTFILES:.shlist=_shbin.h) \
 			$(GFXFILES:.t3s=.h)
 
 export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
-			$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+			$(foreach dir,$(LIBDIRS),-I$(CURDIR)/$(dir)/include) \
+			$(foreach dir,$(LIBDIRS_DEVKITPRO),-I$(DEVKITPRO)/$(dir)/include) \
+			-I$(CURDIR)/$(LIBRARY) \
 			-I$(CURDIR)/$(BUILD)
 
-export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(CURDIR)/$(dir))
+export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(CURDIR)/$(dir)/lib) $(foreach dir,$(LIBDIRS_DEVKITPRO),-L$(DEVKITPRO)/$(dir)/lib)
 
 export _3DSXDEPS	:=	$(if $(NO_SMDH),,$(OUTPUT).smdh)
 

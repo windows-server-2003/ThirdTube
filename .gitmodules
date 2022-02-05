@@ -1,6 +1,6 @@
 [submodule "library/FFmpeg/FFmpeg"]
 	path = library/FFmpeg/FFmpeg
-	url = https://github.com/FFmpeg/FFmpeg
-[submodule "library\\FFmpeg\\FFmpeg"]
-	path = library\\FFmpeg\\FFmpeg
-	url = https://github.com/FFmpeg/FFmpeg
+	url = https://github.com/windows-server-2003/FFmpeg
+[submodule "library/libctru/source"]
+	path = library/libctru/source
+	url = https://github.com/windows-server-2003/libctru

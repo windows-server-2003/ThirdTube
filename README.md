@@ -55,6 +55,13 @@ I haven't tested the minimum system version, but at least 8.1.0-0 is needed.
  - Does it make sense?  
    The **worst** question in the console homebrew scene. Isn't it just exciting to see your favorite videos playing on a 3DS?
 
+## Building
+You need:
+
+ - devkitPro with devkitARM r57  
+ - 3ds-curl installed in portlibs of devkitPro  
+     You can install it by opening devkitPro msys2 and typing `pacman -S 3ds-curl`.
+
 ## License
 You can use the code under the terms of the GNU General Public License GPL v3 or under the terms of any later revisions of the GPL. Refer to the provided LICENSE file for further information.
 
