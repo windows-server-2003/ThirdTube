@@ -62,14 +62,16 @@ You need:
  - 3ds-curl installed in portlibs of devkitPro  
      You can install it by opening devkitPro msys2 and typing `pacman -S 3ds-curl`.
 
+Type ```make``` (if you are on Linux) or ```make all_win``` (if you are on Windows) to build it.  
+
 ## License
 You can use the code under the terms of the GNU General Public License GPL v3 or under the terms of any later revisions of the GPL. Refer to the provided LICENSE file for further information.
 
-## Third-part licenses
+## Third-party licenses
 
 ### [FFmpeg](https://ffmpeg.org/)
 by the FFmpeg developers under GNU Lesser General Public License (LGPL) version 2.1  
-The source code can be found in library/FFmpeg/FFmpeg.  
+The modified source code can be found in https://github.com/windows-server-2003/FFmpeg/tree/3ds.  
 ### [json11](https://github.com/dropbox/json11)
 by Dropbox under MIT License  
 ### [Duktape](https://duktape.org/)
