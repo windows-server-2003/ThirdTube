@@ -147,9 +147,9 @@ static void load_subscription_feed(void *) {
 	std::map<std::pair<int, int>, std::vector<YouTubeVideoSuccinct> > loaded_videos;
 	for (auto channel : channels) {
 		Util_log_save("subsc", "load " + channel.name);
-		add_cpu_limit(35);
+		add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 		auto result = youtube_parse_channel_page(channel.url);
-		remove_cpu_limit(35);
+		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 		
 		// update the subscription metadata at the same time
 		if (result.name != "") {

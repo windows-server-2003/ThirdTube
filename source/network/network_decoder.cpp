@@ -40,7 +40,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 		stream->network_waiting_status = "Reading stream";
 		if (!cpu_limited) {
 			cpu_limited = true;
-			add_cpu_limit(25);
+			add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 		}
 		usleep(20000);
 		if (stream->error || stream->quit_request) {
@@ -51,7 +51,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	}
 	if (cpu_limited) {
 		cpu_limited = false;
-		remove_cpu_limit(25);
+		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	}
 	stream->network_waiting_status = NULL;
 	

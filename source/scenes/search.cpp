@@ -225,9 +225,9 @@ static void load_search_results(void *) {
 		search_url.push_back("0123456789ABCDEF"[(u8) c / 16]);
 		search_url.push_back("0123456789ABCDEF"[(u8) c % 16]);
 	}
-	add_cpu_limit(25);
+	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	YouTubeSearchResult new_result = youtube_parse_search(search_url);
-	remove_cpu_limit(25);
+	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	// wrap and truncate here
 	Util_log_save("search", "truncate/view creation start");
@@ -484,6 +484,8 @@ Intent Search_draw(void)
 	if(Util_log_query_log_show_flag())
 		Util_log_main(key);
 	
+	if ((key.h_x && key.p_y) || (key.h_y && key.p_x)) var_debug_mode = !var_debug_mode;
+	if ((key.h_x && key.p_a) || (key.h_x && key.p_a)) var_show_fps = !var_show_fps;
 	if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	
 	return intent;

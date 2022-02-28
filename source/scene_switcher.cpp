@@ -27,7 +27,6 @@ void Menu_worker_thread(void* arg);
 void Menu_update_thread(void* arg);
 
 static Result sound_init_result;
-static bool is_new_3ds;
 
 void Menu_init(void)
 {
@@ -62,10 +61,10 @@ void Menu_init(void)
 	
 	aptSetSleepAllowed(false);
 	
-	APT_CheckNew3DS(&is_new_3ds);
+	APT_CheckNew3DS(&var_is_new3ds);
+	CFGU_GetSystemModel(&var_model);
 	
-	
-	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_high_resolution_mode).code);
+	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_model != CFG_MODEL_2DS).code);
 	Draw_frame_ready();
 	Draw_screen_ready(0, DEF_DRAW_WHITE);
 	Draw_screen_ready(1, DEF_DRAW_WHITE);
@@ -184,11 +183,12 @@ static std::vector<Intent> scene_stack = {{SceneType::SEARCH, ""}};
 
 bool Menu_main(void)
 {
-	if (sound_init_result != 0 || !is_new_3ds) {
-		std::string error_msg;
-		if (!is_new_3ds) error_msg = "This app only supports New 3DSes due to performance issues";
-		else error_msg = std::string("Could not initialize NDSP (sound service)\nThis is probably because you haven't run DSP1\n") +
-			"You can download it from the link below\n\nhttps://github.com/zoogie/DSP1/releases/";
+	if (sound_init_result != 0) {
+		std::string error_msg = 
+			"Could not initialize NDSP (sound service)\n"
+			"This is probably because you haven't run DSP1\n"
+			"You can download it from the link below\n\n"
+			"https://github.com/zoogie/DSP1/releases/";
 		error_msg += "\n\nPress A to close the app";
 		
 		Hid_info key;

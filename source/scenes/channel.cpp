@@ -268,9 +268,9 @@ static void load_channel(void *) {
 	svcReleaseMutex(resource_lock);
 	
 	if (need_loading) {
-		add_cpu_limit(25);
+		add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 		result = youtube_parse_channel_page(url);
-		remove_cpu_limit(25);
+		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	}
 	
 	// wrap and truncate here to avoid taking time in locked state

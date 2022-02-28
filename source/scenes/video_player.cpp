@@ -15,9 +15,6 @@
 #include "system/util/misc_tasks.hpp"
 #include "system/util/util.hpp"
 
-#define NEW_3DS_CPU_LIMIT 50
-#define OLD_3DS_CPU_LIMIT 80
-
 #define ICON_SIZE 55
 #define TAB_SELECTOR_HEIGHT 20
 #define TAB_SELECTOR_SELECTED_LINE_HEIGHT 3
@@ -181,6 +178,7 @@ void VideoPlayer_init(void) {
 	Result_with_string result;
 	
 	vid_thread_run = true;
+
 	
 	svcCreateMutex(&network_decoder_critical_lock, false);
 	svcCreateMutex(&small_resource_lock, false);
@@ -352,15 +350,15 @@ void VideoPlayer_init(void) {
 	})->set_draw_order({3, 2, 1, 0});
 	for (int i = 0; i < 3; i++) playlist_view->views[i]->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; });
 	
-	APT_CheckNew3DS(&new_3ds);
-	if (new_3ds) {
-		add_cpu_limit(NEW_3DS_CPU_LIMIT);
+	add_cpu_limit(CPU_LIMIT);
+	if (var_is_new3ds) {
 		vid_decode_thread = threadCreate(decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+		livestream_initer_thread = threadCreate(livestream_initer_thread_func, &network_decoder, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
 	} else {
-		add_cpu_limit(OLD_3DS_CPU_LIMIT);
 		vid_decode_thread = threadCreate(decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
+		livestream_initer_thread = threadCreate(livestream_initer_thread_func, &network_decoder, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 1, false);
 	}
 	stream_downloader = NetworkStreamDownloader();
 	stream_downloader_thread = threadCreate(network_downloader_thread, &stream_downloader, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
@@ -427,6 +425,7 @@ void VideoPlayer_init(void) {
 	vid_height = 0;
 	vid_video_format = "n/a";
 	vid_audio_format = "n/a";
+	video_p_value = var_is_new3ds ? 360 : 144;
 	
 	VideoPlayer_resume("");
 	vid_already_init = true;
@@ -495,10 +494,7 @@ void VideoPlayer_exit(void) {
 	
 	svcReleaseMutex(small_resource_lock);
 	
-	bool new_3ds;
-	APT_CheckNew3DS(&new_3ds);
-	if (new_3ds) remove_cpu_limit(NEW_3DS_CPU_LIMIT);
-	else remove_cpu_limit(OLD_3DS_CPU_LIMIT);
+	remove_cpu_limit(CPU_LIMIT);
 
 	Draw_free_texture(61);
 	Draw_free_texture(62);
@@ -667,9 +663,9 @@ static void load_video_page(void *arg) {
 	
 	if (need_loading) {
 		Util_log_save("player/load-v", "request : " + url);
-		add_cpu_limit(25);
+		add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 		tmp_video_info = youtube_parse_video_page(url);
-		remove_cpu_limit(25);
+		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	}
 	
 	if (is_to_display) {
@@ -1016,11 +1012,11 @@ static void load_video_page(void *arg) {
 			available_qualities.insert(std::lower_bound(available_qualities.begin(), available_qualities.end(), 360), 360);
 		
 		video_quality_selector_view->button_texts = { (std::function<std::string ()>) []() { return LOCALIZED(OFF); } };
-		for (auto i : available_qualities) video_quality_selector_view->button_texts.push_back(std::to_string(i) + "p");
+		for (auto i : available_qualities) if (var_is_new3ds || i <= 240) video_quality_selector_view->button_texts.push_back(std::to_string(i) + "p");
 		video_quality_selector_view->button_num = video_quality_selector_view->button_texts.size();
 		
 		if (!audio_only_mode && !tmp_video_info.video_stream_urls.count((int) video_p_value)) {
-			video_p_value = 360;
+			video_p_value = var_is_new3ds ? 360 : 144;
 			if (!tmp_video_info.video_stream_urls.count((int) video_p_value)) audio_only_mode = true;
 		}
 		video_quality_selector_view->selected_button = audio_only_mode ? 0 : 1 + std::find(available_qualities.begin(), available_qualities.end(), (int) video_p_value) - available_qualities.begin();
@@ -1057,9 +1053,9 @@ static void load_video_page(void *arg) {
 static void load_more_suggestions(void *arg_) {
 	YouTubeVideoDetail *arg = (YouTubeVideoDetail *) arg_;
 	
-	add_cpu_limit(25);
+	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	auto new_result = youtube_video_page_load_more_suggestions(*arg);
-	remove_cpu_limit(25);
+	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	// wrap suggestion titles
 	Util_log_save("player/load-s", "truncate/view creation start");
@@ -1086,9 +1082,9 @@ static void load_more_suggestions(void *arg_) {
 static void load_more_comments(void *arg_) {
 	YouTubeVideoDetail *arg = (YouTubeVideoDetail *) arg_;
 	
-	add_cpu_limit(25);
+	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	auto new_result = youtube_video_page_load_more_comments(*arg);
-	remove_cpu_limit(25);
+	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	std::vector<View *> new_comment_views;
 	// wrap comments
@@ -1114,9 +1110,9 @@ static void load_more_replies(void *arg_) {
 	PostView *comment_view = dynamic_cast<PostView *>(comments_main_view->views[comment_index]);
 	YouTubeVideoDetail::Comment &comment = cur_video_info.comments[comment_index];
 	
-	add_cpu_limit(25);
+	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	auto new_comment = youtube_video_page_load_more_replies(comment);
-	remove_cpu_limit(25);
+	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	std::vector<PostView *> new_reply_views;
 	// wrap comments
@@ -1166,9 +1162,9 @@ static void load_caption(void *arg_) {
 	auto &base_lang_id = *arg->first;
 	auto &translation_lang_id = *arg->second;
 	
-	add_cpu_limit(25);
+	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	auto new_video_info = youtube_video_page_load_caption(cur_video_info, base_lang_id, translation_lang_id);
-	remove_cpu_limit(25);
+	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	std::vector<View *> caption_main_views;
 	
@@ -1516,14 +1512,14 @@ static void decode_thread(void* arg) {
 			network_waiting_status = "Reading Stream";
 			if (audio_only_mode) {
 				result = network_decoder.init(playing_video_info.audio_stream_url, stream_downloader,
-					playing_video_info.is_livestream ? playing_video_info.stream_fragment_len : -1, playing_video_info.needs_timestamp_adjusting(), true);
+					playing_video_info.is_livestream ? playing_video_info.stream_fragment_len : -1, playing_video_info.needs_timestamp_adjusting(), var_is_new3ds);
 			} else if (video_p_value == 360 && playing_video_info.duration_ms <= 60 * 60 * 1000 && playing_video_info.both_stream_url != "") {
 				// itag 18 (both_stream) of a long video takes too much time and sometimes leads to a crash 
 				result = network_decoder.init(playing_video_info.both_stream_url, stream_downloader,
-					playing_video_info.is_livestream ? playing_video_info.stream_fragment_len : -1, playing_video_info.needs_timestamp_adjusting(), true);
+					playing_video_info.is_livestream ? playing_video_info.stream_fragment_len : -1, playing_video_info.needs_timestamp_adjusting(), var_is_new3ds);
 			} else if (playing_video_info.video_stream_urls[(int) video_p_value] != "" && playing_video_info.audio_stream_url != "") {
 				result = network_decoder.init(playing_video_info.video_stream_urls[(int) video_p_value], playing_video_info.audio_stream_url, stream_downloader,
-					playing_video_info.is_livestream ? playing_video_info.stream_fragment_len : -1, playing_video_info.needs_timestamp_adjusting(), video_p_value == 360);
+					playing_video_info.is_livestream ? playing_video_info.stream_fragment_len : -1, playing_video_info.needs_timestamp_adjusting(), var_is_new3ds && video_p_value == 360);
 			} else {
 				result.code = -1;
 				result.string = "YouTube parser error";

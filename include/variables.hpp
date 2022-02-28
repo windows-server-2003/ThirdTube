@@ -8,7 +8,6 @@ extern bool var_eco_mode;
 extern bool var_debug_mode;
 extern bool var_flash_mode;
 extern bool var_wifi_enabled;
-extern bool var_high_resolution_mode;
 extern bool var_history_enabled;
 extern int var_autoplay_level;
 extern int var_network_framework;
@@ -34,6 +33,7 @@ extern int var_lcd_brightness;
 extern int var_time_to_turn_off_lcd;
 extern int var_num_of_app_start;
 extern int var_system_region;
+extern bool var_is_new3ds;
 
 #define COMMUNITY_IMAGE_SIZE_MIN 50
 #define COMMUNITY_IMAGE_SIZE_DEFAULT 200
@@ -47,7 +47,7 @@ extern std::string var_clipboard;
 extern std::string var_connected_ssid;
 extern std::string var_lang;
 extern std::string var_lang_content;
-extern std::string var_model;
+extern u8 var_model;
 extern C2D_Image var_square_image[1];
 extern C2D_Image var_texture_thumb_up[2];
 extern C2D_Image var_texture_thumb_down[2];
