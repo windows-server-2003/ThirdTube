@@ -1918,7 +1918,6 @@ Intent VideoPlayer_draw(void)
 	
 	Hid_info key;
 	Util_hid_query_key_state(&key);
-	Util_hid_key_flag_reset();
 	
 	int image_num = !vid_mvd_image_num;
 

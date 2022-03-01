@@ -70,7 +70,6 @@ void Menu_init(void)
 	Draw_screen_ready(1, DEF_DRAW_WHITE);
 	Draw_apply_draw();
 
-	Util_hid_init();
 	Util_expl_init();
 	Exfont_init();
 	for (int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++)
@@ -137,7 +136,6 @@ void Menu_exit(void)
 	Subscription_exit();
 	// add here
 
-	Util_hid_exit();
 	Util_expl_exit();
 	Exfont_exit();
 
@@ -183,6 +181,8 @@ static std::vector<Intent> scene_stack = {{SceneType::SEARCH, ""}};
 
 bool Menu_main(void)
 {
+	Util_hid_update_key_state();
+	
 	if (sound_init_result != 0) {
 		std::string error_msg = 
 			"Could not initialize NDSP (sound service)\n"
@@ -193,7 +193,6 @@ bool Menu_main(void)
 		
 		Hid_info key;
 		Util_hid_query_key_state(&key);
-		Util_hid_key_flag_reset();
 		
 		Draw_frame_ready();
 		Draw_screen_ready(0, DEF_DRAW_WHITE);

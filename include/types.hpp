@@ -67,8 +67,7 @@ struct Hid_info
 	int cpad_y = 0;
 	int touch_x = 0;
 	int touch_y = 0;
-	int touch_x_move = 0;
-	int touch_y_move = 0;
-	int held_time = 0;
+	int touch_x_prev = 0;
+	int touch_y_prev = 0;
 	int count = 0;
 };

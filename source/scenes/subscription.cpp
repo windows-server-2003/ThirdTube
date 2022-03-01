@@ -277,7 +277,6 @@ Intent Subscription_draw(void) {
 	intent.next_scene = SceneType::NO_CHANGE;
 	Hid_info key;
 	Util_hid_query_key_state(&key);
-	Util_hid_key_flag_reset();
 	
 	thumbnail_set_active_scene(SceneType::SUBSCRIPTION);
 	

@@ -356,7 +356,6 @@ Intent Sem_draw(void)
 	
 	Hid_info key;
 	Util_hid_query_key_state(&key);
-	Util_hid_key_flag_reset();
 	
 	thumbnail_set_active_scene(SceneType::SETTINGS);
 	
