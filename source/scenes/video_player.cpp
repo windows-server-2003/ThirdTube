@@ -714,7 +714,7 @@ static void load_video_page(void *arg) {
 						Draw_texture(var_texture_thumb_up[var_night_mode], x, y, 16, 16);
 						x += 16 + SMALL_MARGIN;
 						Draw(cur_video_info.like_count_str, x, y, 0.5, 0.5, LIGHT0_TEXT_COLOR);
-						x += Draw_get_width(cur_video_info.like_count_str, 0.5, 0.5) + SMALL_MARGIN * 2;
+						x += Draw_get_width(cur_video_info.like_count_str, 0.5) + SMALL_MARGIN * 2;
 						x = (int) x;
 						Draw_texture(var_texture_thumb_down[var_night_mode], x, y, 16, 16);
 						x += 16 + SMALL_MARGIN;
@@ -1369,8 +1369,8 @@ namespace Bar {
 		
 		std::string time_str0 = Util_convert_seconds_to_time(bar_timestamp);
 		std::string time_str1 = "/ " + Util_convert_seconds_to_time(vid_duration);
-		float time_str0_w = Draw_get_width(time_str0, SMALL_FONT_SIZE, SMALL_FONT_SIZE);
-		float time_str1_w = Draw_get_width(time_str1, SMALL_FONT_SIZE, SMALL_FONT_SIZE);
+		float time_str0_w = Draw_get_width(time_str0, SMALL_FONT_SIZE);
+		float time_str1_w = Draw_get_width(time_str1, SMALL_FONT_SIZE);
 		bar_x_l = 30;
 		bar_x_r = 320 - std::max(time_str0_w, time_str1_w) - TIME_STR_RIGHT_MARGIN - TIME_STR_LEFT_MARGIN - MAXIMIZE_ICON_WIDTH;
 		
@@ -1978,8 +1978,8 @@ Intent VideoPlayer_draw(void)
 			else if (i == TAB_CAPTIONS) tab_string = LOCALIZED(CAPTIONS);
 			else if (i == TAB_PLAYBACK) tab_string = LOCALIZED(PLAYBACK);
 			else if (i == TAB_PLAYLIST) tab_string = LOCALIZED(PLAYLIST);
-			font_size *= std::min(1.0, (x_r - x_l) * 0.9 / Draw_get_width(tab_string, font_size, font_size));
-			float y = CONTENT_Y_HIGH + (TAB_SELECTOR_HEIGHT - Draw_get_height(tab_string, font_size, font_size)) / 2 - 3;
+			font_size *= std::min(1.0, (x_r - x_l) * 0.9 / Draw_get_width(tab_string, font_size));
+			float y = CONTENT_Y_HIGH + (TAB_SELECTOR_HEIGHT - Draw_get_height(tab_string, font_size)) / 2 - 3;
 			if (i == selected_tab) y += 1;
 			Draw_x_centered(tab_string, x_l, x_r, y, font_size, font_size, DEFAULT_TEXT_COLOR);
 		}

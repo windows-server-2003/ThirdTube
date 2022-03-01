@@ -51,7 +51,7 @@ public :
 	void draw_() const override {
 		thumbnail_draw(thumbnail_handle, x0, y0, get_thumbnail_width(), get_thumbnail_height());
 		if (bottom_right_overlay.size()) {
-			float overlay_width = Draw_get_width(bottom_right_overlay, DURATION_FONT_SIZE, DURATION_FONT_SIZE);
+			float overlay_width = Draw_get_width(bottom_right_overlay, DURATION_FONT_SIZE);
 			Draw_texture(var_square_image[0], 0xBB000000, x0 + get_thumbnail_width() - overlay_width - 2, y0 + get_thumbnail_height() - 10, overlay_width + 2, 10);
 			Draw(bottom_right_overlay, x0 + get_thumbnail_width() - overlay_width - 1, y0 + get_thumbnail_height() - 11,
 				DURATION_FONT_SIZE, DURATION_FONT_SIZE, (u32) -1);

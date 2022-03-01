@@ -79,7 +79,7 @@ void draw_overlay_menu(int y) {
 		for (int i = 0; i < (int) contents.size(); i++) {
 			color = holding_touch && content_at(last_touch_x, last_touch_y) == i ? menu_content_background_color_selected : menu_content_background_color;
 			Draw_texture(var_square_image[0], color, 320 - CONTENT_WIDTH, y_base + i * CONTENT_HEIGHT, CONTENT_WIDTH, CONTENT_HEIGHT);
-			int string_width = Draw_get_width(contents[i].string, 0.5, 0.5);
+			int string_width = Draw_get_width(contents[i].string, 0.5);
 			int string_x = 320 - CONTENT_WIDTH + (CONTENT_WIDTH - string_width) / 2;
 			Draw(contents[i].string, string_x, y_base + i * CONTENT_HEIGHT + 5, 0.5, 0.5, menu_content_string_color);
 		}

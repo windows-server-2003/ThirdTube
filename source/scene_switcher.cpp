@@ -199,8 +199,8 @@ bool Menu_main(void)
 		Draw_screen_ready(0, DEF_DRAW_WHITE);
 		
 		{
-			int width = Draw_get_width(error_msg, 0.5, 0.5);
-			int height = Draw_get_height(error_msg, 0.5, 0.5);
+			int width = Draw_get_width(error_msg, 0.5);
+			int height = Draw_get_height(error_msg, 0.5);
 			Draw(error_msg, (400 - width) / 2, (240 - height) / 2, 0.5, 0.5, DEF_DRAW_BLACK);
 		}
 		Draw_top_ui();

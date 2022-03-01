@@ -17,7 +17,7 @@ void PostView::draw_() const {
 	if (cur_y < 240 && cur_y + DEFAULT_FONT_INTERVAL > 0) {
 		float x = content_x_pos();
 		Draw(author_name, x, cur_y - 3, 0.5, 0.5, LIGHT0_TEXT_COLOR);
-		x += Draw_get_width(author_name + " ", 0.5, 0.5);
+		x += Draw_get_width(author_name + " ", 0.5);
 		Draw(time_str, x, cur_y - 2, 0.45, 0.45, LIGHT1_TEXT_COLOR);
 	}
 	if (cur_y < 240 && cur_y + get_icon_size() > 0) thumbnail_draw(author_icon_handle, x0 + SMALL_MARGIN, cur_y, get_icon_size(), get_icon_size());
@@ -33,7 +33,7 @@ void PostView::draw_() const {
 		if (cur_y < 240 && cur_y + DEFAULT_FONT_INTERVAL > 0) {
 			Draw(LOCALIZED(SHOW_MORE), content_x_pos(), cur_y - 2, 0.5, 0.5, DEF_DRAW_GRAY);
 			if (show_more_holding) Draw_line(content_x_pos(), cur_y + DEFAULT_FONT_INTERVAL, DEF_DRAW_GRAY,
-				content_x_pos() + Draw_get_width(LOCALIZED(SHOW_MORE), 0.5, 0.5), cur_y + DEFAULT_FONT_INTERVAL, DEF_DRAW_GRAY, 1);
+				content_x_pos() + Draw_get_width(LOCALIZED(SHOW_MORE), 0.5), cur_y + DEFAULT_FONT_INTERVAL, DEF_DRAW_GRAY, 1);
 		}
 		cur_y += DEFAULT_FONT_INTERVAL;
 	}
@@ -64,7 +64,7 @@ void PostView::draw_() const {
 		cur_y += SMALL_MARGIN;
 		Draw(LOCALIZED(FOLD_REPLIES), content_x_pos(), cur_y - 2, 0.5, 0.5, COLOR_LINK);
 		if (fold_replies_holding) Draw_line(content_x_pos(), cur_y + DEFAULT_FONT_INTERVAL, COLOR_LINK,
-			content_x_pos() + Draw_get_width(LOCALIZED(FOLD_REPLIES), 0.5, 0.5), cur_y + DEFAULT_FONT_INTERVAL, COLOR_LINK, 1);
+			content_x_pos() + Draw_get_width(LOCALIZED(FOLD_REPLIES), 0.5), cur_y + DEFAULT_FONT_INTERVAL, COLOR_LINK, 1);
 		cur_y += DEFAULT_FONT_INTERVAL;
 		cur_y += SMALL_MARGIN;
 	}
@@ -77,7 +77,7 @@ void PostView::draw_() const {
 		std::string message = is_loading_replies ? LOCALIZED(LOADING) : replies_shown ? LOCALIZED(SHOW_MORE_REPLIES) : LOCALIZED(SHOW_REPLIES);
 		Draw(message, content_x_pos(), cur_y - 2, 0.5, 0.5, COLOR_LINK);
 		if (show_more_replies_holding) Draw_line(content_x_pos(), cur_y + DEFAULT_FONT_INTERVAL, COLOR_LINK,
-			content_x_pos() + Draw_get_width(message, 0.5, 0.5), cur_y + DEFAULT_FONT_INTERVAL, COLOR_LINK, 1);
+			content_x_pos() + Draw_get_width(message, 0.5), cur_y + DEFAULT_FONT_INTERVAL, COLOR_LINK, 1);
 		cur_y += DEFAULT_FONT_INTERVAL;
 	}
 }
@@ -93,7 +93,7 @@ void PostView::update_(Hid_info key) {
 	
 	if (lines_shown < content_lines.size()) {
 		cur_y += SMALL_MARGIN;
-		bool inside_show_more = in_range(key.touch_x, content_x_pos(), std::min<float>(x1, content_x_pos() + Draw_get_width(LOCALIZED(SHOW_MORE), 0.5, 0.5))) &&
+		bool inside_show_more = in_range(key.touch_x, content_x_pos(), std::min<float>(x1, content_x_pos() + Draw_get_width(LOCALIZED(SHOW_MORE), 0.5))) &&
 			in_range(key.touch_y, cur_y, cur_y + DEFAULT_FONT_INTERVAL);
 		
 		if (key.p_touch && inside_show_more) show_more_holding = true;
@@ -117,7 +117,7 @@ void PostView::update_(Hid_info key) {
 	
 	if (replies_shown) {
 		cur_y += SMALL_MARGIN;
-		bool inside_fold_replies = in_range(key.touch_x, content_x_pos(), std::min<float>(x1, content_x_pos() + Draw_get_width(LOCALIZED(FOLD_REPLIES), 0.5, 0.5))) &&
+		bool inside_fold_replies = in_range(key.touch_x, content_x_pos(), std::min<float>(x1, content_x_pos() + Draw_get_width(LOCALIZED(FOLD_REPLIES), 0.5))) &&
 			in_range(key.touch_y, cur_y, cur_y + DEFAULT_FONT_INTERVAL + 1);
 		
 		if (key.p_touch && inside_fold_replies) fold_replies_holding = true;
@@ -137,7 +137,7 @@ void PostView::update_(Hid_info key) {
 	if (is_loading_replies || get_has_more_replies() || replies_shown < replies.size()) {
 		cur_y += SMALL_MARGIN;
 		std::string message = is_loading_replies ? LOCALIZED(LOADING) : replies_shown ? LOCALIZED(SHOW_MORE_REPLIES) : LOCALIZED(SHOW_REPLIES);
-		bool inside_show_more_replies = in_range(key.touch_x, content_x_pos(), std::min<float>(x1, content_x_pos() + Draw_get_width(message, 0.5, 0.5))) &&
+		bool inside_show_more_replies = in_range(key.touch_x, content_x_pos(), std::min<float>(x1, content_x_pos() + Draw_get_width(message, 0.5))) &&
 			in_range(key.touch_y, cur_y, cur_y + DEFAULT_FONT_INTERVAL + 1);
 		
 		if (key.p_touch && inside_show_more_replies) show_more_replies_holding = true;

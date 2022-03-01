@@ -61,7 +61,7 @@ public :
 		Draw_texture(var_square_image[0], LIGHT2_BACK_COLOR, tab_pos_x(selected_tab), y0, tab_width(), tab_selector_height);
 		Draw_texture(var_square_image[0], LIGHT3_BACK_COLOR, tab_pos_x(selected_tab), y0, tab_width(), tab_selector_selected_line_height);
 		for (int i = 0; i < tab_num; i++) {
-			float y = y0 + (tab_selector_height - Draw_get_height(tab_texts[i], 0.5, 0.5)) / 2;
+			float y = y0 + (tab_selector_height - Draw_get_height(tab_texts[i], 0.5)) / 2;
 			if (i == selected_tab) y -= 2;
 			else y -= 3;
 			Draw_x_centered(tab_texts[i], tab_pos_x(i), tab_pos_x(i + 1), y, 0.5, 0.5, DEFAULT_TEXT_COLOR);

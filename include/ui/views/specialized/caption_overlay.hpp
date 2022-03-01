@@ -78,7 +78,7 @@ public :
 		
 		float start_y = 240 - 10 - DEFAULT_FONT_INTERVAL * lines.size();
 		for (size_t i = 0; i < lines.size(); i++) {
-			float width = Draw_get_width(lines[i], 0.5, 0.5);
+			float width = Draw_get_width(lines[i], 0.5);
 			
 			Draw_texture(var_square_image[0], 0xBB000000, (400 - width) / 2 - OVERLAY_SIDE_MARGIN, start_y + i * DEFAULT_FONT_INTERVAL,
 				width + OVERLAY_SIDE_MARGIN * 2, DEFAULT_FONT_INTERVAL);

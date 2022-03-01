@@ -122,22 +122,28 @@ std::map<std::string, std::string> parse_xml_like_text(std::string data) {
 }
 
 // truncate and wrap into at most `max_lines` lines so that each line fit in `max_width` if drawn with the size of `x_size` x `y_size`
+// assumes input_str doesn't contain any linebreaks
 std::vector<std::string> truncate_str(std::string input_str, int max_width, int max_lines, double x_size, double y_size) {
-	static std::string input[1024 + 1];
+	u64 input[1024 + 1];
 	int n;
-	Exfont_text_parse(input_str, &input[0], 1024, &n);
+	Exfont_text_parse(input_str, input, 1024, &n);
 	
-	std::vector<std::vector<std::string> > words; // each word is considered not separable
+	std::vector<std::vector<u64> > words; // each word is considered not separable
+	std::vector<size_t> word_start;
 	for (int i = 0; i < n; i++) {
 		bool seperate;
 		if (!i) seperate = true;
 		else {
-			std::string last_char = words.back().back();
-			seperate = last_char.size() != 1 || input[i].size() != 1 || last_char == " " || input[i] == " ";
+			u64 last_char = words.back().back();
+			// either last_char or next char is multibyte or whitespace
+			seperate = (last_char >> 8) || (input[i] >> 8) || (last_char == (u8) ' ') || (input[i] == (u8) ' ');
 		}
-		if (seperate) words.push_back({input[i]});
-		else words.back().push_back(input[i]);
+		if (seperate) {
+			words.push_back({input[i]});
+			word_start.push_back(i);
+		} else words.back().push_back(input[i]);
 	}
+	word_start.push_back(n);
 	
 	int m = words.size();
 	int head = 0;
@@ -146,35 +152,51 @@ std::vector<std::string> truncate_str(std::string input_str, int max_width, int 
 		if (head >= m) break;
 		
 		int fit_word_num = 0;
-		{ // binary search the number of words that fit in the line
-			int l = 0;
-			int r = std::min(50, m - head + 1);
-			while (r - l > 1) {
-				int m = l + ((r - l) >> 1);
-				std::string query_text;
-				for (int i = head; i < head + m; i++) for (auto j : words[i]) query_text += j;
-				if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
-				else r = m;
+		float cur_line_width = 0;
+		{ // get the number of words that fit in the line
+			for (int i = head; i < m; i++) {
+				float cur_word_width = 0;
+				for (u64 c : words[i]) cur_word_width += Draw_get_width_one(c, x_size);
+				if (cur_line_width + cur_word_width <= max_width) {
+					fit_word_num = i - head + 1;
+					cur_line_width += cur_word_width;
+				} else break;
 			}
-			fit_word_num = l;
 		}
 		
 		std::string cur_line;
-		for (int i = head; i < head + fit_word_num; i++) for (auto j : words[i]) cur_line += j;
-		bool force_fit = !fit_word_num || (line == max_lines - 1 && fit_word_num < m - head);
+		for (size_t i = word_start[head]; i < word_start[head + fit_word_num]; i++) {
+			u64 cur_char = input[i];
+			if (cur_char >> 24) cur_line.push_back(cur_char >> 24);
+			if (cur_char >> 16) cur_line.push_back(cur_char >> 16 & 0xFF);
+			if (cur_char >> 8) cur_line.push_back(cur_char >> 8 & 0xFF);
+			cur_line.push_back(cur_char & 0xFF);
+		}
+		
+		bool force_fit = !fit_word_num || (line == max_lines - 1 && head + fit_word_num < m);
 		if (force_fit) {
-			std::vector<std::string> cur_word = words[head + fit_word_num];
-			int l = 0;
-			int r = cur_word.size();
-			while (r - l > 1) { // binary search the number of characters that fit in the first line
-				int m = l + ((r - l) >> 1);
-				std::string query_text = cur_line;
-				for (int i = 0; i < m; i++) query_text += cur_word[i];
-				query_text += "...";
-				if (Draw_get_width(query_text, x_size, y_size) <= max_width) l = m;
-				else r = m;
+			const std::vector<u64> &cur_word = words[head + fit_word_num];
+			
+			int max_fit = 0;
+			float width_left = max_width - cur_line_width;
+			width_left -= 3 * Draw_get_width_one('.', x_size);
+			
+			if (width_left >= 0) {
+				for (size_t i = 0; i < cur_word.size(); i++) {
+					float cur_size = Draw_get_width_one(cur_word[i], x_size);
+					if (width_left >= cur_size) {
+						width_left -= cur_size;
+						max_fit = i + 1;
+					} else break;
+				}
 			}
-			for (int i = 0; i < l; i++) cur_line += cur_word[i];
+			for (int i = 0; i < max_fit; i++) {
+				u64 cur_char = cur_word[i];
+				if (cur_char >> 24) cur_line.push_back(cur_char >> 24);
+				if (cur_char >> 16) cur_line.push_back(cur_char >> 16 & 0xFF);
+				if (cur_char >> 8) cur_line.push_back(cur_char >> 8 & 0xFF);
+				cur_line.push_back(cur_char & 0xFF);
+			}
 			cur_line += "...";
 			res.push_back(cur_line);
 			head += fit_word_num + 1;
