@@ -4,6 +4,9 @@
 #include <vector>
 #include <set>
 #include <deque>
+#include <string.h>
+
+#include "system/util/fake_pthread.hpp"
 
 extern "C" {
 #include "libavcodec/avcodec.h"
@@ -157,6 +160,11 @@ public :
 	volatile bool ready = false;
 	double timestamp_offset = 0;
 	NetworkDecoderFilterData filter;
+	bool frame_cores_enabled[4];
+	bool slice_cores_enabled[4];
+	
+	void set_frame_cores_enabled(bool *enabled) { memcpy(frame_cores_enabled, enabled, 4); }
+	void set_slice_cores_enabled(bool *enabled) { memcpy(slice_cores_enabled, enabled, 4); }
 	
 	AVCodecContext *get_audio_context() { return decoder_context[AUDIO]; }
 	const char *get_network_waiting_status() {
@@ -199,6 +207,19 @@ public :
 	
 	size_t get_raw_buffer_num() { return hw_decoder_enabled ? video_mvd_tmp_frames.size() : video_tmp_frames.size(); }
 	size_t get_raw_buffer_num_max() { return hw_decoder_enabled ? video_mvd_tmp_frames.size_max() : video_tmp_frames.size_max(); }
+	
+	enum class DecoderType {
+		HW,
+		MT_FRAME,
+		MT_SLICE,
+		ST
+	};
+	DecoderType get_decoder_type() {
+		if (hw_decoder_enabled) return DecoderType::HW;
+		if (decoder_context[VIDEO]->thread_type == FF_THREAD_FRAME) return DecoderType::MT_FRAME;
+		if (decoder_context[VIDEO]->thread_type == FF_THREAD_SLICE) return DecoderType::MT_SLICE;
+		return DecoderType::ST;
+	}
 	
 	
 	// decode the previously read video packet

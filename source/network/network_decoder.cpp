@@ -1,6 +1,7 @@
 #include "headers.hpp"
 #include "network/network_decoder.hpp"
 #include "network/network_downloader.hpp"
+#include <numeric>
 
 extern "C" void memcpy_asm(u8*, u8*, int);
 
@@ -118,7 +119,7 @@ Result_with_string NetworkDecoderFFmpegData::init_(int type, AVMediaType expecte
 	Result_with_string result;
 	int ffmpeg_result;
 	
-	if (video_audio_seperate || type == BOTH) {
+	if (video_audio_seperate || type == BOTH) { // initialize io-related thing
 		network_stream[type]->read_head = 0;
 		
 		opaque[type] = new std::pair<NetworkDecoder *, NetworkStream *>(parent_decoder, network_stream[type]);
@@ -164,6 +165,7 @@ Result_with_string NetworkDecoderFFmpegData::init_(int type, AVMediaType expecte
 			}
 		}
 	}
+	// find stream index
 	if (!video_audio_seperate) {
 		stream_index[type] = -1;
 		for (size_t i = 0; i < format_context[BOTH]->nb_streams; i++) {
@@ -182,6 +184,7 @@ Result_with_string NetworkDecoderFFmpegData::init_(int type, AVMediaType expecte
 		}
 	} else stream_index[type] = 0;
 	
+	// initialize decoder
 	codec[type] = avcodec_find_decoder(get_stream(type)->codecpar->codec_id);
 	if(!codec[type]) {
 		result.error_description = "avcodec_find_decoder() failed";
@@ -199,8 +202,25 @@ Result_with_string NetworkDecoderFFmpegData::init_(int type, AVMediaType expecte
 		result.error_description = "avcodec_parameters_to_context() failed " + std::to_string(ffmpeg_result);
 		goto fail;
 	}
-
-	if ((video_audio_seperate ? (type == VIDEO) : (type == BOTH))) decoder_context[type]->lowres = 0; // <-------
+	
+	if ((video_audio_seperate ? (type == VIDEO) : (type == BOTH))) {
+		decoder_context[type]->lowres = 0; // <-------
+		decoder_context[type]->flags = AV_CODEC_FLAG_OUTPUT_CORRUPT;
+		
+		if (codec[type]->capabilities & AV_CODEC_CAP_FRAME_THREADS) decoder_context[type]->thread_type = FF_THREAD_FRAME;
+		else if(codec[type]->capabilities & AV_CODEC_CAP_SLICE_THREADS) decoder_context[type]->thread_type = FF_THREAD_SLICE;
+		else decoder_context[type]->thread_type = 0;
+		
+		if (decoder_context[type]->thread_type == FF_THREAD_FRAME) {
+			Util_fake_pthread_set_enabled_core(parent_decoder->frame_cores_enabled);
+			decoder_context[type]->thread_count = std::accumulate(std::begin(parent_decoder->frame_cores_enabled), std::end(parent_decoder->frame_cores_enabled), 0);
+		} else if (decoder_context[type]->thread_type == FF_THREAD_SLICE) {
+			Util_fake_pthread_set_enabled_core(parent_decoder->slice_cores_enabled);
+			decoder_context[type]->thread_count = std::accumulate(std::begin(parent_decoder->slice_cores_enabled), std::end(parent_decoder->slice_cores_enabled), 0);
+		} else decoder_context[type]->thread_count = 1;
+		
+		decoder_context[type]->thread_safe_callbacks = 1;
+	}
 	ffmpeg_result = avcodec_open2(decoder_context[type], codec[type], NULL);
 	if (ffmpeg_result != 0) {
 		result.error_description = "avcodec_open2() failed " + std::to_string(ffmpeg_result);

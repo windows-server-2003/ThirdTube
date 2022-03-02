@@ -230,7 +230,14 @@ void VideoPlayer_init(void) {
 				[] () {
 					return std::to_string(vid_width_org) + "x" + std::to_string(vid_height_org) + "@" + std::to_string(vid_framerate).substr(0, 5) + "fps";
 				},
-				[] () { return LOCALIZED(HW_DECODER) + " : " + LOCALIZED_ENABLED_STATUS(network_decoder.hw_decoder_enabled); },
+				[] () {
+					auto decoder_type = network_decoder.get_decoder_type();
+					std::string decoder_type_str =
+						decoder_type == NetworkMultipleDecoder::DecoderType::HW ? LOCALIZED(HW_DECODER) :
+						decoder_type == NetworkMultipleDecoder::DecoderType::MT_SLICE ? LOCALIZED(MULTITHREAD_SLICE) :
+						decoder_type == NetworkMultipleDecoder::DecoderType::MT_FRAME ? LOCALIZED(MULTITHREAD_FRAME) : LOCALIZED(SINGLE_THREAD);
+					return LOCALIZED(DECODER_TYPE) + " : " + decoder_type_str;
+				},
 				[] () {
 					const char *message = get_network_waiting_status();
 					return LOCALIZED(WAITING_STATUS) + " : " + std::string(message ? message : "");
@@ -244,7 +251,7 @@ void VideoPlayer_init(void) {
 					return LOCALIZED(FORWARD_BUFFER) + " : " + (cur_video_info.is_livestream && network_decoder.ready ? std::to_string(network_decoder.get_forward_buffer()) : "N/A");
 				},
 				[] () {
-					return "raw:" + std::to_string(network_decoder.get_raw_buffer_num()) + "/" + std::to_string(network_decoder.get_raw_buffer_num_max());
+					return LOCALIZED(RAW_FRAME_BUFFER) + std::to_string(network_decoder.get_raw_buffer_num()) + "/" + std::to_string(network_decoder.get_raw_buffer_num_max());
 				}
 			}),
 			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
@@ -355,10 +362,20 @@ void VideoPlayer_init(void) {
 	
 	add_cpu_limit(CPU_LIMIT);
 	if (var_is_new3ds) {
+		bool frame_cores[4] = {false, true, var_core2_available, var_core3_available};
+		bool slice_cores[4] = {false, true, false, var_core3_available};
+		network_decoder.set_frame_cores_enabled(frame_cores);
+		network_decoder.set_slice_cores_enabled(slice_cores);
+		
 		vid_decode_thread = threadCreate(decode_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 2, false);
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 		livestream_initer_thread = threadCreate(livestream_initer_thread_func, &network_decoder, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
 	} else {
+		bool frame_cores[4] = {true, true, false, false};
+		bool slice_cores[4] = {false, true, false, false};
+		network_decoder.set_frame_cores_enabled(frame_cores);
+		network_decoder.set_slice_cores_enabled(slice_cores);
+		
 		vid_decode_thread = threadCreate(decode_thread, (void*)("1"), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, 1, false);
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 		livestream_initer_thread = threadCreate(livestream_initer_thread_func, &network_decoder, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 1, false);

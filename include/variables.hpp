@@ -34,6 +34,8 @@ extern int var_time_to_turn_off_lcd;
 extern int var_num_of_app_start;
 extern int var_system_region;
 extern bool var_is_new3ds;
+extern bool var_core2_available;
+extern bool var_core3_available;
 
 #define COMMUNITY_IMAGE_SIZE_MIN 50
 #define COMMUNITY_IMAGE_SIZE_DEFAULT 200

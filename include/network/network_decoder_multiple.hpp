@@ -1,11 +1,11 @@
 #pragma once
 #include <string>
 #include <map>
+#include "headers.hpp"
+#include "types.hpp"
 #include "network_io.hpp"
 #include "network_decoder.hpp"
 #include "network_downloader.hpp"
-#include "types.hpp"
-#include "headers.hpp"
 
 // TODO : do mvd init/deinit here
 
@@ -74,6 +74,9 @@ public :
 	void livestream_initer_thread_func();
 	void request_thread_exit() { initer_exit_request = true; }
 	
+	void set_frame_cores_enabled(bool *enabled) { decoder.set_frame_cores_enabled(enabled); }
+	void set_slice_cores_enabled(bool *enabled) { decoder.set_slice_cores_enabled(enabled); }
+	
 	using VideoFormatInfo = NetworkDecoder::VideoFormatInfo;
 	using AudioFormatInfo = NetworkDecoder::AudioFormatInfo;
 	VideoFormatInfo get_video_info() { return decoder.get_video_info(); }
@@ -103,6 +106,9 @@ public :
 	// the switch to the next sequence is done inside this function
 	using DecodeType = NetworkDecoder::DecodeType;
 	DecodeType next_decode_type();
+	
+	using DecoderType = NetworkDecoder::DecoderType;
+	DecoderType get_decoder_type() { return network_decoder.get_decoding_type(); }
 	
 	// decode the previously read video packet
 	// decoded image is stored internally and can be acquired via get_decoded_video_frame()

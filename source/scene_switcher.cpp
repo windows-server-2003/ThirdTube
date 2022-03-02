@@ -25,6 +25,9 @@ static SceneType current_scene;
 void Menu_check_connectivity_thread(void* arg);
 void Menu_worker_thread(void* arg);
 void Menu_update_thread(void* arg);
+static void empty_thread(void* arg) {
+	threadExit(0);
+}
 
 static Result sound_init_result;
 
@@ -63,6 +66,18 @@ void Menu_init(void)
 	
 	APT_CheckNew3DS(&var_is_new3ds);
 	CFGU_GetSystemModel(&var_model);
+	
+	if (var_is_new3ds) { // check core availability
+		Thread core_2 = threadCreate(empty_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
+		var_core2_available = (bool) core_2;
+		if (core_2) threadJoin(core_2, U64_MAX);
+		threadFree(core_2);
+
+		Thread core_3 = threadCreate(empty_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 3, false);
+		var_core3_available = (bool) core_3;
+		if (core_3) threadJoin(core_3, U64_MAX);
+		threadFree(core_3);
+	}
 	
 	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_model != CFG_MODEL_2DS).code);
 	Draw_frame_ready();

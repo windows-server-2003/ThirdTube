@@ -140,7 +140,7 @@ void Sem_init(void) {
 						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
 					(new EmptyView(0, 0, 320, 10))
 				}),
-			// Tab #2 : UI/Display
+			// Tab #2 : Playback
 			(new ScrollView(0, 0, 320, 0))
 				->set_views({
 					// Autoplay
