@@ -51,7 +51,7 @@ void Menu_init(void)
 		else Util_log_save(DEF_MENU_INIT_STR, "socInit()...", socInit(soc_buffer, SOC_BUFFERSIZE));
 	}
 	Util_log_save(DEF_MENU_INIT_STR, "sslcInit()...", sslcInit(0));
-	Util_log_save(DEF_MENU_INIT_STR, "httpcInit()...", httpcInit(0x500000));
+	Util_log_save(DEF_MENU_INIT_STR, "httpcInit()...", httpcInit(0x200000));
 	Util_log_save(DEF_MENU_INIT_STR, "romfsInit()...", romfsInit());
 	Util_log_save(DEF_MENU_INIT_STR, "cfguInit()...", cfguInit());
 	Util_log_save(DEF_MENU_INIT_STR, "amInit()...", amInit());
@@ -342,15 +342,15 @@ void Menu_get_system_info(void)
 
 int Menu_check_free_ram(void)
 {
-	u8* malloc_check[200];
+	u8* malloc_check[500];
 	int count;
 
-	for (int i = 0; i < 200; i++)
+	for (int i = 0; i < 500; i++)
 		malloc_check[i] = NULL;
 
-	for (count = 0; count < 200; count++)
+	for (count = 0; count < 500; count++)
 	{
-		malloc_check[count] = (u8*)malloc(1000000);// 1 MB
+		malloc_check[count] = (u8*)malloc(100000);// 100 KB
 		if (malloc_check[count] == NULL)
 			break;
 	}
@@ -358,7 +358,7 @@ int Menu_check_free_ram(void)
 	for (int i = 0; i <= count; i++)
 		free(malloc_check[i]);
 
-	return count * 1000; // return free KB
+	return count * 100; // return free KB
 }
 
 /*

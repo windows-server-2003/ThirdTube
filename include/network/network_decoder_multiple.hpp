@@ -79,6 +79,9 @@ public :
 	VideoFormatInfo get_video_info() { return decoder.get_video_info(); }
 	AudioFormatInfo get_audio_info() { return decoder.get_audio_info(); }
 	
+	size_t get_raw_buffer_num() { return decoder.get_raw_buffer_num(); }
+	size_t get_raw_buffer_num_max() { return decoder.get_raw_buffer_num_max(); }
+	
 	double get_duration() { return duration_first_fragment + (fragment_len != -1 ? std::min(seq_num - 1, (int) seq_head) * fragment_len : 0); }
 	double get_forward_buffer() { return fragment_len == -1 ? 0 : (seq_buffered_head - seq_using - 1) * fragment_len; }
 	double get_timestamp_from_bar_pos(double pos) {

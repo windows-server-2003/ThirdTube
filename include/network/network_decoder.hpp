@@ -45,6 +45,7 @@ namespace network_decoder_ {
 			if (head >= tail) return head - tail;
 			else return head + num + 1 - tail;
 		}
+		size_t size_max() { return num; }
 		bool full() {
 			return size() == num;
 		}
@@ -118,6 +119,8 @@ public :
 
 class NetworkDecoder {
 private :
+	static constexpr size_t OLD_MAX_RAW_BUFFER_SIZE = 3 * 1000 * 1000;
+	static constexpr size_t NEW_MAX_RAW_BUFFER_SIZE = 8 * 1000 * 1000;
 	static constexpr int VIDEO = 0;
 	static constexpr int AUDIO = 1;
 	static constexpr int BOTH = 0;
@@ -193,6 +196,9 @@ public :
 		INTERRUPTED
 	};
 	DecodeType next_decode_type();
+	
+	size_t get_raw_buffer_num() { return hw_decoder_enabled ? video_mvd_tmp_frames.size() : video_tmp_frames.size(); }
+	size_t get_raw_buffer_num_max() { return hw_decoder_enabled ? video_mvd_tmp_frames.size_max() : video_tmp_frames.size_max(); }
 	
 	
 	// decode the previously read video packet

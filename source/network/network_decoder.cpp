@@ -481,8 +481,12 @@ Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
 	height = decoder_context[VIDEO]->height;
 	if (width % 16) width += 16 - width % 16;
 	if (height % 16) height += 16 - height % 16;
+	const size_t MAX_RAW_BUFFER_SIZE = var_is_new3ds ? NEW_MAX_RAW_BUFFER_SIZE : OLD_MAX_RAW_BUFFER_SIZE;
 	if (is_mvd) {
-		std::vector<u8 *> init(11);
+		int buffer_size = MAX_RAW_BUFFER_SIZE / (width * height * 2);
+		if (buffer_size <= 10) Util_log_save("decoder", "mvd buffer size too low:" + std::to_string(buffer_size));
+		
+		std::vector<u8 *> init(buffer_size);
 		for (auto &i : init) {
 			i = (u8 *) malloc(width * height * 2);
 			if (!i) {
@@ -498,7 +502,10 @@ Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
 			goto fail;
 		}
 	} else {
-		std::vector<AVFrame *> init(11);
+		int buffer_size = MAX_RAW_BUFFER_SIZE / (width * height * 1.5);
+		if (buffer_size <= 10) Util_log_save("decoder", "buffer size too low:" + std::to_string(buffer_size));
+		
+		std::vector<AVFrame *> init(buffer_size);
 		for (auto &i : init) {
 			i = av_frame_alloc();
 			if (!i) {

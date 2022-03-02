@@ -2,6 +2,8 @@
 #include "network/network_downloader.hpp"
 #include "network/network_io.hpp"
 
+#define MAX_CACHE_BLOCKS (var_is_new3ds ? NEW3DS_MAX_CACHE_BLOCKS : OLD3DS_MAX_CACHE_BLOCKS)
+
 
 // --------------------------------
 // NetworkStream implementation
