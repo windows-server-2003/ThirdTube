@@ -357,20 +357,17 @@ void Menu_get_system_info(void)
 
 int Menu_check_free_ram(void)
 {
-	u8* malloc_check[500];
+	u8* malloc_check[2000];
 	int count;
-
-	for (int i = 0; i < 500; i++)
-		malloc_check[i] = NULL;
-
-	for (count = 0; count < 500; count++)
+	
+	for (count = 0; count < 2000; count++)
 	{
-		malloc_check[count] = (u8*)malloc(100000);// 100 KB
+		malloc_check[count] = (u8 *) malloc(100000);// 100 KB
 		if (malloc_check[count] == NULL)
 			break;
 	}
 
-	for (int i = 0; i <= count; i++)
+	for (int i = 0; i < count; i++)
 		free(malloc_check[i]);
 
 	return count * 100; // return free KB

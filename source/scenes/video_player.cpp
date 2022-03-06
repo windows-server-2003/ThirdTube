@@ -251,7 +251,7 @@ void VideoPlayer_init(void) {
 					return LOCALIZED(FORWARD_BUFFER) + " : " + (cur_video_info.is_livestream && network_decoder.ready ? std::to_string(network_decoder.get_forward_buffer()) : "N/A");
 				},
 				[] () {
-					return LOCALIZED(RAW_FRAME_BUFFER) + std::to_string(network_decoder.get_raw_buffer_num()) + "/" + std::to_string(network_decoder.get_raw_buffer_num_max());
+					return LOCALIZED(RAW_FRAME_BUFFER) + " : " + std::to_string(network_decoder.get_raw_buffer_num()) + "/" + std::to_string(network_decoder.get_raw_buffer_num_max());
 				}
 			}),
 			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
@@ -1628,7 +1628,7 @@ static void decode_thread(void* arg) {
 				
 				auto type = network_decoder.next_decode_type();
 				
-				if (type == NetworkMultipleDecoder::DecodeType::EoF) {
+				if (type == NetworkMultipleDecoder::PacketType::EoF) {
 					vid_pausing = true;
 					if (!eof_reached) { // the first time it reaches EOF
 						svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
@@ -1642,7 +1642,7 @@ static void decode_thread(void* arg) {
 					continue;
 				} else eof_reached = false;
 				
-				if (type == NetworkMultipleDecoder::DecodeType::AUDIO) {
+				if (type == NetworkMultipleDecoder::PacketType::AUDIO) {
 					osTickCounterUpdate(&counter0);
 					result = network_decoder.decode_audio(&audio_size, &audio, &pos);
 					osTickCounterUpdate(&counter0);
@@ -1665,7 +1665,7 @@ static void decode_thread(void* arg) {
 
 					free(audio);
 					audio = NULL;
-				} else if (type == NetworkMultipleDecoder::DecodeType::VIDEO) {
+				} else if (type == NetworkMultipleDecoder::PacketType::VIDEO) {
 					osTickCounterUpdate(&counter0);
 					result = network_decoder.decode_video(&w, &h, &key, &pos);
 					osTickCounterUpdate(&counter0);
@@ -1695,10 +1695,10 @@ static void decode_thread(void* arg) {
 					for (int i = 1; i < 320; i++) vid_time[0][i - 1] = vid_time[0][i];
 					
 					if (vid_play_request && !vid_seek_request && !vid_change_video_request) {
-						if (result.code != 0)
+						if (result.code != 0 && result.code != DEF_ERR_NEED_MORE_INPUT)
 							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
 					}
-				} else if (type == NetworkMultipleDecoder::DecodeType::INTERRUPTED) continue;
+				} else if (type == NetworkMultipleDecoder::PacketType::INTERRUPTED) continue;
 				else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "unknown type of packet");
 			}
 			

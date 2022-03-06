@@ -104,11 +104,11 @@ public :
 	std::vector<std::pair<double, std::vector<double> > > get_buffering_progress_bars(int bar_len);
 	
 	// the switch to the next sequence is done inside this function
-	using DecodeType = NetworkDecoder::DecodeType;
-	DecodeType next_decode_type();
+	using PacketType = NetworkDecoder::PacketType;
+	PacketType next_decode_type();
 	
 	using DecoderType = NetworkDecoder::DecoderType;
-	DecoderType get_decoder_type() { return network_decoder.get_decoding_type(); }
+	DecoderType get_decoder_type() { return decoder.get_decoder_type(); }
 	
 	// decode the previously read video packet
 	// decoded image is stored internally and can be acquired via get_decoded_video_frame()
@@ -132,7 +132,6 @@ public :
 	}
 	
 	// seek both audio and video
-	// TODO : implement this
 	Result_with_string seek(s64 microseconds);
 };
 // `arg` should be a pointer to an instance of NetworkMultipleDecoder

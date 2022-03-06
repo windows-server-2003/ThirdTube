@@ -156,9 +156,9 @@ void NetworkMultipleDecoder::check_filter_update() {
 	}
 }
 
-NetworkMultipleDecoder::DecodeType NetworkMultipleDecoder::next_decode_type() {
-	DecodeType res = decoder.next_decode_type();
-	if (res == DecodeType::EoF) {
+NetworkMultipleDecoder::PacketType NetworkMultipleDecoder::next_decode_type() {
+	PacketType res = decoder.next_decode_type();
+	if (res == PacketType::EoF) {
 		while (!initer_exit_request && !interrupt && seq_using + 1 < seq_num) {
 			svcWaitSynchronization(fragments_lock, std::numeric_limits<s64>::max());
 			if (fragments.count(seq_using + 1)) break;
@@ -170,8 +170,8 @@ NetworkMultipleDecoder::DecodeType NetworkMultipleDecoder::next_decode_type() {
 		else if (seq_using + 1 >= seq_num) Util_log_save("net-mul", "seq end : " + std::to_string(seq_using) + " " + std::to_string(seq_num));
 		*/
 		
-		if (interrupt || initer_exit_request) res = DecodeType::INTERRUPTED;
-		else if (seq_using + 1 >= seq_num) res = DecodeType::EoF;
+		if (interrupt || initer_exit_request) res = PacketType::INTERRUPTED;
+		else if (seq_using + 1 >= seq_num) res = PacketType::EoF;
 		else {
 			decoder.change_ffmpeg_data(fragments[seq_using + 1], adjust_timestamp ? (seq_using + 1) * fragment_len : 0);
 			seq_using++;
@@ -237,6 +237,7 @@ Result_with_string NetworkMultipleDecoder::seek(s64 microseconds) {
 	}
 	return result;
 }
+
 void NetworkMultipleDecoder::livestream_initer_thread_func() {
 	while (!initer_exit_request) {
 		while (initer_stop_request && !initer_exit_request) {

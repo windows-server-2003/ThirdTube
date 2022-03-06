@@ -87,7 +87,10 @@ private :
 	static constexpr int AUDIO = 1;
 	static constexpr int BOTH = 0;
 	
-	Result_with_string init_(int type, AVMediaType expected_codec_type, NetworkDecoder *parent_decoder);
+	// type : VIDEO, AUDIO
+	Result_with_string init_io(int type, NetworkDecoder *parent_decoder);
+	Result_with_string init_decoder(int type, NetworkDecoder *parent_decoder);
+	
 	AVStream *get_stream(int type) { return format_context[video_audio_seperate ? type : BOTH]->streams[stream_index[type]]; }
 public :
 	bool video_audio_seperate = false;
@@ -197,13 +200,13 @@ public :
 	};
 	AudioFormatInfo get_audio_info();
 	
-	enum class DecodeType {
+	enum class PacketType {
 		AUDIO,
 		VIDEO,
 		EoF, // EOF is reserved so...
 		INTERRUPTED
 	};
-	DecodeType next_decode_type();
+	PacketType next_decode_type();
 	
 	size_t get_raw_buffer_num() { return hw_decoder_enabled ? video_mvd_tmp_frames.size() : video_tmp_frames.size(); }
 	size_t get_raw_buffer_num_max() { return hw_decoder_enabled ? video_mvd_tmp_frames.size_max() : video_tmp_frames.size_max(); }

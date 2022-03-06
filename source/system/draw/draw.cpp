@@ -218,14 +218,13 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 	bool found = false;
 	bool font_loaded[2] = { Exfont_is_loaded_system_font(0), Exfont_is_loaded_system_font(1), };//JPN, CHN
 	float width = 0, height = 0, original_x, y_offset;
-	int memcmp_result = -1;
 	int characters = 0;
 	static int font_num_list[1024];
 	static u64 draw_part_text[1024];
-	C2D_Text c2d_text;
-	C2D_TextBuf c2d_buf;
+	static C2D_Text c2d_text;
+	static C2D_TextBuf c2d_buf;
 	original_x = x;
-	c2d_buf = C2D_TextBufNew(4096);
+	if (!c2d_buf) c2d_buf = C2D_TextBufNew(4096);
 
 	Exfont_text_parse(text, draw_part_text, 1023, &characters);
 	Exfont_text_sort(draw_part_text, characters);
@@ -311,8 +310,6 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 		}
 		if (cur_font_list_num == -2) break;
 	}
-	
-	C2D_TextBufDelete(c2d_buf);
 }
 
 float Draw_get_height(std::string text, float text_size_y) {

@@ -115,74 +115,71 @@ void ffmpeg_log_callback(void *, int level, const char *fmt, va_list vargs) {
 }
 
 #define NETWORK_BUFFER_SIZE 0x10000
-Result_with_string NetworkDecoderFFmpegData::init_(int type, AVMediaType expected_codec_type, NetworkDecoder *parent_decoder) {
+Result_with_string NetworkDecoderFFmpegData::init_io(int type, NetworkDecoder *parent_decoder) {
 	Result_with_string result;
 	int ffmpeg_result;
 	
-	if (video_audio_seperate || type == BOTH) { // initialize io-related thing
-		network_stream[type]->read_head = 0;
-		
-		opaque[type] = new std::pair<NetworkDecoder *, NetworkStream *>(parent_decoder, network_stream[type]);
-		unsigned char *buffer = (unsigned char *) av_malloc(NETWORK_BUFFER_SIZE);
-		if (!buffer) {
-			result.error_description = "network buffer allocation failed";
-			result.code = DEF_ERR_OUT_OF_MEMORY;
-			result.string = DEF_ERR_OUT_OF_MEMORY_STR;
-			return result;
-		}
-		io_context[type] = avio_alloc_context(buffer, NETWORK_BUFFER_SIZE, 0, opaque[type], read_network_stream, NULL, seek_network_stream);
-		if (!io_context[type]) {
-			result.error_description = "IO context allocation failed";
-			result.code = DEF_ERR_OUT_OF_MEMORY;
-			result.string = DEF_ERR_OUT_OF_MEMORY_STR;
-			return result;
-		}
-		format_context[type] = avformat_alloc_context();
-		if (!format_context[type]) {
-			result.error_description = "format context allocation failed";
-			result.code = DEF_ERR_OUT_OF_MEMORY;
-			result.string = DEF_ERR_OUT_OF_MEMORY_STR;
-			return result;
-		}
-		format_context[type]->pb = io_context[type];
-		ffmpeg_result = avformat_open_input(&format_context[type], "yay", NULL, NULL);
-		if (ffmpeg_result != 0) {
-			result.error_description = "avformat_open_input() failed " + std::to_string(ffmpeg_result);
+	network_stream[type]->read_head = 0;
+	
+	opaque[type] = new std::pair<NetworkDecoder *, NetworkStream *>(parent_decoder, network_stream[type]);
+	unsigned char *buffer = (unsigned char *) av_malloc(NETWORK_BUFFER_SIZE);
+	if (!buffer) {
+		result.error_description = "network buffer allocation failed";
+		result.code = DEF_ERR_OUT_OF_MEMORY;
+		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
+		return result;
+	}
+	io_context[type] = avio_alloc_context(buffer, NETWORK_BUFFER_SIZE, 0, opaque[type], read_network_stream, NULL, seek_network_stream);
+	if (!io_context[type]) {
+		result.error_description = "IO context allocation failed";
+		result.code = DEF_ERR_OUT_OF_MEMORY;
+		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
+		return result;
+	}
+	format_context[type] = avformat_alloc_context();
+	if (!format_context[type]) {
+		result.error_description = "format context allocation failed";
+		result.code = DEF_ERR_OUT_OF_MEMORY;
+		result.string = DEF_ERR_OUT_OF_MEMORY_STR;
+		return result;
+	}
+	format_context[type]->pb = io_context[type];
+	ffmpeg_result = avformat_open_input(&format_context[type], "yay", NULL, NULL);
+	if (ffmpeg_result != 0) {
+		result.error_description = "avformat_open_input() failed " + std::to_string(ffmpeg_result);
+		goto fail;
+	}
+	ffmpeg_result = avformat_find_stream_info(format_context[type], NULL);
+	if (!format_context[type]) {
+		result.error_description = "avformat_find_stream_info() failed " + std::to_string(ffmpeg_result);
+		goto fail;
+	}
+	if (video_audio_seperate) {
+		if (format_context[type]->nb_streams != 1) {
+			result.error_description = "nb_streams != 1 : " + std::to_string(format_context[type]->nb_streams);
+			goto fail;
+		} else if (format_context[type]->streams[0]->codecpar->codec_type != (type == VIDEO ? AVMEDIA_TYPE_VIDEO : AVMEDIA_TYPE_AUDIO)) {
+			result.error_description = "stream type wrong : " + std::to_string(format_context[type]->streams[0]->codecpar->codec_type);
 			goto fail;
 		}
-		ffmpeg_result = avformat_find_stream_info(format_context[type], NULL);
-		if (!format_context[type]) {
-			result.error_description = "avformat_find_stream_info() failed " + std::to_string(ffmpeg_result);
-			goto fail;
-		}
-		if (video_audio_seperate) {
-			if (format_context[type]->nb_streams != 1) {
-				result.error_description = "nb_streams != 1 : " + std::to_string(format_context[type]->nb_streams);
-				goto fail;
-			} else if (format_context[type]->streams[0]->codecpar->codec_type != expected_codec_type) {
-				result.error_description = "stream type wrong : " + std::to_string(format_context[type]->streams[0]->codecpar->codec_type);
-				goto fail;
-			}
+		stream_index[type] = 0;
+	} else {
+		stream_index[VIDEO] = stream_index[AUDIO] = -1;
+		for (size_t i = 0; i < format_context[BOTH]->nb_streams; i++) {
+			if (format_context[BOTH]->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) stream_index[VIDEO] = i;
+			if (format_context[BOTH]->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) stream_index[AUDIO] = i;
 		}
 	}
-	// find stream index
-	if (!video_audio_seperate) {
-		stream_index[type] = -1;
-		for (size_t i = 0; i < format_context[BOTH]->nb_streams; i++) {
-			if (format_context[BOTH]->streams[i]->codecpar->codec_type == expected_codec_type) {
-				stream_index[type] = i;
-			}
-		}
-		if (stream_index[type] == -1) {
-			if (type == VIDEO) {
-				audio_only = true;
-				return result;
-			} else {
-				result.error_description = "stream of the expected type not found";
-				goto fail;
-			}
-		}
-	} else stream_index[type] = 0;
+	return result;
+	
+	fail:
+	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
+	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
+	return result;
+}
+Result_with_string NetworkDecoderFFmpegData::init_decoder(int type, NetworkDecoder *parent_decoder) {
+	Result_with_string result;
+	int ffmpeg_result;
 	
 	// initialize decoder
 	codec[type] = avcodec_find_decoder(get_stream(type)->codecpar->codec_id);
@@ -204,7 +201,7 @@ Result_with_string NetworkDecoderFFmpegData::init_(int type, AVMediaType expecte
 	}
 	
 	if ((video_audio_seperate ? (type == VIDEO) : (type == BOTH))) {
-		decoder_context[type]->lowres = 0; // <-------
+		decoder_context[type]->lowres = 0;
 		decoder_context[type]->flags = AV_CODEC_FLAG_OUTPUT_CORRUPT;
 		
 		if (codec[type]->capabilities & AV_CODEC_CAP_FRAME_THREADS) decoder_context[type]->thread_type = FF_THREAD_FRAME;
@@ -261,18 +258,32 @@ Result_with_string NetworkDecoderFFmpegData::init(NetworkStream *video_stream, N
 	network_stream[VIDEO] = video_stream;
 	network_stream[AUDIO] = audio_stream;
 	this->parent_decoder = parent_decoder;
+
+#	define RETURN_WITH_PREFIX_ON_ERROR(exp, prefix) \
+	do {\
+		if ((result = exp).code != 0) {\
+			result.error_description = prefix + result.error_description;\
+			return result;\
+		}\
+	} while (0)
 	
-	result = init_(VIDEO, AVMEDIA_TYPE_VIDEO, parent_decoder);
-	if (result.code != 0) {
-		result.error_description = "[video] " + result.error_description;
+	// init io
+	if (video_audio_seperate) {
+		RETURN_WITH_PREFIX_ON_ERROR(init_io(VIDEO, parent_decoder), "[v] ");
+		RETURN_WITH_PREFIX_ON_ERROR(init_io(AUDIO, parent_decoder), "[a] ");
+	} else RETURN_WITH_PREFIX_ON_ERROR(init_io(VIDEO, parent_decoder), "[v+a] ");
+	
+	if (stream_index[VIDEO] == -1) audio_only = true;
+	if (stream_index[AUDIO] == -1) {
+		result.error_description = "audio stream not found";
+		result.code = -1;
 		return result;
 	}
 	
-	result = init_(AUDIO, AVMEDIA_TYPE_AUDIO, parent_decoder);
-	if (result.code != 0) {
-		result.error_description = "[audio] " + result.error_description;
-		return result;
-	}
+	// init decoder
+	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(VIDEO, parent_decoder), "[v] ");
+	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(AUDIO, parent_decoder), "[a] ");
+#	undef RETURN_WITH_PREFIX_ON_ERROR
 	
 	return result;
 }
@@ -675,7 +686,7 @@ Result_with_string NetworkDecoder::read_packet(int type) {
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
 }
-NetworkDecoder::DecodeType NetworkDecoder::next_decode_type() {
+NetworkDecoder::PacketType NetworkDecoder::next_decode_type() {
 	if (video_audio_seperate) {
 		for (int type = 0; type < 2; type++) if (!packet_buffer[type].size())
 			read_packet(type);
@@ -685,12 +696,12 @@ NetworkDecoder::DecodeType NetworkDecoder::next_decode_type() {
 			if (result.code != 0) break;
 		}
 	}
-	if (!packet_buffer[VIDEO].size() && !packet_buffer[AUDIO].size()) return DecodeType::EoF;
-	if (!packet_buffer[AUDIO].size()) return DecodeType::VIDEO;
-	if (!packet_buffer[VIDEO].size()) return DecodeType::AUDIO;
+	if (!packet_buffer[VIDEO].size() && !packet_buffer[AUDIO].size()) return PacketType::EoF;
+	if (!packet_buffer[AUDIO].size()) return PacketType::VIDEO;
+	if (!packet_buffer[VIDEO].size()) return PacketType::AUDIO;
 	double video_dts = packet_buffer[VIDEO][0]->dts * av_q2d(get_stream(VIDEO)->time_base);
 	double audio_dts = packet_buffer[AUDIO][0]->dts * av_q2d(get_stream(AUDIO)->time_base);
-	return video_dts <= audio_dts ? DecodeType::VIDEO : DecodeType::AUDIO;
+	return video_dts <= audio_dts ? PacketType::VIDEO : PacketType::AUDIO;
 }
 static std::string debug_str = "";
 Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
@@ -834,7 +845,7 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 	ffmpeg_result = avcodec_send_packet(decoder_context[VIDEO], packet_read);
 	if(ffmpeg_result == 0) {
 		ffmpeg_result = avcodec_receive_frame(decoder_context[VIDEO], cur_frame);
-		if(ffmpeg_result == 0) {
+		if (ffmpeg_result == 0) {
 			*width = cur_frame->width;
 			*height = cur_frame->height;
 			double time_base = av_q2d(get_stream(VIDEO)->time_base);
@@ -842,13 +853,16 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 			else *cur_pos = cur_frame->pkt_dts * time_base;
 			*cur_pos += timestamp_offset;
 			video_tmp_frames.push();
-		} else {
+		} else if (ffmpeg_result == AVERROR(EAGAIN)) result.code = DEF_ERR_NEED_MORE_INPUT;
+		else {
+			result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
+			result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 			result.error_description = "avcodec_receive_frame() failed " + std::to_string(ffmpeg_result);
-			goto fail;
 		}
 	} else {
+		result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
+		result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 		result.error_description = "avcodec_send_packet() failed " + std::to_string(ffmpeg_result);
-		goto fail;
 	}
 	
 	av_packet_free(&packet_read);
@@ -856,17 +870,6 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 	// refill the packet buffer
 	while (!packet_buffer[VIDEO].size() && read_packet(video_audio_seperate ? VIDEO : BOTH).code == 0);
 	
-	return result;
-	
-	fail:
-	
-	av_packet_free(&packet_read);
-	packet_buffer[VIDEO].pop_front();
-	// refill the packet buffer
-	while (!packet_buffer[VIDEO].size() && read_packet(video_audio_seperate ? VIDEO : BOTH).code == 0);
-	
-	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
-	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
 }
 Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cur_pos) {
