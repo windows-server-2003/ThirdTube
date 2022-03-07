@@ -1,0 +1,7 @@
+1. Download the source from https://github.com/google/brotli/releases
+2. Run:
+	make CFLAGS="-march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -O2 -mword-relocations -ffunction-sections -fdata-sections" CROSS_COMPILE=arm-none-eabi lib
+
+Current binaries are built with:
+	- libbrotli v1.0.9
+	- devkitARM release 57

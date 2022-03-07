@@ -1,0 +1,17 @@
+1. Download the source from https://curl.se/download/ and move to the root of the source tree
+2. Apply 3ds.patch via `patch -Np1 -i [3ds.patch path]`
+3. Make sure 3ds-mbedtls is installed in devkitPro portlibs via devkitPro pacman
+4. Set THIRDTUBE_PATH in 3ds-configure.sh to the actual path to ThirdTube
+5. Run 3ds-configure.sh
+6. Confirm the configuration says:
+	SSL:              enabled (mbedTLS)
+	brotli:           enabled (libbrotlidec)
+7. Run `make -C lib` in the same directory
+8. Take libcurl.a and libcurl.la from lib/.libs, *.h from include/curl
+
+Current binaries are built with:
+	- libcurl 7.69.1
+	- devkitARM release 57
+
+3ds.patch has been taken from https://github.com/devkitPro/pacman-packages/blob/master/3ds/curl/
+

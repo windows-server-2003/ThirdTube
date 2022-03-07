@@ -38,6 +38,7 @@ namespace About {
 		{"Duktape", {"by Duktape authors under MIT License"} },
 		{"libctru", {"by devkitPro under zlib License"} },
 		{"libcurl", {"by Daniel Stenberg and many contributors", "under the curl license"} },
+		{"libbrotli", {"by the Brotli Authors under the MIT license"} },
 		{"stb", {"by Sean Barrett under MIT License"} }
 	};
 	

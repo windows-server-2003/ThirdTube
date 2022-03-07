@@ -1,0 +1,192 @@
+diff -NBaur curl-7.69.1/lib/connect.c curl-7.69.1-3ds/lib/connect.c
+--- curl-7.69.1/lib/connect.c	2020-03-09 15:31:01.000000000 +0000
++++ curl-7.69.1-3ds/lib/connect.c	2020-04-16 22:23:56.184673917 +0100
+@@ -111,6 +111,9 @@
+ tcpkeepalive(struct Curl_easy *data,
+              curl_socket_t sockfd)
+ {
++  (void) sockfd;
++  infof(data, "SO_KEEPALIVE is not supported on 3DS\n");
++#if 0
+   int optval = data->set.tcp_keepalive?1:0;
+ 
+   /* only set IDLE and INTVL if setting KEEPALIVE is successful */
+@@ -162,6 +165,7 @@
+ #endif
+ #endif
+   }
++#endif
+ }
+ 
+ static CURLcode
+@@ -494,7 +498,7 @@
+ static bool verifyconnect(curl_socket_t sockfd, int *error)
+ {
+   bool rc = TRUE;
+-#ifdef SO_ERROR
++#if 0
+   int err = 0;
+   curl_socklen_t errSize = sizeof(err);
+ 
+diff -NBaur curl-7.69.1/lib/curl_addrinfo.c curl-7.69.1-3ds/lib/curl_addrinfo.c
+--- curl-7.69.1/lib/curl_addrinfo.c	2020-03-09 15:31:01.000000000 +0000
++++ curl-7.69.1-3ds/lib/curl_addrinfo.c	2020-04-16 22:23:56.192740793 +0100
+@@ -151,9 +151,11 @@
+     if((ai->ai_addr == NULL) || !(ai->ai_addrlen > 0))
+       continue;
+ 
++#if 0 // 3DS socu returns ai_addrlen = 8
+     /* ignore elements with bogus address size */
+     if((size_t)ai->ai_addrlen < ss_size)
+       continue;
++#endif
+ 
+     ca = malloc(sizeof(Curl_addrinfo));
+     if(!ca) {
+diff -NBaur curl-7.69.1/lib/socketpair.c curl-7.69.1-3ds/lib/socketpair.c
+--- curl-7.69.1/lib/socketpair.c	2020-03-09 15:31:01.000000000 +0000
++++ curl-7.69.1-3ds/lib/socketpair.c	2020-04-16 22:23:56.192740793 +0100
+@@ -43,6 +43,7 @@
+ #ifdef HAVE_ARPA_INET_H
+ #include <arpa/inet.h>
+ #endif
++#include <arpa/inet.h>
+ #ifndef INADDR_LOOPBACK
+ #define INADDR_LOOPBACK 0x7f000001
+ #endif /* !INADDR_LOOPBACK */
+diff -NBaur curl-7.69.1/lib/socketpair.c.orig curl-7.69.1-3ds/lib/socketpair.c.orig
+--- curl-7.69.1/lib/socketpair.c.orig	1970-01-01 01:00:00.000000000 +0100
++++ curl-7.69.1-3ds/lib/socketpair.c.orig	2020-03-09 15:31:01.000000000 +0000
+@@ -0,0 +1,121 @@
++/***************************************************************************
++ *                                  _   _ ____  _
++ *  Project                     ___| | | |  _ \| |
++ *                             / __| | | | |_) | |
++ *                            | (__| |_| |  _ <| |___
++ *                             \___|\___/|_| \_\_____|
++ *
++ * Copyright (C) 2019, Daniel Stenberg, <daniel@haxx.se>, et al.
++ *
++ * This software is licensed as described in the file COPYING, which
++ * you should have received as part of this distribution. The terms
++ * are also available at https://curl.haxx.se/docs/copyright.html.
++ *
++ * You may opt to use, copy, modify, merge, publish, distribute and/or sell
++ * copies of the Software, and permit persons to whom the Software is
++ * furnished to do so, under the terms of the COPYING file.
++ *
++ * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
++ * KIND, either express or implied.
++ *
++ ***************************************************************************/
++
++#include "curl_setup.h"
++#include "socketpair.h"
++
++#ifndef HAVE_SOCKETPAIR
++#ifdef WIN32
++/*
++ * This is a socketpair() implementation for Windows.
++ */
++#include <string.h>
++#include <winsock2.h>
++#include <ws2tcpip.h>
++#include <windows.h>
++#include <io.h>
++#else
++#ifdef HAVE_NETDB_H
++#include <netdb.h>
++#endif
++#ifdef HAVE_NETINET_IN_H
++#include <netinet/in.h> /* IPPROTO_TCP */
++#endif
++#ifdef HAVE_ARPA_INET_H
++#include <arpa/inet.h>
++#endif
++#ifndef INADDR_LOOPBACK
++#define INADDR_LOOPBACK 0x7f000001
++#endif /* !INADDR_LOOPBACK */
++#endif /* !WIN32 */
++
++/* The last 3 #include files should be in this order */
++#include "curl_printf.h"
++#include "curl_memory.h"
++#include "memdebug.h"
++
++int Curl_socketpair(int domain, int type, int protocol,
++                    curl_socket_t socks[2])
++{
++  union {
++    struct sockaddr_in inaddr;
++    struct sockaddr addr;
++  } a;
++  curl_socket_t listener;
++  curl_socklen_t addrlen = sizeof(a.inaddr);
++  int reuse = 1;
++  char data[2][12];
++  ssize_t dlen;
++  (void)domain;
++  (void)type;
++  (void)protocol;
++
++  listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
++  if(listener == CURL_SOCKET_BAD)
++    return -1;
++
++  memset(&a, 0, sizeof(a));
++  a.inaddr.sin_family = AF_INET;
++  a.inaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
++  a.inaddr.sin_port = 0;
++
++  socks[0] = socks[1] = CURL_SOCKET_BAD;
++
++  if(setsockopt(listener, SOL_SOCKET, SO_REUSEADDR,
++                (char *)&reuse, (curl_socklen_t)sizeof(reuse)) == -1)
++    goto error;
++  if(bind(listener, &a.addr, sizeof(a.inaddr)) == -1)
++    goto error;
++  if(getsockname(listener, &a.addr, &addrlen) == -1)
++    goto error;
++  if(listen(listener, 1) == -1)
++    goto error;
++  socks[0] = socket(AF_INET, SOCK_STREAM, 0);
++  if(socks[0] == CURL_SOCKET_BAD)
++    goto error;
++  if(connect(socks[0], &a.addr, sizeof(a.inaddr)) == -1)
++    goto error;
++  socks[1] = accept(listener, NULL, NULL);
++  if(socks[1] == CURL_SOCKET_BAD)
++    goto error;
++
++  /* verify that nothing else connected */
++  msnprintf(data[0], sizeof(data[0]), "%p", socks);
++  dlen = strlen(data[0]);
++  if(swrite(socks[0], data[0], dlen) != dlen)
++    goto error;
++  if(sread(socks[1], data[1], sizeof(data[1])) != dlen)
++    goto error;
++  if(memcmp(data[0], data[1], dlen))
++    goto error;
++
++  sclose(listener);
++  return 0;
++
++  error:
++  sclose(listener);
++  sclose(socks[0]);
++  sclose(socks[1]);
++  return -1;
++}
++
++#endif /* ! HAVE_SOCKETPAIR */
+diff -NBaur curl-7.69.1/lib/socketpair.h curl-7.69.1-3ds/lib/socketpair.h
+--- curl-7.69.1/lib/socketpair.h	2020-03-09 15:31:01.000000000 +0000
++++ curl-7.69.1-3ds/lib/socketpair.h	2020-04-16 22:28:35.341275999 +0100
+@@ -31,6 +31,6 @@
+ #endif
+ 
+ /* Defined here to allow specific build configs to disable it completely */
+-#define USE_SOCKETPAIR 1
++#undef USE_SOCKETPAIR
+ 
+ #endif /* HEADER_CURL_SOCKETPAIR_H */

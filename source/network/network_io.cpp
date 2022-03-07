@@ -457,6 +457,17 @@ int curl_set_socket_options(void *, curl_socket_t sockfd, curlsocktype purpose) 
 	
 	return CURL_SOCKOPT_OK;
 }
+int curl_debug_callback_func(CURL *handle, curl_infotype type, char *data, size_t size, void *userptr) {
+	std::string prefix;
+	if (type == CURLINFO_HEADER_OUT) prefix = "h>";
+	if (type == CURLINFO_HEADER_IN) prefix = "h<";
+	if (type == CURLINFO_DATA_OUT) prefix = "d>";
+	if (type == CURLINFO_SSL_DATA_OUT) prefix = "D>";
+	if (type == CURLINFO_DATA_IN) prefix = "d<";
+	if (type == CURLINFO_SSL_DATA_IN) prefix = "D<";
+	Util_log_save("curl", prefix + std::string(data, data + size));
+	return 0;
+}
  
 
 static NetworkResult access_http_internal(NetworkSessionList &session_list, const std::string &method, const std::string &url,
@@ -560,10 +571,13 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
 			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, (long) follow_redirect);
 			curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L);
+			curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "br");
 			curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_2TLS);
 			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_receive_data_callback_func);
 			curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_receive_headers_callback_func);
 			curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, curl_set_socket_options);
+			// curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) 1);
+			// curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_debug_callback_func);
 			session_list.curl_errbuf = (char *) malloc(CURL_ERROR_SIZE);
 			curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, session_list.curl_errbuf);
 			// curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);

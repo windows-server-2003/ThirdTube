@@ -59,10 +59,14 @@ I haven't tested the minimum system version, but at least 8.1.0-0 is needed.
 You need:
 
  - devkitPro with devkitARM r57  
- - 3ds-curl installed in portlibs of devkitPro  
-     You can install it by opening devkitPro msys2 and typing `pacman -S 3ds-curl`.
+ - ```3ds-zlib``` and ```3ds-mbedtls``` installed in portlibs of devkitPro  
+   You can install it by opening devkitPro msys2 and typing ```pacman -S [package name]```.
 
 Type ```make``` (if you are on Linux) or ```make all_win``` (if you are on Windows) to build it.  
+
+ - Building of dependency libraries(optional)  
+   For ffmpeg, libbrotli, and libcurl, follow built.txt in each directory  
+   For libctru, just type ```make``` in library\libctru\source\libctru  
 
 ## License
 You can use the code under the terms of the GNU General Public License GPL v3 or under the terms of any later revisions of the GPL. Refer to the provided LICENSE file for further information.
@@ -80,6 +84,8 @@ by Duktape authors under MIT License
 by devkitPro under zlib License  
 ### [libcurl](https://curl.se/)
 by Daniel Stenberg and many contributors under the curl License  
+### [libbrotli](https://github.com/google/brotli)  
+by the Brotli Authors under MIT license
 ### [stb](https://github.com/nothings/stb/)
 by Sean Barrett under MIT License and Public Domain  
 
