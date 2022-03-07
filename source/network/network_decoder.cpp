@@ -5,11 +5,14 @@
 
 extern "C" void memcpy_asm(u8*, u8*, int);
 
-void NetworkDecoderFFmpegData::deinit(bool deinit_stream) {
+
+/* --------------------------------------------------------- */
+/*                  NetworkDecoderFFmpegIOData               */
+/* --------------------------------------------------------- */
+void NetworkDecoderFFmpegIOData::deinit(bool deinit_stream) {
 	for (int type = 0; type < 2; type++) {
 		delete opaque[type];
 		opaque[type] = NULL;
-		avcodec_free_context(&decoder_context[type]);
 		if (io_context[type]) av_freep(&io_context[type]->buffer);
 		av_freep(&io_context[type]);
 		avformat_close_input(&format_context[type]);
@@ -18,9 +21,7 @@ void NetworkDecoderFFmpegData::deinit(bool deinit_stream) {
 			network_stream[type] = NULL;
 		}
 	}
-	swr_free(&swr_context);
 }
-
 static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size or AVERROR_EOF
 	NetworkDecoder *decoder = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->first;
 	NetworkStream *stream = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->second;
@@ -115,7 +116,7 @@ void ffmpeg_log_callback(void *, int level, const char *fmt, va_list vargs) {
 }
 
 #define NETWORK_BUFFER_SIZE 0x10000
-Result_with_string NetworkDecoderFFmpegData::init_io(int type, NetworkDecoder *parent_decoder) {
+Result_with_string NetworkDecoderFFmpegIOData::init_(int type, NetworkDecoder *parent_decoder) {
 	Result_with_string result;
 	int ffmpeg_result;
 	
@@ -177,88 +178,6 @@ Result_with_string NetworkDecoderFFmpegData::init_io(int type, NetworkDecoder *p
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
 }
-Result_with_string NetworkDecoderFFmpegData::init_decoder(int type, NetworkDecoder *parent_decoder) {
-	Result_with_string result;
-	int ffmpeg_result;
-	
-	// initialize decoder
-	codec[type] = avcodec_find_decoder(get_stream(type)->codecpar->codec_id);
-	if(!codec[type]) {
-		result.error_description = "avcodec_find_decoder() failed";
-		goto fail;
-	}
-
-	decoder_context[type] = avcodec_alloc_context3(codec[type]);
-	if(!decoder_context[type]) {
-		result.error_description = "avcodec_alloc_context3() failed";
-		goto fail;
-	}
-
-	ffmpeg_result = avcodec_parameters_to_context(decoder_context[type], get_stream(type)->codecpar);
-	if (ffmpeg_result != 0) {
-		result.error_description = "avcodec_parameters_to_context() failed " + std::to_string(ffmpeg_result);
-		goto fail;
-	}
-	
-	if ((video_audio_seperate ? (type == VIDEO) : (type == BOTH))) {
-		decoder_context[type]->lowres = 0;
-		decoder_context[type]->flags = AV_CODEC_FLAG_OUTPUT_CORRUPT;
-		
-		if (codec[type]->capabilities & AV_CODEC_CAP_FRAME_THREADS) decoder_context[type]->thread_type = FF_THREAD_FRAME;
-		else if(codec[type]->capabilities & AV_CODEC_CAP_SLICE_THREADS) decoder_context[type]->thread_type = FF_THREAD_SLICE;
-		else decoder_context[type]->thread_type = 0;
-		
-		if (decoder_context[type]->thread_type == FF_THREAD_FRAME) {
-			Util_fake_pthread_set_enabled_core(parent_decoder->frame_cores_enabled);
-			decoder_context[type]->thread_count = std::accumulate(std::begin(parent_decoder->frame_cores_enabled), std::end(parent_decoder->frame_cores_enabled), 0);
-		} else if (decoder_context[type]->thread_type == FF_THREAD_SLICE) {
-			Util_fake_pthread_set_enabled_core(parent_decoder->slice_cores_enabled);
-			decoder_context[type]->thread_count = std::accumulate(std::begin(parent_decoder->slice_cores_enabled), std::end(parent_decoder->slice_cores_enabled), 0);
-		} else decoder_context[type]->thread_count = 1;
-		
-		decoder_context[type]->thread_safe_callbacks = 1;
-	}
-	ffmpeg_result = avcodec_open2(decoder_context[type], codec[type], NULL);
-	if (ffmpeg_result != 0) {
-		result.error_description = "avcodec_open2() failed " + std::to_string(ffmpeg_result);
-		goto fail;
-	}
-	
-	if (type == AUDIO) {
-		swr_context = swr_alloc();
-		if (!swr_context) {
-			result.error_description = "swr_alloc() failed ";
-			goto fail;
-		}
-		if (!swr_alloc_set_opts(swr_context, av_get_default_channel_layout(decoder_context[AUDIO]->channels), AV_SAMPLE_FMT_S16, decoder_context[AUDIO]->sample_rate,
-			av_get_default_channel_layout(decoder_context[AUDIO]->channels), decoder_context[AUDIO]->sample_fmt, decoder_context[AUDIO]->sample_rate, 0, NULL))
-		{
-			result.error_description = "swr_alloc_set_opts() failed ";
-			goto fail;
-		}
-
-		ffmpeg_result = swr_init(swr_context);
-		if (ffmpeg_result != 0) {
-			result.error_description = "swr_init() failed " + std::to_string(ffmpeg_result);
-			goto fail;
-		}
-	}
-	return result;
-	
-	fail:
-	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
-	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
-	return result;
-}
-
-Result_with_string NetworkDecoderFFmpegData::init(NetworkStream *video_stream, NetworkStream *audio_stream, NetworkDecoder *parent_decoder) {
-	Result_with_string result;
-	
-	video_audio_seperate = video_stream != audio_stream;
-	network_stream[VIDEO] = video_stream;
-	network_stream[AUDIO] = audio_stream;
-	this->parent_decoder = parent_decoder;
-
 #	define RETURN_WITH_PREFIX_ON_ERROR(exp, prefix) \
 	do {\
 		if ((result = exp).code != 0) {\
@@ -266,12 +185,20 @@ Result_with_string NetworkDecoderFFmpegData::init(NetworkStream *video_stream, N
 			return result;\
 		}\
 	} while (0)
+Result_with_string NetworkDecoderFFmpegIOData::init(NetworkStream *video_stream, NetworkStream *audio_stream, NetworkDecoder *parent_decoder) {
+	Result_with_string result;
+	
+	video_audio_seperate = video_stream != audio_stream;
+	network_stream[VIDEO] = video_stream;
+	network_stream[AUDIO] = audio_stream;
+	this->parent_decoder = parent_decoder;
+	
 	
 	// init io
 	if (video_audio_seperate) {
-		RETURN_WITH_PREFIX_ON_ERROR(init_io(VIDEO, parent_decoder), "[v] ");
-		RETURN_WITH_PREFIX_ON_ERROR(init_io(AUDIO, parent_decoder), "[a] ");
-	} else RETURN_WITH_PREFIX_ON_ERROR(init_io(VIDEO, parent_decoder), "[v+a] ");
+		RETURN_WITH_PREFIX_ON_ERROR(init_(VIDEO, parent_decoder), "[v] ");
+		RETURN_WITH_PREFIX_ON_ERROR(init_(AUDIO, parent_decoder), "[a] ");
+	} else RETURN_WITH_PREFIX_ON_ERROR(init_(VIDEO, parent_decoder), "[v+a] ");
 	
 	if (stream_index[VIDEO] == -1) audio_only = true;
 	if (stream_index[AUDIO] == -1) {
@@ -280,26 +207,27 @@ Result_with_string NetworkDecoderFFmpegData::init(NetworkStream *video_stream, N
 		return result;
 	}
 	
-	// init decoder
-	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(VIDEO, parent_decoder), "[v] ");
-	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(AUDIO, parent_decoder), "[a] ");
-#	undef RETURN_WITH_PREFIX_ON_ERROR
-	
 	return result;
 }
-Result_with_string NetworkDecoderFFmpegData::init(NetworkStream *both_stream, NetworkDecoder *parent_decoder) {
+Result_with_string NetworkDecoderFFmpegIOData::init(NetworkStream *both_stream, NetworkDecoder *parent_decoder) {
 	return init(both_stream, both_stream, parent_decoder);
 }
-Result_with_string NetworkDecoderFFmpegData::reinit() {
+Result_with_string NetworkDecoderFFmpegIOData::reinit() {
 	deinit(false);
 	return init(network_stream[VIDEO], network_stream[AUDIO], parent_decoder);
 }
-double NetworkDecoderFFmpegData::get_duration() {
+double NetworkDecoderFFmpegIOData::get_duration() {
 	return (double) format_context[video_audio_seperate ? AUDIO : BOTH]->duration / AV_TIME_BASE;
 }
 
 
 
+
+
+
+/* ********************************************************* */
+/*                  NetworkDecoderFilterData                 */
+/* ********************************************************* */
 
 void NetworkDecoderFilterData::deinit() {
 	avfilter_graph_free(&audio_filter_graph);
@@ -465,6 +393,8 @@ Result_with_string NetworkDecoderFilterData::process_audio_frame(AVFrame *input)
 
 
 
+
+
 /* ********************************************************* */
 /*                       NetworkDecoder                      */
 /* ********************************************************* */
@@ -491,16 +421,13 @@ void NetworkDecoder::deinit() {
 		buffered_pts_list_lock = 0;
 	}
 	
-	// ffmpeg data should not be freed, but to prevent accesses to them, we set NULLs here
-	for (int type = 0; type < 2; type++) {
-		network_stream[type] = NULL;
-		opaque[type] = NULL;
-		format_context[type] = NULL;
-		io_context[type] = NULL;
-		decoder_context[type] = NULL;
-		codec[type] = NULL;
-	}
-	swr_context = NULL;
+	// its members should be freed by NetworkMultipleDecoder, not here
+	// just to prevent use-after-free, we set the pointers NULL
+	ffmpeg_io_data = NetworkDecoderFFmpegIOData();
+	
+	// deinit decoder
+	for (int type = 0; type < 2; type++) avcodec_free_context(&decoder_context[type]);
+	swr_free(&swr_context);
 }
 
 Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
@@ -559,6 +486,79 @@ Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
 }
+Result_with_string NetworkDecoder::init_decoder(int type) {
+	Result_with_string result;
+	int ffmpeg_result;
+	
+	// initialize decoder
+	codec[type] = avcodec_find_decoder(get_stream(type)->codecpar->codec_id);
+	if(!codec[type]) {
+		result.error_description = "avcodec_find_decoder() failed";
+		goto fail;
+	}
+
+	decoder_context[type] = avcodec_alloc_context3(codec[type]);
+	if(!decoder_context[type]) {
+		result.error_description = "avcodec_alloc_context3() failed";
+		goto fail;
+	}
+
+	ffmpeg_result = avcodec_parameters_to_context(decoder_context[type], get_stream(type)->codecpar);
+	if (ffmpeg_result != 0) {
+		result.error_description = "avcodec_parameters_to_context() failed " + std::to_string(ffmpeg_result);
+		goto fail;
+	}
+	
+	if ((video_audio_seperate ? (type == VIDEO) : (type == BOTH))) {
+		decoder_context[type]->lowres = 0;
+		decoder_context[type]->flags = AV_CODEC_FLAG_OUTPUT_CORRUPT;
+		
+		if (codec[type]->capabilities & AV_CODEC_CAP_FRAME_THREADS) decoder_context[type]->thread_type = FF_THREAD_FRAME;
+		else if(codec[type]->capabilities & AV_CODEC_CAP_SLICE_THREADS) decoder_context[type]->thread_type = FF_THREAD_SLICE;
+		else decoder_context[type]->thread_type = 0;
+		
+		if (decoder_context[type]->thread_type == FF_THREAD_FRAME) {
+			Util_fake_pthread_set_enabled_core(frame_cores_enabled);
+			decoder_context[type]->thread_count = std::accumulate(std::begin(frame_cores_enabled), std::end(frame_cores_enabled), 0);
+		} else if (decoder_context[type]->thread_type == FF_THREAD_SLICE) {
+			Util_fake_pthread_set_enabled_core(slice_cores_enabled);
+			decoder_context[type]->thread_count = std::accumulate(std::begin(slice_cores_enabled), std::end(slice_cores_enabled), 0);
+		} else decoder_context[type]->thread_count = 1;
+		
+		decoder_context[type]->thread_safe_callbacks = 1;
+	}
+	ffmpeg_result = avcodec_open2(decoder_context[type], codec[type], NULL);
+	if (ffmpeg_result != 0) {
+		result.error_description = "avcodec_open2() failed " + std::to_string(ffmpeg_result);
+		goto fail;
+	}
+	
+	if (type == AUDIO) {
+		swr_context = swr_alloc();
+		if (!swr_context) {
+			result.error_description = "swr_alloc() failed ";
+			goto fail;
+		}
+		if (!swr_alloc_set_opts(swr_context, av_get_default_channel_layout(decoder_context[AUDIO]->channels), AV_SAMPLE_FMT_S16, decoder_context[AUDIO]->sample_rate,
+			av_get_default_channel_layout(decoder_context[AUDIO]->channels), decoder_context[AUDIO]->sample_fmt, decoder_context[AUDIO]->sample_rate, 0, NULL))
+		{
+			result.error_description = "swr_alloc_set_opts() failed ";
+			goto fail;
+		}
+
+		ffmpeg_result = swr_init(swr_context);
+		if (ffmpeg_result != 0) {
+			result.error_description = "swr_init() failed " + std::to_string(ffmpeg_result);
+			goto fail;
+		}
+	}
+	return result;
+	
+	fail:
+	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
+	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
+	return result;
+}
 
 Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	Result_with_string result;
@@ -566,6 +566,19 @@ Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	
 	hw_decoder_enabled = request_hw_decoder;
 	interrupt = false;
+	
+	// init decoder
+	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(VIDEO), "[v] ");
+	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(AUDIO), "[a] ");
+	
+	// init buffers based on decoder info
+	if (!audio_only) {
+		result = init_output_buffer(request_hw_decoder);
+		if (result.code != 0) {
+			result.error_description = "[out buf] " + result.error_description;
+			return result;
+		}
+	}
 	
 	libctru_result = svcCreateMutex(&buffered_pts_list_lock, false);
 	if (libctru_result != 0) {
@@ -576,36 +589,8 @@ Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 		return result;
 	}
 	
-	if (!audio_only) {
-		result = init_output_buffer(request_hw_decoder);
-		if (result.code != 0) {
-			result.error_description = "[out buf] " + result.error_description;
-			return result;
-		}
-	}
 	mvd_first = true;
 	ready = true;
-	return result;
-}
-Result_with_string NetworkDecoder::change_ffmpeg_data(const NetworkDecoderFFmpegData &data, double timestamp_offset) {
-	Result_with_string result;
-	
-	interrupt = false;
-	
-	video_audio_seperate = data.video_audio_seperate;
-	for (int type = 0; type < 2; type++) {
-		network_stream[type] = data.network_stream[type];
-		opaque[type] = data.opaque[type];
-		format_context[type] = data.format_context[type];
-		io_context[type] = data.io_context[type];
-		stream_index[type] = data.stream_index[type];
-		decoder_context[type] = data.decoder_context[type];
-		codec[type] = data.codec[type];
-	}
-	swr_context = data.swr_context;
-	audio_only = data.audio_only;
-	this->timestamp_offset = timestamp_offset;
-	
 	return result;
 }
 void NetworkDecoder::clear_buffer() {

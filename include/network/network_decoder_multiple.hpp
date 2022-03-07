@@ -32,7 +32,7 @@ private :
 	
 	NetworkDecoder decoder;
 	Handle fragments_lock;
-	std::map<int, NetworkDecoderFFmpegData> fragments;
+	std::map<int, NetworkDecoderFFmpegIOData> fragments;
 	std::map<int, int> error_count;
 	int fragment_len = -1;
 	NetworkStreamDownloader *downloader = NULL;

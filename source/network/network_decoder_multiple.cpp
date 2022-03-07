@@ -11,7 +11,7 @@ void NetworkMultipleDecoder::deinit() {
 	inited = false;
 	
 	decoder.deinit();
-	decoder.filter.deinit();
+	decoder.deinit_filter();
 	for (auto &i : fragments) i.second.deinit(true);
 	fragments.clear();
 	if (video_audio_seperate) {
@@ -81,7 +81,7 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	
 	std::string url_append = !is_livestream ? "" : fragment_len == 1 ? "&headm=4" : "&headm=2";
 	int fragment_id = 0;
-	NetworkDecoderFFmpegData tmp_ffmpeg_data;
+	NetworkDecoderFFmpegIOData tmp_ffmpeg_data;
 	std::vector<NetworkStream *> streams;
 	if (video_audio_seperate) {
 		NetworkStream *video_stream = new NetworkStream(video_url + url_append, is_livestream, &video_session_list);
@@ -109,11 +109,10 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	}
 	if (result.code != 0) goto cleanup;
 	fragments[fragment_id] = tmp_ffmpeg_data;
-	result = decoder.change_ffmpeg_data(fragments[fragment_id], adjust_timestamp ? fragment_id * fragment_len : 0);
-	if (result.code != 0) goto cleanup;
-	result = decoder.filter.init(decoder.get_audio_context(), cur_preamp, cur_tempo, cur_pitch);
-	if (result.code != 0) goto cleanup;
+	decoder.change_ffmpeg_io_data(fragments[fragment_id], adjust_timestamp ? fragment_id * fragment_len : 0);
 	result = decoder.init(request_hw_decoder);
+	if (result.code != 0) goto cleanup;
+	result = decoder.init_filter(cur_preamp, cur_tempo, cur_pitch);
 	if (result.code != 0) goto cleanup;
 	
 	seq_using = fragment_id;
@@ -132,7 +131,7 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	
 	cleanup :
 	tmp_ffmpeg_data.deinit(false);
-	decoder.filter.deinit();
+	decoder.deinit_filter();
 	if (video_session_list.inited) video_session_list.close_sessions();
 	if (audio_session_list.inited) audio_session_list.close_sessions();
 	if (both_session_list.inited) both_session_list.close_sessions();
@@ -148,8 +147,8 @@ void NetworkMultipleDecoder::check_filter_update() {
 		if (preamp_change_request > 0) cur_preamp = preamp_change_request;
 		if (tempo_change_request > 0) cur_tempo = tempo_change_request;
 		if (pitch_change_request > 0) cur_pitch = pitch_change_request;
-		decoder.filter.deinit();
-		decoder.filter.init(decoder.get_audio_context(), cur_preamp, cur_tempo, cur_pitch);
+		decoder.deinit_filter();
+		decoder.init_filter(cur_preamp, cur_tempo, cur_pitch);
 		preamp_change_request = -1;
 		tempo_change_request = -1;
 		pitch_change_request = -1;
@@ -173,7 +172,7 @@ NetworkMultipleDecoder::PacketType NetworkMultipleDecoder::next_decode_type() {
 		if (interrupt || initer_exit_request) res = PacketType::INTERRUPTED;
 		else if (seq_using + 1 >= seq_num) res = PacketType::EoF;
 		else {
-			decoder.change_ffmpeg_data(fragments[seq_using + 1], adjust_timestamp ? (seq_using + 1) * fragment_len : 0);
+			decoder.change_ffmpeg_io_data(fragments[seq_using + 1], adjust_timestamp ? (seq_using + 1) * fragment_len : 0);
 			seq_using++;
 			res = decoder.next_decode_type();
 			// Util_log_save("net-mul", "after change ffmpeg res : " + std::to_string((int) res));
@@ -226,11 +225,11 @@ Result_with_string NetworkMultipleDecoder::seek(s64 microseconds) {
 		}
 		recalc_buffered_head();
 		decoder.clear_buffer();
-		decoder.change_ffmpeg_data(fragments[(int) seq_using], adjust_timestamp ? seq_using * fragment_len : 0);
+		decoder.change_ffmpeg_io_data(fragments[(int) seq_using], adjust_timestamp ? seq_using * fragment_len : 0);
 		svcReleaseMutex(fragments_lock);
 	} else {
 		decoder.clear_buffer();
-		decoder.change_ffmpeg_data(fragments[(int) seq_using], adjust_timestamp ? seq_using * fragment_len : 0);
+		decoder.change_ffmpeg_io_data(fragments[(int) seq_using], adjust_timestamp ? seq_using * fragment_len : 0);
 		// trying to seek to a point too close to the end somehow causes ffmpeg to read the entire stream again ?
 		microseconds = std::max(0.0, std::min((double) microseconds, (get_duration() - 1) * 1000000));
 		result = decoder.seek(microseconds);
@@ -260,7 +259,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 		}
 		Util_log_save("net/live-init", "next : " + std::to_string(seq_next));
 		
-		NetworkDecoderFFmpegData tmp_ffmpeg_data;
+		NetworkDecoderFFmpegIOData tmp_ffmpeg_data;
 		if (video_audio_seperate) {
 			NetworkStream *video_stream = new NetworkStream(video_url + "&sq=" + std::to_string(seq_next), is_livestream, is_livestream ? &video_session_list : NULL);
 			NetworkStream *audio_stream = new NetworkStream(audio_url + "&sq=" + std::to_string(seq_next), is_livestream, is_livestream ? &audio_session_list : NULL);

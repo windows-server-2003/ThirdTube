@@ -434,6 +434,7 @@ void VideoPlayer_init(void) {
 	result = Draw_load_texture("romfs:/gfx/draw/thumb_down.t3x", 64, var_texture_thumb_down, 0, 2);
 	if (result.code != 0) Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 	
+	
 	vid_x = 0;
 	vid_y = 15;
 	vid_frametime = 0;

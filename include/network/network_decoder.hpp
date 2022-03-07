@@ -81,28 +81,22 @@ namespace network_decoder_ {
 
 class NetworkDecoder;
 
-class NetworkDecoderFFmpegData {
+class NetworkDecoderFFmpegIOData {
 private :
 	static constexpr int VIDEO = 0;
 	static constexpr int AUDIO = 1;
 	static constexpr int BOTH = 0;
 	
 	// type : VIDEO, AUDIO
-	Result_with_string init_io(int type, NetworkDecoder *parent_decoder);
-	Result_with_string init_decoder(int type, NetworkDecoder *parent_decoder);
-	
-	AVStream *get_stream(int type) { return format_context[video_audio_seperate ? type : BOTH]->streams[stream_index[type]]; }
+	Result_with_string init_(int type, NetworkDecoder *parent_decoder);
 public :
 	bool video_audio_seperate = false;
+	bool audio_only = false;
 	NetworkStream *network_stream[2] = {NULL, NULL};
 	std::pair<NetworkDecoder *, NetworkStream *> *opaque[2] = {NULL, NULL};
 	AVFormatContext *format_context[2] = {NULL, NULL};
 	AVIOContext *io_context[2] = {NULL, NULL};
 	int stream_index[2] = {0, 0};
-	AVCodecContext *decoder_context[2] = {NULL, NULL};
-	SwrContext *swr_context = NULL;
-	const AVCodec *codec[2] = {NULL, NULL};
-	bool audio_only = false;
 	NetworkDecoder *parent_decoder = NULL;
 	
 	Result_with_string init(NetworkStream *video_stream, NetworkStream *audio_stream, NetworkDecoder *parent_decoder);
@@ -111,6 +105,8 @@ public :
 	Result_with_string reinit();
 	double get_duration();
 };
+
+
 class NetworkDecoderFilterData {
 public :
 	AVFilterGraph *audio_filter_graph = NULL;
@@ -131,18 +127,23 @@ private :
 	static constexpr int AUDIO = 1;
 	static constexpr int BOTH = 0;
 	
-	// ffmpeg data
-	bool video_audio_seperate = false;
-	NetworkStream *network_stream[2] = {NULL, NULL};
-	std::pair<NetworkDecoder *, NetworkStream *> *opaque[2] = {NULL, NULL};
-	AVFormatContext *format_context[2] = {NULL, NULL};
-	AVIOContext *io_context[2] = {NULL, NULL};
-	int stream_index[2] = {0, 0};
+	// ffmpeg io/format related things
+	NetworkDecoderFFmpegIOData ffmpeg_io_data;
+	// references to its members
+	bool &video_audio_seperate = ffmpeg_io_data.video_audio_seperate;
+	bool &audio_only = ffmpeg_io_data.audio_only;
+	NetworkStream *(&network_stream)[2] = ffmpeg_io_data.network_stream;
+	AVFormatContext *(&format_context)[2] = ffmpeg_io_data.format_context;
+	int (&stream_index)[2] = ffmpeg_io_data.stream_index;
+	// ffmpeg decoder
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
 	const AVCodec *codec[2] = {NULL, NULL};
-	bool audio_only = false;
+	NetworkDecoder *parent_decoder = NULL;
+	// ffmpeg filter
+	NetworkDecoderFilterData filter;
 	
+	// buffers
 	std::deque<AVPacket *> packet_buffer[2];
 	network_decoder_::output_buffer<AVFrame *> video_tmp_frames;
 	network_decoder_::output_buffer<u8 *> video_mvd_tmp_frames;
@@ -153,6 +154,7 @@ private :
 	bool mvd_first = false;
 	
 	Result_with_string init_output_buffer(bool);
+	Result_with_string init_decoder(int type);
 	Result_with_string read_packet(int type);
 	Result_with_string mvd_decode(int *width, int *height);
 	AVStream *get_stream(int type) { return format_context[video_audio_seperate ? type : BOTH]->streams[stream_index[type]]; }
@@ -162,14 +164,12 @@ public :
 	volatile bool need_reinit = false;
 	volatile bool ready = false;
 	double timestamp_offset = 0;
-	NetworkDecoderFilterData filter;
 	bool frame_cores_enabled[4];
 	bool slice_cores_enabled[4];
 	
 	void set_frame_cores_enabled(bool *enabled) { memcpy(frame_cores_enabled, enabled, 4); }
 	void set_slice_cores_enabled(bool *enabled) { memcpy(slice_cores_enabled, enabled, 4); }
 	
-	AVCodecContext *get_audio_context() { return decoder_context[AUDIO]; }
 	const char *get_network_waiting_status() {
 		if (network_stream[VIDEO] && network_stream[VIDEO]->network_waiting_status) return network_stream[VIDEO]->network_waiting_status;
 		if (network_stream[AUDIO] && network_stream[AUDIO]->network_waiting_status) return network_stream[AUDIO]->network_waiting_status;
@@ -177,10 +177,24 @@ public :
 	}
 	std::vector<std::pair<double, std::vector<double> > > get_buffering_progress_bars(int bar_len);
 	
-	Result_with_string change_ffmpeg_data(const NetworkDecoderFFmpegData &data, double timestamp_offset);
-	Result_with_string init(bool request_hw_decoder); // should be called after the call of change_ffmpeg_data()
+	size_t get_raw_buffer_num() { return hw_decoder_enabled ? video_mvd_tmp_frames.size() : video_tmp_frames.size(); }
+	size_t get_raw_buffer_num_max() { return hw_decoder_enabled ? video_mvd_tmp_frames.size_max() : video_tmp_frames.size_max(); }
+	
+	
+	Result_with_string init(bool request_hw_decoder); // should be called after change_ffmpeg_data()
 	void deinit();
 	void clear_buffer();
+	
+	
+	void deinit_filter() { filter.deinit(); }
+	// should be called after this->init()
+	Result_with_string init_filter(double volume, double tempo, double pitch) { return filter.init(decoder_context[AUDIO], volume, tempo, pitch); }
+	// used for livestreams/premieres where the video is splitted into fragments
+	void change_ffmpeg_io_data(const NetworkDecoderFFmpegIOData &ffmpeg_io_data, double timestamp_offset) {
+		interrupt = false;
+		this->ffmpeg_io_data = ffmpeg_io_data;
+		this->timestamp_offset = timestamp_offset;
+	}
 	
 	struct VideoFormatInfo {
 		int width;
@@ -207,9 +221,6 @@ public :
 		INTERRUPTED
 	};
 	PacketType next_decode_type();
-	
-	size_t get_raw_buffer_num() { return hw_decoder_enabled ? video_mvd_tmp_frames.size() : video_tmp_frames.size(); }
-	size_t get_raw_buffer_num_max() { return hw_decoder_enabled ? video_mvd_tmp_frames.size_max() : video_tmp_frames.size_max(); }
 	
 	enum class DecoderType {
 		HW,

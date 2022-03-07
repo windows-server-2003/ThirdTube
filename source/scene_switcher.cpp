@@ -31,17 +31,18 @@ static void empty_thread(void* arg) {
 
 static Result sound_init_result;
 
+
 void Menu_init(void)
 {
 	Result_with_string result;
 	
 	Util_log_init();
 	Util_log_save(DEF_MENU_INIT_STR, "Initializing..." + DEF_CURRENT_APP_VER);
-
+	
 	osSetSpeedupEnable(true);
 	aptSetSleepAllowed(true);
 	svcSetThreadPriority(CUR_THREAD_HANDLE, DEF_THREAD_PRIORITY_HIGH - 1);
-
+	
 	Util_log_save(DEF_MENU_INIT_STR, "fsInit()...", fsInit());
 	Util_log_save(DEF_MENU_INIT_STR, "acInit()...", acInit());
 	Util_log_save(DEF_MENU_INIT_STR, "aptInit()...", aptInit());
