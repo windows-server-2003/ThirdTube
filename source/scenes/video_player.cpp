@@ -735,10 +735,6 @@ static void load_video_page(void *arg) {
 						x += 16 + SMALL_MARGIN;
 						Draw(cur_video_info.like_count_str, x, y, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 						x += Draw_get_width(cur_video_info.like_count_str, 0.5) + SMALL_MARGIN * 2;
-						x = (int) x;
-						Draw_texture(var_texture_thumb_down[var_night_mode], x, y, 16, 16);
-						x += 16 + SMALL_MARGIN;
-						Draw(cur_video_info.dislike_count_str, x, y, 0.5, 0.5, LIGHT0_TEXT_COLOR);
 					}),
 				(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2))
 					->set_get_color([] () { return DEF_DRAW_GRAY; }),
