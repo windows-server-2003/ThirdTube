@@ -382,8 +382,7 @@ void VideoPlayer_init(void) {
 	}
 	stream_downloader = NetworkStreamDownloader();
 	stream_downloader_thread = threadCreate(network_downloader_thread, &stream_downloader, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
-	livestream_initer_thread = threadCreate(livestream_initer_thread_func, &network_decoder, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
-
+	
 	vid_total_time = 0;
 	vid_total_frames = 0;
 	vid_min_time = 99999999;
@@ -1679,6 +1678,7 @@ static void decode_thread(void* arg) {
 						osTickCounterUpdate(&counter0);
 					}
 					vid_video_time = osTickCounterRead(&counter0);
+					
 					
 					// get the elapsed time from the previous frame
 					osTickCounterUpdate(&counter1);

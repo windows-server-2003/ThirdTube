@@ -139,7 +139,6 @@ private :
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
 	const AVCodec *codec[2] = {NULL, NULL};
-	NetworkDecoder *parent_decoder = NULL;
 	// ffmpeg filter
 	NetworkDecoderFilterData filter;
 	
