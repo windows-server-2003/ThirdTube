@@ -131,7 +131,7 @@ void Menu_init(void)
 	misc_tasks_thread = threadCreate(misc_tasks_thread_func, NULL, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
 	Menu_get_system_info();
-
+	
 	Util_log_save(DEF_MENU_INIT_STR, "Initialized");
 }
 
