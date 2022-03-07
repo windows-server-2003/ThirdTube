@@ -292,6 +292,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			} else if (result.code == 0) {
 				if (video_stream->seq_head != -1) seq_head = video_stream->seq_head;
 			}
+			video_stream->disable_interrupt = audio_stream->disable_interrupt = false;
 		} else {
 			NetworkStream *both_stream = new NetworkStream(both_url + "&sq=" + std::to_string(seq_next), is_livestream, is_livestream ? &both_session_list : NULL);
 			both_stream->disable_interrupt = true;
@@ -313,6 +314,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 				both_stream->quit_request = true;
 				continue;
 			}
+			both_stream->disable_interrupt = false;
 		}
 		
 		svcWaitSynchronization(fragments_lock, std::numeric_limits<s64>::max());
