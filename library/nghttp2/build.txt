@@ -1,0 +1,10 @@
+1. Download the source from https://github.com/nghttp2/nghttp2/releases and move to the root of the source tree
+3. Make sure 3ds-zlib is installed in devkitPro portlibs via devkitPro pacman
+4. Set THIRDTUBE_PATH in 3ds-configure.sh to the actual path to ThirdTube
+5. Run 3ds-configure.sh
+6. Run `make -C lib` in the same directory
+7. Take libnghttp2.a and libnghttp2.la from lib/.libs, *.h from lib/includes
+
+Current binaries are built with:
+	- nghttp2 v1.47.0
+	- devkitARM release 57
