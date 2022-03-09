@@ -175,7 +175,7 @@ static std::vector<u8> http_get(const std::string &url, int &status_code) {
 	
 	confirm_thread_network_session_list_inited();
 	if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) add_cpu_limit(30);
-	auto result = Access_http_get(thread_network_session_list, url, {});
+	auto result = thread_network_session_list.perform(HttpRequest::GET(url, {}));
 	if (var_network_framework == NETWORK_FRAMEWORK_HTTPC) remove_cpu_limit(30);
 	if (result.fail) {
 		status_code = -1;

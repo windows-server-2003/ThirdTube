@@ -158,7 +158,9 @@ void Menu_exit(void)
 	thumbnail_downloader_thread_exit_request();
 	async_task_thread_exit_request();
 	misc_tasks_thread_exit_request();
+	NetworkSessionList::exit_request();
 	unlock_network_state();
+	
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_check_connectivity_thread, time_out));
 	// Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_send_app_info_thread, time_out));

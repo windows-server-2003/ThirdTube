@@ -15,11 +15,11 @@ namespace youtube_parser {
 	std::string country_code = "US";
 	
 #ifdef _WIN32
-	std::string http_get(const std::string &url, std::map<std::string, std::string> header) {
+	std::string http_get(const std::string &url, std::map<std::string, std::string> headers) {
 		static int cnt = 0;
 		static const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
-		if (!header.count("User-Agent")) header["User-Agent"] = user_agent;
-		if (!header.count("Accept-Language")) header["Accept-Language"] = language_code + ";q=0.9";
+		if (!headers.count("User-Agent")) headers["User-Agent"] = user_agent;
+		if (!headers.count("Accept-Language")) headers["Accept-Language"] = language_code + ";q=0.9";
 		
 		{
 			std::ofstream file("wget_url.txt");
@@ -28,7 +28,7 @@ namespace youtube_parser {
 		std::string save_file_name = "wget_tmp" + std::to_string(cnt++) + ".txt";
 		
 		std::string command = "wget -i wget_url.txt -O " + save_file_name + " --no-check-certificate";
-		for (auto i : header) command += " --header=\"" + i.first + ": " + i.second + "\"";
+		for (auto header : headers) command += " --header=\"" + header.first + ": " + header.second + "\"";
 		
 		system(command.c_str());
 		std::ifstream file(save_file_name);
@@ -58,12 +58,12 @@ namespace youtube_parser {
 		}
 	}
 	
-	std::string http_get(const std::string &url, std::map<std::string, std::string> header) {
+	std::string http_get(const std::string &url, std::map<std::string, std::string> headers) {
 		confirm_thread_network_session_list_inited();
-		if (!header.count("Accept-Language")) header["Accept-Language"] = language_code + ";q=0.9";
+		if (!headers.count("Accept-Language")) headers["Accept-Language"] = language_code + ";q=0.9";
 		
 		debug("accessing...");
-		auto result = Access_http_get(thread_network_session_list, url, header);
+		auto result = thread_network_session_list.perform(HttpRequest::GET(url, headers));
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
 		result.finalize();
@@ -72,7 +72,7 @@ namespace youtube_parser {
 	std::string http_post_json(const std::string &url, const std::string &json) {
 		confirm_thread_network_session_list_inited();
 		debug("accessing(POST)...");
-		auto result = Access_http_post(thread_network_session_list, url, {{"Content-Type", "application/json"}}, json);
+		auto result = thread_network_session_list.perform(HttpRequest::POST(url, {{"Content-Type", "application/json"}}, json));
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
 		result.finalize();

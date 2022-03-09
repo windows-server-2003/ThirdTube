@@ -287,7 +287,7 @@ static void access_input_url(void *) {
 		static NetworkSessionList session_list;
 		if (!session_list.inited) session_list.init();
 		
-		auto result = Access_http_get(session_list, url, {});
+		auto result = session_list.perform(HttpRequest::GET(url, {}));
 		page_type = youtube_get_page_type(result.redirected_url);
 		url = result.redirected_url;
 		result.finalize();

@@ -99,18 +99,26 @@ void NetworkSessionList::close_sessions() {
 	for (auto &session : sessions) session.second.close();
 }
 void NetworkSessionList::deinit() {
+	inited = false;
+	
 	close_sessions();
 	sessions.clear();
 	
+	// curl cleanup
+	if (curl_multi) {
+		curl_multi_cleanup(curl_multi);
+		curl_multi = NULL;
+	}
+	
 	delete buffer;
 	buffer = NULL;
-	
-	inited = false;
+}
+void NetworkSessionList::exit_request() {
+	exiting = true;
 }
 void NetworkSessionList::at_exit() {
 	for (auto session_list : deinit_list) session_list->deinit();
 	deinit_list.clear();
-	exiting = true;
 }
 
 
@@ -262,7 +270,7 @@ struct ChunkProcessor {
 		return 0;
 	}
 };
-static bool perform_http_request(NetworkSession &session, const std::string &request_content, std::vector<u8> &buffer, NetworkResult &result) {
+static bool perform_sslc_http_request(NetworkSession &session, const std::string &request_content, std::vector<u8> &buffer, NetworkResult &result) {
 	if (session.fail) return false;
 	
 	static constexpr int TIMEOUT_MS = 1000 * 15;
@@ -338,7 +346,7 @@ static bool perform_http_request(NetworkSession &session, const std::string &req
 				session.close();
 				session.open(session.host_name);
 				Util_log_save("sslc", "session reopened... fail:" + std::to_string(session.fail));
-				if (!session.fail) return perform_http_request(session, request_content, buffer, result);
+				if (!session.fail) return perform_sslc_http_request(session, request_content, buffer, result);
 				else goto fail;
 			} else if (R_FAILED(lictru_res)) {
 				Util_log_save("sslc", "sslcRead() failed : ", lictru_res);
@@ -424,6 +432,8 @@ static bool perform_http_request(NetworkSession &session, const std::string &req
 	return false;
 }
 
+
+// libcurl callback functions
 static size_t curl_receive_data_callback_func(char *in_ptr, size_t, size_t len, void *user_data) {
 	std::vector<u8> *out = (std::vector<u8> *) user_data;
 	out->insert(out->end(), in_ptr, in_ptr + len);
@@ -431,7 +441,7 @@ static size_t curl_receive_data_callback_func(char *in_ptr, size_t, size_t len, 
 	// Util_log_save("curl", "received : " + std::to_string(len));
 	return len;
 }
-size_t curl_receive_headers_callback_func(char* in_ptr, size_t, size_t len, void *user_data) {
+static size_t curl_receive_headers_callback_func(char* in_ptr, size_t, size_t len, void *user_data) {
 	std::map<std::string, std::string> *out = (std::map<std::string, std::string> *) user_data;
 	
 	std::string cur_line = std::string(in_ptr, in_ptr + len);
@@ -449,7 +459,7 @@ size_t curl_receive_headers_callback_func(char* in_ptr, size_t, size_t len, void
 	}
 	return len;
 }
-int curl_set_socket_options(void *, curl_socket_t sockfd, curlsocktype purpose) {
+static int curl_set_socket_options(void *, curl_socket_t sockfd, curlsocktype purpose) {
 	static const int SOCKET_BUFFER_MAX_SIZE = 0x8000;
 	
 	// expand socket buffer size
@@ -457,7 +467,7 @@ int curl_set_socket_options(void *, curl_socket_t sockfd, curlsocktype purpose) 
 	
 	return CURL_SOCKOPT_OK;
 }
-int curl_debug_callback_func(CURL *handle, curl_infotype type, char *data, size_t size, void *userptr) {
+static int curl_debug_callback_func(CURL *handle, curl_infotype type, char *data, size_t size, void *userptr) {
 	std::string prefix;
 	if (type == CURLINFO_HEADER_OUT) prefix = "h>";
 	if (type == CURLINFO_HEADER_IN) prefix = "h<";
@@ -468,19 +478,13 @@ int curl_debug_callback_func(CURL *handle, curl_infotype type, char *data, size_
 	Util_log_save("curl", prefix + std::string(data, data + size));
 	return 0;
 }
- 
 
-static NetworkResult access_http_internal(NetworkSessionList &session_list, const std::string &method, const std::string &url,
+
+NetworkResult NetworkSessionList::perform_one(const std::string &method, const std::string &url,
 	std::map<std::string, std::string> request_headers, const std::string &body, bool follow_redirect) {
 	
 	NetworkResult res;
 	res.redirected_url = url;
-	
-	if (!session_list.inited) {
-		res.fail = true;
-		res.error = "invalid session list";
-		return res;
-	}
 	
 	if (url.substr(0, 7) != "http://" && url.substr(0, 8) != "https://") {
 		res.fail = true;
@@ -488,19 +492,11 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 		return res;
 	}
 	
-	static const std::string DEFAULT_USER_AGENT = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
-	static const std::map<std::string, std::string> default_headers = {
-		{"Accept", "*/*"},
-		{"Connection", "Keep-Alive"},
-		{"User-Agent", DEFAULT_USER_AGENT}
-	};
-	for (auto header : default_headers) if (!request_headers.count(header.first)) request_headers[header.first] = header.second;
-	
 	if (var_network_framework == NETWORK_FRAMEWORK_SSLC) {
 		auto host_name = url_get_host_name(url);
 		request_headers["Host"] = host_name;
 		
-		NetworkSession &session_using = session_list.sessions[host_name];
+		NetworkSession &session_using = this->sessions[host_name];
 		if (!session_using.inited || session_using.fail) {
 			// Util_log_save("net-io", "init : " + host_name);
 			session_using.close();
@@ -526,7 +522,7 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 		request_content += "\r\n";
 		request_content += body;
 		
-		if (!perform_http_request(session_using, request_content, *session_list.buffer, res)) res.fail = true;
+		if (!perform_sslc_http_request(session_using, request_content, *this->buffer, res)) res.fail = true;
 		if (exiting) {
 			res.fail = true;
 			res.error = "The app is about to exit";
@@ -557,87 +553,178 @@ static NetworkResult access_http_internal(NetworkSessionList &session_list, cons
 		}
 		res.status_code = status_code;
 		
-		auto &buffer = *session_list.buffer;
+		auto &buffer = *this->buffer;
 		while (1) {
 			u32 len_read;
 			Result ret = httpcDownloadData(&res.context, &buffer[0], buffer.size(), &len_read);
 			res.data.insert(res.data.end(), buffer.begin(), buffer.begin() + len_read);
 			if (ret != (s32) HTTPC_RESULTCODE_DOWNLOADPENDING) break;
 		}
-	} else if (var_network_framework == NETWORK_FRAMEWORK_LIBCURL) {
-		CURL *&curl = session_list.curl;
-		if (!curl) {
-			curl = curl_easy_init();
-			curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-			curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, (long) follow_redirect);
-			curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L);
-			curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "br");
-			curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_2TLS);
-			curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_receive_data_callback_func);
-			curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_receive_headers_callback_func);
-			curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, curl_set_socket_options);
-			// curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) 1);
-			// curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_debug_callback_func);
-			session_list.curl_errbuf = (char *) malloc(CURL_ERROR_SIZE);
-			curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, session_list.curl_errbuf);
-			// curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
-		}
-		curl_easy_setopt(curl, CURLOPT_WRITEDATA, &res.data);
-		curl_easy_setopt(curl, CURLOPT_HEADERDATA, &res.response_headers);
-		curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
-		if (method == "POST") curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
-		else curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
-		curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-		
-		struct curl_slist *request_headers_list = NULL;
-		for (auto i : request_headers) request_headers_list = curl_slist_append(request_headers_list, (i.first + ": " + i.second).c_str());
-		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, request_headers_list);
-		
-		CURLcode curl_code = curl_easy_perform(curl);
-		if (curl_code == CURLE_OK) {
-			long status_code;
-			curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-			res.status_code = status_code;
-			
-			char *redirected_url;
-			curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &redirected_url);
-			res.redirected_url = redirected_url;
-			if (res.redirected_url != url) Util_log_save("curl", "redir : " + res.redirected_url);
-		} else Util_log_save("curl", std::string("deep fail : ") + curl_easy_strerror(curl_code) + " / " + session_list.curl_errbuf);
-		
-		curl_slist_free_all(request_headers_list);
 	}
 	return res;
 }
-NetworkResult Access_http_get(NetworkSessionList &session_list, std::string url, const std::map<std::string, std::string> &request_headers, bool follow_redirect) {
-	NetworkResult result;
-	while (1) {
-		result = access_http_internal(session_list, "GET", url , request_headers, "", follow_redirect);
-		if (result.status_code / 100 != 3) return result;
-		
-		Util_log_save("http", "redir");
-		if (!follow_redirect) {
-			result.redirected_url = result.get_header("Location");
-			return result;
+void NetworkSessionList::curl_add_request(const std::string &method, const std::string &url,
+	std::map<std::string, std::string> request_headers, const std::string &body, bool follow_redirect, NetworkResult &res) {
+	
+	if (!curl_multi) {
+		curl_multi = curl_multi_init();
+		curl_multi_setopt(curl_multi, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
+	}
+	CURL *curl;
+	curl = curl_easy_init();
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+	curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L);
+	curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "br");
+	curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long) CURL_HTTP_VERSION_2TLS);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_receive_data_callback_func);
+	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_receive_headers_callback_func);
+	curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, curl_set_socket_options);
+	// curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) 1);
+	// curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_debug_callback_func);
+	char *curl_errbuf = (char *) malloc(CURL_ERROR_SIZE);
+	memset(curl_errbuf, 0, CURL_ERROR_SIZE);
+	curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, curl_errbuf);
+	curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L);
+	// curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
+	
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &res.data);
+	curl_easy_setopt(curl, CURLOPT_HEADERDATA, &res.response_headers);
+	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method.c_str());
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, (long) follow_redirect);
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	
+	struct curl_slist *request_headers_list = NULL;
+	for (auto i : request_headers) request_headers_list = curl_slist_append(request_headers_list, (i.first + ": " + i.second).c_str());
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, request_headers_list);
+	
+	curl_multi_add_handle(curl_multi, curl);
+	curl_requests.push_back({curl, &res, curl_errbuf, url});
+}
+CURLMcode NetworkSessionList::curl_perform_requests() {
+	int running_request_num;
+	CURLMcode res;
+	do {
+		res = curl_multi_perform(curl_multi, &running_request_num);
+		if (res) break;
+		if (running_request_num) curl_multi_poll(curl_multi, NULL, 0, 10000, NULL);
+		if (exiting) {
+			for (auto &i : curl_requests) {
+				i.res->fail = true;
+				i.res->error = "The app is exiting";
+			}
+			return CURLM_OK;
 		}
-		auto new_url = result.get_header("Location");
-		if (var_network_framework == NETWORK_FRAMEWORK_SSLC) {
-			auto old_host = url_get_host_name(url);
-			auto new_host = url_get_host_name(new_url);
-			if (old_host != new_host) {
-				session_list.sessions[old_host].close();
-				session_list.sessions.erase(old_host);
+	} while (running_request_num > 0);
+	
+	if (res != CURLM_OK) {
+		std::string err = curl_multi_strerror(res);
+		Util_log_save("curl", "curl multi deep fail : " + err);
+		for (auto &i : curl_requests) {
+			i.res->fail = true;
+			i.res->error = err;
+		}
+		return res;
+	}
+	
+	CURLMsg *msg;
+	int msg_left;
+	while ((msg = curl_multi_info_read(curl_multi, &msg_left))) {
+		if (msg->msg == CURLMSG_DONE) {
+			CURL *curl = msg->easy_handle;
+			NetworkResult *res = NULL;
+			char *errbuf = NULL;
+			std::string orig_url;
+			for (auto &i : curl_requests) if (i.curl == msg->easy_handle) {
+				res = i.res;
+				errbuf = i.errbuf;
+				orig_url = i.orig_url;
+			}
+			if (!res) {
+				Util_log_save("curl", "unexpected : while processing multi message corresponding request not found");
+				continue;
+			}
+			CURLcode each_result = msg->data.result;
+			if (each_result == CURLE_OK) {
+				long status_code;
+				curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+				res->status_code = status_code;
+				
+				char *redirected_url;
+				curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &redirected_url);
+				res->redirected_url = redirected_url;
+				if (res->redirected_url != orig_url) Util_log_save("curl", "redir : " + res->redirected_url);
+			} else {
+				Util_log_save("curl", std::string("deep fail : ") + curl_easy_strerror(each_result) + " / " + errbuf);
+				res->fail = true;
+				res->error = errbuf;
 			}
 		}
-		result.finalize();
-		url = new_url;
 	}
-}
-NetworkResult Access_http_post(NetworkSessionList &session_list, const std::string &url, const std::map<std::string, std::string> &request_headers,
-	const std::string &data) {
 	
-	auto result = access_http_internal(session_list, "POST", url , request_headers, data, false);
-	result.redirected_url = url;
+	return res;
+}
+void NetworkSessionList::curl_clear_requests() {
+	for (auto &i : curl_requests) {
+		free(i.errbuf);
+		curl_multi_remove_handle(curl_multi, i.curl);
+		curl_easy_cleanup(i.curl);
+	}
+	curl_requests.clear();
+}
+
+NetworkResult NetworkSessionList::perform(const HttpRequest &request) {
+	NetworkResult result;
+	
+	if (!this->inited) {
+		result.fail = true;
+		result.error = "invalid session list";
+		return result;
+	}
+	
+	if (var_network_framework != NETWORK_FRAMEWORK_LIBCURL) {
+		std::string url = request.url;
+		while (1) {
+			result = perform_one(request.method, url, request.headers, request.body, request.follow_redirect);
+			if (result.status_code / 100 != 3) return result;
+			
+			Util_log_save("http", "redir");
+			if (!request.follow_redirect || request.method == "POST") { // don't follow redirects when posting
+				result.redirected_url = result.get_header("Location");
+				return result;
+			}
+			auto new_url = result.get_header("Location");
+			if (var_network_framework == NETWORK_FRAMEWORK_SSLC) {
+				auto old_host = url_get_host_name(url);
+				auto new_host = url_get_host_name(new_url);
+				if (old_host != new_host) {
+					this->sessions[old_host].close();
+					this->sessions.erase(old_host);
+				}
+			}
+			result.finalize();
+			url = new_url;
+		}
+	} else {
+		this->curl_add_request(request.method, request.url, request.headers, request.body, request.follow_redirect && request.method != "POST", result);
+		this->curl_perform_requests();
+		this->curl_clear_requests();
+	}
+	return result;
+}
+std::vector<NetworkResult> NetworkSessionList::perform(const std::vector<HttpRequest> &requests) {
+	std::vector<NetworkResult> result(requests.size());
+	if (var_network_framework != NETWORK_FRAMEWORK_LIBCURL) {
+		for (size_t i = 0; i < requests.size(); i++) result[i] = perform(requests[i]);
+	} else {
+		for (size_t i = 0; i < requests.size(); i++) {
+			auto &cur_req = requests[i];
+			auto &cur_res = result[i];
+			this->curl_add_request(cur_req.method, cur_req.url, cur_req.headers, cur_req.body, cur_req.follow_redirect && cur_req.method != "POST", cur_res);
+		}
+		this->curl_perform_requests();
+		this->curl_clear_requests();
+	}
 	return result;
 }
 void NetworkResult::finalize () {
@@ -654,6 +741,7 @@ std::string NetworkResult::get_header(std::string key) {
 		return response_headers.count(key) ? response_headers[key] : "";
 	}
 }
+
 
 static bool exclusive_state_entered = false;
 void lock_network_state() {
