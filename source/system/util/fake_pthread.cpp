@@ -29,29 +29,26 @@ void Util_fake_pthread_set_enabled_core(bool enabled_core[4])
 	util_fake_pthread_core_offset = 0;
 }
 
+// seems like pthread_mutex_t is u32 and LightLock is s32
 int	pthread_mutex_lock(pthread_mutex_t *mutex) {
-	RecursiveLock_Lock(*(RecursiveLock **) mutex);
+	LightLock_Lock((LightLock *) mutex);
 	return 0;
 }
 int pthread_mutex_trylock(pthread_mutex_t *mutex) {
-	int res = RecursiveLock_TryLock(*(RecursiveLock **) mutex);
+	int res = LightLock_TryLock((LightLock *) mutex);
 	return res ? EBUSY : 0;
 }
-
 int	pthread_mutex_unlock(pthread_mutex_t *mutex)  {
-	RecursiveLock_Unlock(*(RecursiveLock **) mutex);
+	LightLock_Unlock((LightLock *) mutex);
 	return 0;
 }
 
 int	pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr) {
-	*(RecursiveLock **) mutex = new RecursiveLock;
-	RecursiveLock_Init(*(RecursiveLock **) mutex);
+	LightLock_Init((LightLock *) mutex);
 	return 0;
 }
 
-int	pthread_mutex_destroy(pthread_mutex_t *mutex) {
-	delete *(RecursiveLock **) mutex;
-	*(RecursiveLock **) mutex = NULL;
+int	pthread_mutex_destroy(pthread_mutex_t *mutex) { // LightLock doesn't need any resource releasing
 	return 0;
 }
 
