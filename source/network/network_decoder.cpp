@@ -69,7 +69,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	fail :
 	if (cpu_limited) {
 		cpu_limited = false;
-		remove_cpu_limit(25);
+		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	}
 	stream->network_waiting_status = NULL;
 	return AVERROR_EOF;
