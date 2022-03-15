@@ -1,10 +1,6 @@
 #include <regex>
 #include "internal_common.hpp"
 
-#ifndef _WIN32
-#include "network/network_io.hpp"
-#endif
-
 void youtube_change_content_language(std::string language_code) {
 	youtube_parser::language_code = language_code;
 	youtube_parser::country_code = language_code == "en" ? "US" : "JP";
@@ -13,6 +9,10 @@ void youtube_change_content_language(std::string language_code) {
 namespace youtube_parser {
 	std::string language_code = "en";
 	std::string country_code = "US";
+	std::string innertube_key;
+	std::string base_js_url;
+	int sts; // base.js version?
+	bool quick_mode = true;
 	
 #ifdef _WIN32
 	std::string http_get(const std::string &url, std::map<std::string, std::string> headers) {
@@ -31,26 +31,30 @@ namespace youtube_parser {
 		for (auto header : headers) command += " --header=\"" + header.first + ": " + header.second + "\"";
 		
 		system(command.c_str());
-		std::ifstream file(save_file_name);
+		
+		std::ifstream file(save_file_name, std::ios::binary);
 		std::stringstream sstream;
 		sstream << file.rdbuf();
 		return sstream.str();
 	}
-	std::string http_post_json(const std::string &url, const std::string &json) {
+	std::string http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
 		{
 			std::ofstream file("post_tmp.txt");
 			file << json;
 		}
-		system(("curl -X POST -H \"Content-Type: application/json\" " + url + " -o curl_tmp.txt --data-binary \"@post_tmp.txt\"").c_str());
+		std::string command = "curl -X POST -H \"Content-Type: application/json\" ";
+		for (auto header : headers) command += "-H \"" + header.first + ": " + header.second + "\" ";
+		command += url + " -o curl_tmp.txt --data-binary \"@post_tmp.txt\"";
+		system(command.c_str());
 		
-		std::ifstream file("curl_tmp.txt");
+		std::ifstream file("curl_tmp.txt", std::ios::binary);
 		std::stringstream sstream;
 		sstream << file.rdbuf();
 		return sstream.str();
 	}
 #else
 	static bool thread_network_session_list_inited = false;
-	static NetworkSessionList thread_network_session_list;
+	NetworkSessionList thread_network_session_list;
 	static void confirm_thread_network_session_list_inited() {
 		if (!thread_network_session_list_inited) {
 			thread_network_session_list_inited = true;
@@ -58,21 +62,29 @@ namespace youtube_parser {
 		}
 	}
 	
-	std::string http_get(const std::string &url, std::map<std::string, std::string> headers) {
+	HttpRequest http_get_request(const std::string &url, std::map<std::string, std::string> headers) {
 		confirm_thread_network_session_list_inited();
 		if (!headers.count("Accept-Language")) headers["Accept-Language"] = language_code + ";q=0.9";
-		
+		return HttpRequest::GET(url, headers);
+	}
+	std::string http_get(const std::string &url, std::map<std::string, std::string> headers) {
 		debug("accessing...");
-		auto result = thread_network_session_list.perform(HttpRequest::GET(url, headers));
+		auto result = thread_network_session_list.perform(http_get_request(url, headers));
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
 		result.finalize();
 		return std::string(result.data.begin(), result.data.end());
 	}
-	std::string http_post_json(const std::string &url, const std::string &json) {
+	HttpRequest http_post_json_request(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
 		confirm_thread_network_session_list_inited();
+		if (!headers.count("Accept-Language")) headers["Accept-Language"] = language_code + ";q=0.9";
+		headers["Content-Type"] = "application/json";
+		
+		return HttpRequest::POST(url, headers, json);
+	}
+	std::string http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
 		debug("accessing(POST)...");
-		auto result = thread_network_session_list.perform(HttpRequest::POST(url, {{"Content-Type", "application/json"}}, json));
+		auto result = thread_network_session_list.perform(http_post_json_request(url, json, headers));
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
 		result.finalize();
@@ -259,5 +271,40 @@ namespace youtube_parser {
 		}
 		if (url.substr(0, 2) == "m.") url = "www." + url.substr(2, url.size());
 		return "https://" + url;
+	}
+	
+	void fetch_innertube_key_and_player() {
+		// very light without logging in
+		std::string html = http_get("https://m.youtube.com/feed/library", {});
+		
+		// innertube key
+		innertube_key = "";
+		const std::string prefix = "\"INNERTUBE_API_KEY\":\"";
+		auto pos = html.find(prefix);
+		if (pos != std::string::npos) {
+			pos += prefix.size();
+			while (pos < html.size() && html[pos] != '"') innertube_key.push_back(html[pos++]);
+		}
+		if (innertube_key == "") debug("Failed to fetch INNERTUBE_API_KEY");
+		
+		// base js url
+		pos = html.find("base.js\"");
+		if (pos != std::string::npos) {
+			size_t end = pos + std::string("base.js").size();
+			while (pos && html[pos] != '"') pos--;
+			if (html[pos] == '"') base_js_url = "https://m.youtube.com" + html.substr(pos + 1, end - (pos + 1));
+		}
+		if (base_js_url == "") debug("could not find base.js url");
+		
+		// base js version
+		pos = html.find("\"STS\":");
+		if (pos != std::string::npos) {
+			pos += 6;
+			sts = 0;
+			for (; pos < html.size() && isdigit(html[pos]); pos++) sts = sts * 10 + html[pos] - '0';
+		} else {
+			sts = -1;
+			debug("could not find STS");
+		}
 	}
 }

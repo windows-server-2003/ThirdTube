@@ -137,17 +137,6 @@ YouTubeSearchResult youtube_parse_search(std::string url) {
 			res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 		}
 	}
-	{
-		std::regex pattern(std::string(R"***("INNERTUBE_API_KEY":"([\w-]+)")***"));
-		std::smatch match_result;
-		if (std::regex_search(html, match_result, pattern)) {
-			res.continue_key = match_result[1].str();
-		} else {
-			debug("INNERTUBE_API_KEY not found");
-			res.error = "INNERTUBE_API_KEY not found";
-			return res;
-		}
-	}
 	
 	/*
 	for (auto i : res.results) {
@@ -159,8 +148,9 @@ YouTubeSearchResult youtube_parse_search(std::string url) {
 YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result) {
 	YouTubeSearchResult new_result = prev_result;
 	
-	if (prev_result.continue_key == "") {
-		new_result.error = "continue key empty";
+	if (innertube_key == "") fetch_innertube_key_and_player();
+	if (innertube_key == "") {
+		new_result.error = "innertube key empty";
 		return new_result;
 	}
 	if (prev_result.continue_token == "") {
@@ -176,7 +166,7 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		
-		std::string post_url = "https://m.youtube.com/youtubei/v1/search?key=" + prev_result.continue_key;
+		std::string post_url = "https://m.youtube.com/youtubei/v1/search?key=" + innertube_key;
 		
 		std::string received_str = http_post_json(post_url, post_content);
 		if (received_str != "") {

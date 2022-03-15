@@ -5,7 +5,6 @@
 #include "n_param.hpp"
 #include "cache.hpp"
 
-
 static Json get_initial_data(const std::string &html) {
 	Json res;
 	if (fast_extract_initial(html, "ytInitialData", res)) return res;
@@ -27,12 +26,11 @@ static Json initial_player_response(const std::string &html) {
 	return res;
 }
 
+
 static std::map<std::string, yt_cipher_transform_procedure> cipher_transform_proc_cache;
 static std::map<std::string, std::string> nparam_transform_function_cache;
 static std::map<std::pair<std::string, std::string>, std::string> nparam_transform_results_cache;
-static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
-	Json player_response = initial_player_response(html);
-	
+static bool extract_player_data(YouTubeVideoDetail &res, Json player_response, bool use_js_player) {
 	res.playability_status = player_response["playabilityStatus"]["status"].string_value();
 	res.playability_reason = player_response["playabilityStatus"]["reason"].string_value();
 	res.is_upcoming = player_response["videoDetails"]["isUpcoming"].bool_value();
@@ -44,86 +42,76 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 	for (auto i : player_response["streamingData"]["formats"].array_items()) formats.push_back(i);
 	for (auto i : player_response["streamingData"]["adaptiveFormats"].array_items()) formats.push_back(i);
 	
-	// for obfuscated signatures & n parameter modification
-	std::string js_url;
-	// get base js url
-	if (player_response["assets"]["js"] != Json()) js_url = player_response["assets"]["js"] != Json();
-	else {
-		auto pos = html.find("base.js\"");
-		if (pos != std::string::npos) {
-			size_t end = pos + std::string("base.js").size();
-			while (pos && html[pos] != '"') pos--;
-			if (html[pos] == '"') js_url = html.substr(pos + 1, end - (pos + 1));
-		}
-		if (js_url == "") {
-			debug("could not find base js url");
-			return false;
-		}
-	}
-	js_url = "https://m.youtube.com" + js_url;
-	if (!cipher_transform_proc_cache.count(js_url) || !nparam_transform_function_cache.count(js_url)) {
-		std::string js_id;
-		std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
-		std::smatch match_res;
-		if (std::regex_search(js_url, match_res, std::regex("/s/player/([\\w]+)/"))) js_id = match_res[1].str();
-		if (js_url == "") {
-			debug("failed to extract js id");
-			return false;
-		}
-		bool cache_used = false;
-#ifndef _WIN32
-		char *buf = (char *) malloc(0x4000);
-		u32 read_size;
-		if (buf && Util_file_load_from_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) buf, 0x4000 - 1, &read_size).code == 0) {
-			debug("cache found (" + js_id + ") size:" + std::to_string(read_size) + " found, using...");
-			buf[read_size] = '\0';
-			if (yt_procs_from_string(buf, cipher_transform_proc_cache[js_url], nparam_transform_function_cache[js_url])) cache_used = true;
-			else debug("failed to load cache");
-		}
-		free(buf);
-#endif
-		if (!cache_used) {
-			std::string js_content = http_get(js_url);
-			if (!js_content.size()) {
-				debug("base js download failed");
+	if (use_js_player) {
+		// for obfuscated signatures & n parameter modification
+		if (!cipher_transform_proc_cache.count(base_js_url) || !nparam_transform_function_cache.count(base_js_url)) {
+			std::string js_id;
+			std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
+			std::smatch match_res;
+			if (std::regex_search(base_js_url, match_res, std::regex("/s/player/([\\w]+)/"))) js_id = match_res[1].str();
+			if (js_id == "") {
+				debug("failed to extract js id");
 				return false;
 			}
-			cipher_transform_proc_cache[js_url] = yt_cipher_get_transform_plan(js_content);
-			nparam_transform_function_cache[js_url] = yt_nparam_get_function_content(js_content);
-#ifndef _WIN32
-			auto cache_str = yt_procs_to_string(cipher_transform_proc_cache[js_url], nparam_transform_function_cache[js_url]);
-			Result_with_string result = Util_file_save_to_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) cache_str.c_str(), cache_str.size(), true);
-			if (result.code != 0) debug("cache write failed : " + result.error_description);
-#endif
+			bool cache_used = false;
+#			ifndef _WIN32
+			char *buf = (char *) malloc(0x4000);
+			u32 read_size;
+			if (buf && Util_file_load_from_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) buf, 0x4000 - 1, &read_size).code == 0) {
+				debug("cache found (" + js_id + ") size:" + std::to_string(read_size) + " found, using...");
+				buf[read_size] = '\0';
+				if (yt_procs_from_string(buf, cipher_transform_proc_cache[base_js_url], nparam_transform_function_cache[base_js_url])) cache_used = true;
+				else debug("failed to load cache");
+			}
+			free(buf);
+#			endif
+			if (!cache_used) {
+				std::string js_content = http_get(base_js_url);
+				if (!js_content.size()) {
+					debug("base js download failed");
+					return false;
+				}
+				cipher_transform_proc_cache[base_js_url] = yt_cipher_get_transform_plan(js_content);
+				nparam_transform_function_cache[base_js_url] = yt_nparam_get_function_content(js_content);
+#			ifndef _WIN32
+				auto cache_str = yt_procs_to_string(cipher_transform_proc_cache[base_js_url], nparam_transform_function_cache[base_js_url]);
+				Result_with_string result = Util_file_save_to_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) cache_str.c_str(), cache_str.size(), true);
+				if (result.code != 0) debug("cache write failed : " + result.error_description);
+#			endif
+			}
 		}
-	}
-	
-	for (auto &i : formats) { // handle decipher
-		if (i["url"] != Json()) continue;
+		debug("start cipher");
 		
-		auto transform_procedure = cipher_transform_proc_cache[js_url];
-		auto cipher_params = parse_parameters(i["cipher"] != Json() ? i["cipher"].string_value() : i["signatureCipher"].string_value());
-		auto tmp = i.object_items();
-		tmp["url"] = Json(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + yt_deobfuscate_signature(cipher_params["s"], transform_procedure));
-		i = Json(tmp);
-	}
-	for (auto &i : formats) { // modify the `n` parameter
-		std::string url = i["url"].string_value();
-		std::smatch match_result;
-		if (std::regex_search(url, match_result, std::regex(std::string("[\?&]n=([^&]+)")))) {
-			auto cur_n = match_result[1].str();
-			std::string next_n;
-			if (!nparam_transform_results_cache.count({js_url, cur_n})) {
-				next_n = yt_modify_nparam(match_result[1].str(), nparam_transform_function_cache[js_url]);
-				nparam_transform_results_cache[{js_url, cur_n}] = next_n;
-			} else next_n = nparam_transform_results_cache[{js_url, cur_n}];
-			url = std::string(url.cbegin(), match_result[1].first) + next_n + std::string(match_result[1].second, url.cend());
-		} else debug("failed to detect `n` parameter");
-		if (url.find("ratebypass") == std::string::npos) url += "&ratebypass=yes";
-		
-		auto tmp = i.object_items();
-		tmp["url"] = url;
-		i = Json(tmp);
+		for (auto &i : formats) { // handle decipher
+			if (i["url"] != Json()) continue;
+			
+			auto transform_procedure = cipher_transform_proc_cache[base_js_url];
+			auto cipher_params = parse_parameters(i["cipher"] != Json() ? i["cipher"].string_value() : i["signatureCipher"].string_value());
+			auto tmp = i.object_items();
+			tmp["url"] = Json(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + yt_deobfuscate_signature(cipher_params["s"], transform_procedure));
+			i = Json(tmp);
+		}
+		debug("start n param");
+		static auto nparam_regex = std::regex(std::string("[\?&]n=([^&]+)"));
+		for (auto &i : formats) { // modify the `n` parameter
+			std::string url = i["url"].string_value();
+			std::smatch match_result;
+			if (std::regex_search(url, match_result, nparam_regex)) {
+				auto cur_n = match_result[1].str();
+				std::string next_n;
+				if (!nparam_transform_results_cache.count({base_js_url, cur_n})) {
+					next_n = yt_modify_nparam(match_result[1].str(), nparam_transform_function_cache[base_js_url]);
+					nparam_transform_results_cache[{base_js_url, cur_n}] = next_n;
+				} else next_n = nparam_transform_results_cache[{base_js_url, cur_n}];
+				url = std::string(url.cbegin(), match_result[1].first) + next_n + std::string(match_result[1].second, url.cend());
+			} else debug("failed to detect `n` parameter");
+			if (url.find("ratebypass") == std::string::npos) url += "&ratebypass=yes";
+			
+			auto tmp = i.object_items();
+			tmp["url"] = url;
+			i = Json(tmp);
+		}
+		debug("end n param");
 	}
 	for (auto &i : formats) { // something like %2C still appears in the url, so decode them back
 		auto tmp = i.object_items();
@@ -199,7 +187,6 @@ static bool extract_stream(YouTubeVideoDetail &res, const std::string &html) {
 		cur_lang.id = translation_lang["languageCode"].string_value();
 		res.caption_translation_languages.push_back(cur_lang);
 	}
-	
 	return true;
 }
 
@@ -288,11 +275,9 @@ static void extract_item(Json content, YouTubeVideoDetail &res) {
 	}
 }
 
-static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
-	Json initial_data = get_initial_data(html);
-	
+static void extract_metadata(YouTubeVideoDetail &res, Json data) {
 	{
-		auto contents = initial_data["contents"]["singleColumnWatchNextResults"]["results"]["results"]["contents"];
+		auto contents = data["contents"]["singleColumnWatchNextResults"]["results"]["results"]["contents"];
 		for (auto content : contents.array_items()) {
 			if (content["itemSectionRenderer"] != Json()) {
 				for (auto i : content["itemSectionRenderer"]["contents"].array_items()) extract_item(i, res);
@@ -306,7 +291,7 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 			}
 		}
 	}
-	Json playlist_object = initial_data["contents"]["singleColumnWatchNextResults"]["playlist"]["playlist"];
+	Json playlist_object = data["contents"]["singleColumnWatchNextResults"]["playlist"]["playlist"];
 	if (playlist_object != Json()) {
 		res.playlist.id = playlist_object["playlistId"].string_value();
 		res.playlist.selected_index = -1;
@@ -327,21 +312,9 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 			}
 		}
 	}
-	{
-		const std::string prefix = "\"INNERTUBE_API_KEY\":\"";
-		auto pos = html.find(prefix);
-		if (pos != std::string::npos) {
-			pos += prefix.size();
-			while (pos < html.size() && html[pos] != '"') res.continue_key.push_back(html[pos++]);
-		}
-		if (res.continue_key == "") {
-			debug("INNERTUBE_API_KEY not found");
-			res.error = "INNERTUBE_API_KEY not found";
-		}
-	}
 	res.comment_continue_type = -1;
 	res.comments_disabled = true;
-	for (auto i : initial_data["engagementPanels"].array_items()) if (i["engagementPanelSectionListRenderer"] != Json()) {
+	for (auto i : data["engagementPanels"].array_items()) if (i["engagementPanelSectionListRenderer"] != Json()) {
 		for (auto j : i["engagementPanelSectionListRenderer"]["content"]["sectionListRenderer"]["continuations"].array_items()) if (j["reloadContinuationData"] != Json()) {
 			res.comment_continue_token = j["reloadContinuationData"]["continuation"].string_value();
 			res.comment_continue_type = 0;
@@ -368,20 +341,82 @@ static void extract_metadata(YouTubeVideoDetail &res, const std::string &html) {
 YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	YouTubeVideoDetail res;
 	
-	url = convert_url_to_mobile(url);
+	bool cur_quick_mode = quick_mode;
+	if (cur_quick_mode) cur_quick_mode = (youtube_get_video_id_by_url(url) != "");
 	
-	res.url = url;
-	std::string html = http_get(url);
-	if (!html.size()) {
-		res.error = "failed to download video page";
+	if (innertube_key == "" || base_js_url == "") fetch_innertube_key_and_player();
+	if (innertube_key == "" || base_js_url == "") {
+		res.error = "innertube key or base.js url empty";
 		return res;
 	}
+	Json json[2];
+	if (cur_quick_mode) {
+		res.id = youtube_get_video_id_by_url(url);
+		
+		const std::string innertube_key = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"; // hardcoded
+		
+		std::string post_content = R"({"videoId": "%0", "context": {"client": {"hl": "%1","gl": "%2","clientName": "MWEB","clientVersion": "2.20220308.01.00"}}, "playbackContext": {"contentPlaybackContext": {"signatureTimestamp": %3}}})";
+		post_content = std::regex_replace(post_content, std::regex("%0"), res.id);
+		post_content = std::regex_replace(post_content, std::regex("%1"), language_code);
+		post_content = std::regex_replace(post_content, std::regex("%2"), country_code);
+		post_content = std::regex_replace(post_content, std::regex("%3"), std::to_string(sts));
+		std::string urls[2] = {
+			"https://www.youtube.com/youtubei/v1/next?key=" + innertube_key,
+			"https://www.youtube.com/youtubei/v1/player?key=" + innertube_key
+		};
+		std::string json_str[2]; // {/next, /player}
+#		ifdef _WIN32
+		for (int i = 0; i < 2; i++) json_str[i] = http_post_json(urls[i], post_content);
+#		else
+		debug("accessing(multi)...");
+		{
+			std::vector<HttpRequest> requests;
+			for (int i = 0; i < 2; i++) requests.push_back(http_post_json_request(urls[i], post_content));
+			auto results = thread_network_session_list.perform(requests);
+			bool fail = false;
+			for (int i = 0; i < 2; i++) if (results[i].fail) {
+				fail = true;
+				debug("#" + std::to_string(i) + " fail");
+			}
+			if (!fail) debug("ok");
+			for (int i = 0; i < 2; i++) json_str[i] = std::string(results[i].data.begin(), results[i].data.end());
+		}
+#		endif
+		for (int i = 0; i < 2; i++) {
+			std::string json_err;
+			json[i] = Json::parse(json_str[i], json_err);
+			if (json_err != "" || json[i] == Json()) {
+				debug("error parsing json str #" + std::to_string(i) + " : " + json_err);
+				return res;
+			}
+		}
+	} else {
+		std::string html = http_get(url);
+		if (!html.size()) {
+			res.error = "failed to download video page";
+			return res;
+		}
+		json[0] = get_initial_data(html);
+		json[1] = initial_player_response(html);
+		
+		if (res.id.size() != 11) res.id = youtube_get_video_id_by_url(url);
+	}
+	debug("json ok");
+	extract_metadata(res, json[0]);
+	debug("metadata ok");
+	extract_player_data(res, json[1], true);
+	debug("player ok");
+
+#	ifdef _WIN32
+	if (res.audio_stream_url != "") {
+		auto tmp_data = http_get(res.audio_stream_url, {{"Range", "bytes=0-400000"}});
+		if (tmp_data.size() != 400001) {
+			debug("!!!!!!!!!!!!!!!!!!!!! SIZE DIFFER : " + std::to_string(tmp_data.size()) + " !!!!!!!!!!!!!!!!!!!!!");
+		} else debug("----------------------- OK -----------------------");
+	} else debug("!!!!!!!!!!!!!!!!!!!!! AUDIO STREAM URL EMPTY !!!!!!!!!!!!!!!!!!!!!");
+#	endif
 	
-	extract_stream(res, html);
-	extract_metadata(res, html);
-	
-	if (res.id.size() != 11) res.id = youtube_get_video_id_by_url(url);
-	res.succinct_thumbnail_url = youtube_get_video_thumbnail_url_by_id(res.id);
+	if (res.id != "") res.succinct_thumbnail_url = youtube_get_video_thumbnail_url_by_id(res.id);
 #	ifndef _WIN32
 	if (res.title != "" && res.id != "") {
 		HistoryVideo video;
@@ -403,8 +438,9 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDetail &prev_result) {
 	YouTubeVideoDetail new_result = prev_result;
 	
-	if (prev_result.continue_key == "") {
-		new_result.error = "continue key empty";
+	if (innertube_key == "") fetch_innertube_key_and_player();
+	if (innertube_key == "") {
+		new_result.error = "innertube key empty";
 		return new_result;
 	}
 	if (prev_result.suggestions_continue_token == "") {
@@ -420,7 +456,7 @@ YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDe
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		
-		std::string post_url = "https://m.youtube.com/youtubei/v1/next?key=" + prev_result.continue_key;
+		std::string post_url = "https://m.youtube.com/youtubei/v1/next?key=" + innertube_key;
 		
 		std::string received_str = http_post_json(post_url, post_content);
 		if (received_str != "") {
@@ -478,6 +514,11 @@ YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(Json comment_r
 YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetail &prev_result) {
 	YouTubeVideoDetail new_result = prev_result;
 	
+	if (innertube_key == "") fetch_innertube_key_and_player();
+	if (innertube_key == "") {
+		new_result.error = "innertube key empty";
+		return new_result;
+	}
 	if (prev_result.comment_continue_type == -1) {
 		new_result.error = "No more comments available";
 		return new_result;
@@ -488,7 +529,6 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 		// get the icon of the author with minimum size
 		for (auto i : comment_thread_renderer["commentThreadRenderer"]["replies"]["commentRepliesRenderer"]["contents"].array_items()) if (i["continuationItemRenderer"] != Json())
 			cur_comment.replies_continue_token = i["continuationItemRenderer"]["button"]["buttonRenderer"]["command"]["continuationCommand"]["token"].string_value();
-		cur_comment.continue_key = new_result.continue_key; // copy the innertube key so that we can load replies only by a YouTubeVideoDetail::Comment instance
 		return cur_comment;
 	};
 	
@@ -524,7 +564,7 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 			post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 			post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 			
-			std::string received_str = http_post_json("https://m.youtube.com/youtubei/v1/next?key=" + prev_result.continue_key, post_content);
+			std::string received_str = http_post_json("https://m.youtube.com/youtubei/v1/next?key=" + innertube_key, post_content);
 			if (received_str != "") {
 				std::string json_err;
 				comment_data = Json::parse(received_str, json_err);
@@ -562,6 +602,8 @@ YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVi
 		debug("load_more_replies on a comment that has no replies to load");
 		return comment;
 	}
+	if (innertube_key == "") fetch_innertube_key_and_player();
+	if (innertube_key == "") return comment;
 	
 	Json replies_data;
 	{
@@ -570,7 +612,7 @@ YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVi
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		
-		std::string received_str = http_post_json("https://m.youtube.com/youtubei/v1/next?key=" + comment.continue_key, post_content);
+		std::string received_str = http_post_json("https://m.youtube.com/youtubei/v1/next?key=" + innertube_key, post_content);
 		if (received_str != "") {
 			std::string json_err;
 			replies_data = Json::parse(received_str, json_err);
@@ -647,7 +689,10 @@ YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &pre
 std::string youtube_get_video_id_by_url(const std::string &url) {
 	auto pos = url.find("?v=");
 	if (pos == std::string::npos) pos = url.find("&v=");
-	if (pos != std::string::npos) return url.substr(pos + 3, 11);
+	if (pos != std::string::npos) {
+		std::string res = url.substr(pos + 3, 11);
+		return youtube_is_valid_video_id(res) ? res : "";
+	}
 	return "";
 }
 std::string youtube_get_video_thumbnail_url_by_id(const std::string &id) {

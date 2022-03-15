@@ -26,6 +26,7 @@
 #	include "system/util/history.hpp"
 #	include "system/util/misc_tasks.hpp"
 #	include "system/cpu_limit.hpp"
+#	include "network/network_io.hpp"
 #	include "definitions.hpp"
 #	define debug(s) Util_log_save("yt-parser", (s))
 #endif
@@ -36,9 +37,18 @@ using namespace json11;
 namespace youtube_parser {
 	extern std::string language_code;
 	extern std::string country_code;
+	extern std::string innertube_key;
+	extern std::string base_js_url;
+	extern int sts;
+	extern bool quick_mode;
 	
+#	ifndef _WIN32
+	extern NetworkSessionList thread_network_session_list;
+	HttpRequest http_get_request(const std::string &url, std::map<std::string, std::string> headers = {});
+	HttpRequest http_post_json_request(const std::string &url, const std::string &json, std::map<std::string, std::string> headers = {});
+#	endif
 	std::string http_get(const std::string &url, std::map<std::string, std::string> header = {});
-	std::string http_post_json(const std::string &url, const std::string &json);
+	std::string http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> header = {});
 	
 	bool starts_with(const std::string &str, const std::string &pattern, size_t offset = 0);
 	bool ends_with(const std::string &str, const std::string &pattern);
@@ -60,9 +70,11 @@ namespace youtube_parser {
 	bool fast_extract_initial(const std::string &html, const std::string &var_name, Json &res);
 	
 	Json get_succeeding_json_regexes(const std::string &html, std::vector<const char *> patterns);
-
+	
 	std::string convert_url_to_mobile(std::string url);
 	std::string convert_url_to_desktop(std::string url);
+	
+	void fetch_innertube_key_and_player();
 }
 using namespace youtube_parser;
 

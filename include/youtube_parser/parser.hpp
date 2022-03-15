@@ -54,9 +54,8 @@ struct YouTubeSearchResult {
 	std::vector<YouTubeSuccinctItem> results;
 	
 	std::string continue_token;
-	std::string continue_key;
 	
-	bool has_continue() const { return continue_token != "" && continue_key != ""; }
+	bool has_continue() const { return continue_token != ""; }
 };
 YouTubeSearchResult youtube_parse_search(std::string url);
 // takes the previous result, returns the new result with both old items and new items
@@ -132,13 +131,11 @@ struct YouTubeVideoDetail {
 		
 		int reply_num;
 		std::vector<Comment> replies;
-		std::string continue_key; // innertube key, equals to YouTubeChannelDetail.continue_key
 		std::string replies_continue_token;
 		bool has_more_replies() const { return replies_continue_token != ""; }
 	};
 	std::vector<Comment> comments;
 	
-	std::string continue_key; // innertube key
 	std::string suggestions_continue_token;
 	std::string comment_continue_token;
 	int comment_continue_type; // -1 : unavailable, 0 : using watch_comments, 1 : using innertube
@@ -155,7 +152,7 @@ struct YouTubeVideoDetail {
 		for (auto suggestion : suggestions) if (suggestion.type == YouTubeSuccinctItem::VIDEO) return suggestion.video;
 		return YouTubeVideoSuccinct();
 	}
-	bool has_more_suggestions() const { return continue_key != "" && suggestions_continue_token != ""; }
+	bool has_more_suggestions() const { return suggestions_continue_token != ""; }
 	bool has_more_comments() const { return comment_continue_type != -1; }
 	bool needs_timestamp_adjusting() const { return is_livestream && livestream_type == LivestreamType::PREMIERE; }
 	bool is_playable() const { return playability_status == "OK" && (both_stream_url != "" || (audio_stream_url != "" && video_stream_urls.size())); }
@@ -181,7 +178,6 @@ struct YouTubeChannelDetail {
 	std::string subscriber_count_str;
 	std::vector<YouTubeVideoSuccinct> videos;
 	
-	std::string innertube_key;
 	std::string continue_token;
 	std::string playlist_tab_browse_id;
 	std::string playlist_tab_params;
@@ -203,9 +199,9 @@ struct YouTubeChannelDetail {
 	bool community_loaded = false;
 	std::string community_continuation_token;
 	
-	bool has_continue() const { return innertube_key != "" && continue_token != ""; }
-	bool has_playlist_to_load() const { return innertube_key != "" && playlist_tab_browse_id != "" && playlist_tab_params != ""; }
-	bool has_community_posts_to_load() const { return !community_loaded || (innertube_key != "" && community_continuation_token != ""); }
+	bool has_continue() const { return continue_token != ""; }
+	bool has_playlist_to_load() const { return playlist_tab_browse_id != "" && playlist_tab_params != ""; }
+	bool has_community_posts_to_load() const { return !community_loaded || community_continuation_token != ""; }
 };
 YouTubeChannelDetail youtube_parse_channel_page(std::string url);
 // takes the previous result, returns the new result with both old items and new items
