@@ -236,7 +236,6 @@ void NetworkStreamDownloader::downloader_thread() {
 						break;
 				}
 			}
-			result.finalize();
 		} else {
 			u64 block_reading = read_heads[cur_stream_index] / BLOCK_SIZE;
 			if (cur_stream->ready) {
@@ -277,7 +276,6 @@ void NetworkStreamDownloader::downloader_thread() {
 					if (cur_stream->retry_cnt_left) {
 						cur_stream->retry_cnt_left--;
 					} else cur_stream->error = true;
-					result.finalize();
 					continue;
 				}
 				cur_stream->retry_cnt_left = NetworkStream::RETRY_CNT_MAX;
@@ -290,7 +288,6 @@ void NetworkStreamDownloader::downloader_thread() {
 				Util_log_save("net/dl", "access failed : " + result.error);
 				cur_stream->error = true;
 			}
-			result.finalize();
 		}
 	}
 	Util_log_save(LOG_THREAD_STR, "Exit, deiniting...");

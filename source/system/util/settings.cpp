@@ -37,9 +37,6 @@ void load_settings() {
 	var_flash_mode = load_int("dark_theme_flash", 0);
 	var_community_image_size = std::min(COMMUNITY_IMAGE_SIZE_MAX, std::max(COMMUNITY_IMAGE_SIZE_MIN, load_int("community_image_size", COMMUNITY_IMAGE_SIZE_DEFAULT)));
 	var_autoplay_level = std::min(2, std::max(0, load_int("autoplay_level", 2)));
-	var_network_framework = var_network_framework_changed = load_int("use_experimental_sslc", -1); // for back compability
-	if (var_network_framework < 0 || var_network_framework >= 3) var_network_framework = var_network_framework_changed = load_int("network_framework", -1);
-	if (var_network_framework < 0 || var_network_framework >= 3) var_network_framework = var_network_framework_changed = 2;
 	var_history_enabled = load_int("history_enabled", 1);
 	var_video_show_debug_info = load_int("video_show_debug_info", 0);
 	var_video_linear_filter = load_int("linear_filter", 1);
@@ -62,7 +59,6 @@ void save_settings() {
 		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n" + 
 		"<community_image_size>" + std::to_string(var_community_image_size) + "</community_image_size>\n" +
 		"<autoplay_level>" + std::to_string(var_autoplay_level) + "</autoplay_level>\n" + 
-		"<network_framework>" + std::to_string(var_network_framework_changed) + "</network_framework>\n" +
 		"<history_enabled>" + std::to_string(var_history_enabled) + "</history_enabled>\n" +
 		"<video_show_debug_info>" + std::to_string(var_video_show_debug_info) + "</video_show_debug_info>\n" +
 		"<linear_filter>" + std::to_string(var_video_linear_filter) + "</linear_filter>\n";

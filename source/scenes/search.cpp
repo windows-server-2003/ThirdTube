@@ -290,8 +290,6 @@ static void access_input_url(void *) {
 		auto result = session_list.perform(HttpRequest::GET(url, {}));
 		page_type = youtube_get_page_type(result.redirected_url);
 		url = result.redirected_url;
-		result.finalize();
-		session_list.close_sessions();
 	}
 	
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());

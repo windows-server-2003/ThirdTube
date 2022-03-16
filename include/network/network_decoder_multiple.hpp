@@ -36,9 +36,6 @@ private :
 	std::map<int, int> error_count;
 	int fragment_len = -1;
 	NetworkStreamDownloader *downloader = NULL;
-	NetworkSessionList video_session_list;
-	NetworkSessionList audio_session_list;
-	NetworkSessionList both_session_list;
 	
 	volatile int seq_buffered_head = 0;
 	

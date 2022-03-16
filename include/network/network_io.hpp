@@ -5,12 +5,7 @@
 #include <3ds.h>
 #include <curl/curl.h>
 
-#define NETWORK_FRAMEWORK_HTTPC 0
-#define NETWORK_FRAMEWORK_SSLC 1
-#define NETWORK_FRAMEWORK_LIBCURL 2
-
 struct NetworkResult {
-	httpcContext context; // only when using httpc
 	std::string redirected_url;
 	bool fail = false; // whether some network error occured; receiving http error code like 404 is still counted as a 'success'
 	std::string error;
@@ -21,7 +16,6 @@ struct NetworkResult {
 	
 	bool status_code_is_success() { return status_code / 100 == 2; }
 	std::string get_header(std::string key);
-	void finalize();
 };
 struct HttpRequest { // including https
 	std::string method;
@@ -48,23 +42,11 @@ struct HttpRequest { // including https
 	}
 };
 
-struct NetworkSession {
-	bool inited = false;
-	bool fail = false;
-	int sockfd = -1;
-	sslcContext sslc_context;
-	std::string host_name;
-	
-	void open(std::string host_name);
-	void close();
-};
 struct NetworkSessionList { // one instance per thread
 private :
 	void deinit(); // will be called for each instance when the app exits
-	NetworkResult perform_one(const std::string &method, const std::string &url,
-		std::map<std::string, std::string> request_headers, const std::string &body, bool follow_redirect); // used for httpc and sslc
-	void curl_add_request(const std::string &method, const std::string &url,
-		std::map<std::string, std::string> request_headers, const std::string &body, bool follow_redirect, NetworkResult &res);
+	
+	void curl_add_request(const HttpRequest &request, NetworkResult *res);
 	CURLMcode curl_perform_requests();
 	void curl_clear_requests();
 public :
@@ -77,9 +59,6 @@ public :
 		std::string orig_url;
 	};
 	std::vector<RequestInternal> curl_requests; // {curl context, corresponding result, error buffer}
-	// should not be used from outside network_io.cpp
-	std::map<std::string, NetworkSession> sessions;  // used for sslc
-	std::vector<u8> *buffer;
 	
 	volatile bool inited = false;
 	
@@ -94,8 +73,6 @@ public :
 	static void at_exit();
 	static void exit_request();
 };
-
-std::string url_get_host_name(const std::string &url);
 
 void lock_network_state();
 void unlock_network_state();

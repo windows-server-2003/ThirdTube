@@ -72,7 +72,6 @@ namespace youtube_parser {
 		auto result = thread_network_session_list.perform(http_get_request(url, headers));
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
-		result.finalize();
 		return std::string(result.data.begin(), result.data.end());
 	}
 	HttpRequest http_post_json_request(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
@@ -87,7 +86,6 @@ namespace youtube_parser {
 		auto result = thread_network_session_list.perform(http_post_json_request(url, json, headers));
 		if (result.fail) debug("fail : " + result.error);
 		else debug("ok");
-		result.finalize();
 		return std::string(result.data.begin(), result.data.end());
 	}
 #endif

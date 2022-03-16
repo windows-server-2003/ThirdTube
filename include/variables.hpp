@@ -10,8 +10,6 @@ extern bool var_flash_mode;
 extern bool var_wifi_enabled;
 extern bool var_history_enabled;
 extern int var_autoplay_level;
-extern int var_network_framework;
-extern int var_network_framework_changed;
 extern bool var_show_fps;
 extern bool var_full_screen_mode;
 extern bool var_video_show_debug_info;

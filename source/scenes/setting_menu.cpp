@@ -269,17 +269,6 @@ void Sem_init(void) {
 								misc_tasks_request(TASK_SAVE_SETTINGS);
 							}
 						}),
-					// Network framework
-					(new SelectorView(0, 0, 320, 35))
-						->set_texts({"httpc", "sslc", "libcurl"}, var_network_framework_changed)
-						->set_title([](const SelectorView &view) { return LOCALIZED(NETWORK_FRAMEWORK) +
-							(var_network_framework != var_network_framework_changed ? " (" + LOCALIZED(RESTART_TO_APPLY) + ")" : ""); })
-						->set_on_change([](const SelectorView &view) {
-							if (var_network_framework_changed != view.selected_button) {
-								var_network_framework_changed = view.selected_button;
-								misc_tasks_request(TASK_SAVE_SETTINGS);
-							}
-						}),
 					(new EmptyView(0, 0, 320, 10)),
 					// Debug info in the control tab
 					(new SelectorView(0, 0, 320, 35))

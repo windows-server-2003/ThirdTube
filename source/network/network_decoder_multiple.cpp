@@ -14,10 +14,6 @@ void NetworkMultipleDecoder::deinit() {
 	decoder.deinit_filter();
 	for (auto &i : fragments) i.second.deinit(true);
 	fragments.clear();
-	if (video_audio_seperate) {
-		video_session_list.close_sessions();
-		audio_session_list.close_sessions();
-	} else both_session_list.close_sessions();
 	if (mvd_inited) {
 		mvdstdExit();
 		mvd_inited = false;
@@ -58,12 +54,7 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	if (video_audio_seperate) {
 		this->video_url = video_url;
 		this->audio_url = audio_url;
-		if (!video_session_list.inited) video_session_list.init();
-		if (!audio_session_list.inited) audio_session_list.init();
-	} else {
-		this->both_url = video_url;
-		if (!both_session_list.inited) both_session_list.init();
-	}
+	} else this->both_url = video_url;
 	this->fragment_len = fragment_len;
 	this->downloader = &downloader;
 	error_count.clear();
@@ -84,8 +75,8 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	NetworkDecoderFFmpegIOData tmp_ffmpeg_data;
 	std::vector<NetworkStream *> streams;
 	if (video_audio_seperate) {
-		NetworkStream *video_stream = new NetworkStream(video_url + url_append, is_livestream, &video_session_list);
-		NetworkStream *audio_stream = new NetworkStream(audio_url + url_append, is_livestream, &audio_session_list);
+		NetworkStream *video_stream = new NetworkStream(video_url + url_append, is_livestream, NULL);
+		NetworkStream *audio_stream = new NetworkStream(audio_url + url_append, is_livestream, NULL);
 		streams = {video_stream, audio_stream};
 		downloader.add_stream(video_stream);
 		downloader.add_stream(audio_stream);
@@ -97,7 +88,7 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 		video_url = get_base_url(video_stream->url);
 		audio_url = get_base_url(audio_stream->url);
 	} else {
-		NetworkStream *both_stream = new NetworkStream(both_url + url_append, is_livestream, &both_session_list);
+		NetworkStream *both_stream = new NetworkStream(both_url + url_append, is_livestream, NULL);
 		streams = { both_stream };
 		downloader.add_stream(both_stream);
 		decoder.interrupt = false;
@@ -132,9 +123,6 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	cleanup :
 	tmp_ffmpeg_data.deinit(false);
 	decoder.deinit_filter();
-	if (video_session_list.inited) video_session_list.close_sessions();
-	if (audio_session_list.inited) audio_session_list.close_sessions();
-	if (both_session_list.inited) both_session_list.close_sessions();
 	for (auto stream : streams) stream->quit_request = true;
 	return result;
 }
@@ -261,8 +249,8 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 		
 		NetworkDecoderFFmpegIOData tmp_ffmpeg_data;
 		if (video_audio_seperate) {
-			NetworkStream *video_stream = new NetworkStream(video_url + "&sq=" + std::to_string(seq_next), is_livestream, is_livestream ? &video_session_list : NULL);
-			NetworkStream *audio_stream = new NetworkStream(audio_url + "&sq=" + std::to_string(seq_next), is_livestream, is_livestream ? &audio_session_list : NULL);
+			NetworkStream *video_stream = new NetworkStream(video_url + "&sq=" + std::to_string(seq_next), is_livestream, NULL);
+			NetworkStream *audio_stream = new NetworkStream(audio_url + "&sq=" + std::to_string(seq_next), is_livestream, NULL);
 			video_stream->disable_interrupt = audio_stream->disable_interrupt = true;
 			downloader->add_stream(video_stream);
 			downloader->add_stream(audio_stream);
@@ -294,7 +282,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			}
 			video_stream->disable_interrupt = audio_stream->disable_interrupt = false;
 		} else {
-			NetworkStream *both_stream = new NetworkStream(both_url + "&sq=" + std::to_string(seq_next), is_livestream, is_livestream ? &both_session_list : NULL);
+			NetworkStream *both_stream = new NetworkStream(both_url + "&sq=" + std::to_string(seq_next), is_livestream, NULL);
 			both_stream->disable_interrupt = true;
 			downloader->add_stream(both_stream);
 			Result_with_string result = tmp_ffmpeg_data.init(both_stream, &decoder);
