@@ -213,6 +213,7 @@ void youtube_change_content_language(std::string language_code);
 
 // util function
 std::string youtube_get_video_id_by_url(const std::string &url);
+std::string youtube_get_playlist_id_by_url(const std::string &url);
 std::string youtube_get_video_thumbnail_url_by_id(const std::string &id);
 std::string youtube_get_video_url_by_id(const std::string &id);
 std::string get_video_id_from_thumbnail_url(const std::string &url);

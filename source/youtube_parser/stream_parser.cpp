@@ -205,7 +205,7 @@ static void extract_owner(Json slimOwnerRenderer, YouTubeVideoDetail &res) {
 	res.author.url = slimOwnerRenderer["channelUrl"].string_value();
 	res.author.subscribers = get_text_from_object(slimOwnerRenderer["expandedSubtitle"]);
 	
-	constexpr int target_height = 70;
+	constexpr int target_height = 48;
 	int min_distance = 100000;
 	std::string best_icon;
 	for (auto icon : slimOwnerRenderer["thumbnail"]["thumbnails"].array_items()) {
@@ -352,14 +352,16 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	Json json[2];
 	if (cur_quick_mode) {
 		res.id = youtube_get_video_id_by_url(url);
+		std::string playlist_id = youtube_get_playlist_id_by_url(url);
 		
 		const std::string innertube_key = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"; // hardcoded
 		
-		std::string post_content = R"({"videoId": "%0", "context": {"client": {"hl": "%1","gl": "%2","clientName": "MWEB","clientVersion": "2.20220308.01.00"}}, "playbackContext": {"contentPlaybackContext": {"signatureTimestamp": %3}}})";
+		std::string post_content = R"({"videoId": "%0", %1"context": {"client": {"hl": "%2","gl": "%3","clientName": "MWEB","clientVersion": "2.20220308.01.00"}}, "playbackContext": {"contentPlaybackContext": {"signatureTimestamp": %4}}})";
 		post_content = std::regex_replace(post_content, std::regex("%0"), res.id);
-		post_content = std::regex_replace(post_content, std::regex("%1"), language_code);
-		post_content = std::regex_replace(post_content, std::regex("%2"), country_code);
-		post_content = std::regex_replace(post_content, std::regex("%3"), std::to_string(sts));
+		post_content = std::regex_replace(post_content, std::regex("%1"), playlist_id == "" ? "" : "\"playlistId\": \"" + playlist_id + "\", ");
+		post_content = std::regex_replace(post_content, std::regex("%2"), language_code);
+		post_content = std::regex_replace(post_content, std::regex("%3"), country_code);
+		post_content = std::regex_replace(post_content, std::regex("%4"), std::to_string(sts));
 		std::string urls[2] = {
 			"https://www.youtube.com/youtubei/v1/next?key=" + innertube_key,
 			"https://www.youtube.com/youtubei/v1/player?key=" + innertube_key
@@ -484,7 +486,7 @@ YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDe
 	return new_result;
 }
 
-YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(Json comment_renderer) {
+YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(Json comment_renderer, int thumbnail_height) {
 	YouTubeVideoDetail::Comment cur_comment;
 	// get the icon of the author with minimum size
 	cur_comment.id = comment_renderer["commentId"].string_value();
@@ -494,19 +496,19 @@ YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(Json comment_r
 	cur_comment.author.url = "https://m.youtube.com" + comment_renderer["authorEndpoint"]["browseEndpoint"]["canonicalBaseUrl"].string_value();
 	cur_comment.publish_date = get_text_from_object(comment_renderer["publishedTimeText"]);
 	cur_comment.upvotes_str = get_text_from_object(comment_renderer["voteCount"]);
-	{
-		constexpr int target_height = 70;
-		int min_distance = 100000;
-		std::string best_icon;
-		for (auto icon : comment_renderer["authorThumbnail"]["thumbnails"].array_items()) {
-			int cur_height = icon["height"].int_value();
-			if (cur_height >= 256) continue; // too large
-			if (min_distance > std::abs(target_height - cur_height)) {
-				min_distance = std::abs(target_height - cur_height);
-				best_icon = icon["url"].string_value();
-			}
+	if (comment_renderer["authorThumbnail"]["thumbnails"].array_items().size()) {
+		auto thumbnail = comment_renderer["authorThumbnail"]["thumbnails"].array_items()[0];
+		std::string icon_url = thumbnail["url"].string_value();
+		std::string icon_url_modified;
+		std::string replace_from = "s" + std::to_string(thumbnail["width"].int_value()) + "-";
+		std::string replace_to = "s" + std::to_string(thumbnail_height) + "-";
+		for (size_t i = 0; i < icon_url.size(); ) {
+			if (icon_url.substr(i, replace_from.size()) == replace_from) {
+				i += replace_from.size();
+				icon_url_modified += replace_to;
+			} else icon_url_modified.push_back(icon_url[i++]);
 		}
-		cur_comment.author.icon_url = best_icon;
+		cur_comment.author.icon_url = icon_url_modified;
 	}
 	return cur_comment;
 	
@@ -525,7 +527,7 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 	}
 	
 	auto parse_comment_thread_renderer = [&] (Json comment_thread_renderer) {
-		auto cur_comment = extract_comment_from_comment_renderer(comment_thread_renderer["commentThreadRenderer"]["comment"]["commentRenderer"]);
+		auto cur_comment = extract_comment_from_comment_renderer(comment_thread_renderer["commentThreadRenderer"]["comment"]["commentRenderer"], 48);
 		// get the icon of the author with minimum size
 		for (auto i : comment_thread_renderer["commentThreadRenderer"]["replies"]["commentRepliesRenderer"]["contents"].array_items()) if (i["continuationItemRenderer"] != Json())
 			cur_comment.replies_continue_token = i["continuationItemRenderer"]["button"]["buttonRenderer"]["command"]["continuationCommand"]["token"].string_value();
@@ -625,7 +627,7 @@ YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVi
 	}
 	for (auto i : replies_data["onResponseReceivedEndpoints"].array_items()) if (i["appendContinuationItemsAction"] != Json())
 		for (auto item : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
-			if (item["commentRenderer"] != Json()) res.replies.push_back(extract_comment_from_comment_renderer(item["commentRenderer"]));
+			if (item["commentRenderer"] != Json()) res.replies.push_back(extract_comment_from_comment_renderer(item["commentRenderer"], 32));
 			if (item["continuationItemRenderer"] != Json())
 				res.replies_continue_token = item["continuationItemRenderer"]["button"]["buttonRenderer"]["command"]["continuationCommand"]["token"].string_value();
 		}
@@ -692,6 +694,17 @@ std::string youtube_get_video_id_by_url(const std::string &url) {
 	if (pos != std::string::npos) {
 		std::string res = url.substr(pos + 3, 11);
 		return youtube_is_valid_video_id(res) ? res : "";
+	}
+	return "";
+}
+std::string youtube_get_playlist_id_by_url(const std::string &url) {
+	auto pos = url.find("?list=");
+	if (pos == std::string::npos) pos = url.find("&list=");
+	if (pos != std::string::npos) {
+		pos += 6;
+		std::string res;
+		for (size_t i = pos; i < url.size() && url[i] != '&'; i++) res.push_back(url[i]);
+		return res;
 	}
 	return "";
 }
