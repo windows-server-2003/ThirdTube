@@ -15,7 +15,7 @@
 #include "system/util/misc_tasks.hpp"
 #include "system/util/async_task.hpp"
 
-#define MAX_THUMBNAIL_LOAD_REQUEST 20
+#define MAX_THUMBNAIL_LOAD_REQUEST 12
 
 #define FEED_RELOAD_BUTTON_HEIGHT 18
 #define TOP_HEIGHT (MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2)
@@ -35,18 +35,15 @@ namespace Subscription {
 	int feed_loading_progress = 0;
 	int feed_loading_total = 0;
 	
-	int channel_thumbnail_request_l = 0;
-	int channel_thumbnail_request_r = 0;
-	int video_thumbnail_request_l = 0;
-	int video_thumbnail_request_r = 0;
-	
 	int CONTENT_Y_HIGH = 240; // changes according to whether the video playing bar is drawn or not
 	
 	VerticalListView *main_view = NULL;
 	TabView *main_tab_view = NULL;
 	ScrollView *channels_tab_view = NULL;
+	VerticalListView *channels_tab_list_view = NULL;
 	VerticalListView *feed_tab_view = NULL;
 	ScrollView *feed_videos_view = NULL;
+	VerticalListView *feed_videos_list_view = NULL;
 };
 using namespace Subscription;
 
@@ -58,8 +55,12 @@ void Subscription_init(void) {
 	
 	svcCreateMutex(&resource_lock, false);
 	
-	channels_tab_view = (new ScrollView(0, 0, 320, 0))->set_margin(SMALL_MARGIN); // height : dummy(set properly by set_stretch_subview(true) on main_tab_view)
-	feed_videos_view = (new ScrollView(0, 0, 320, 0))->set_margin(SMALL_MARGIN);
+	channels_tab_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::SUBSCRIPTION);
+	channels_tab_view = (new ScrollView(0, 0, 320, 0))->set_views({channels_tab_list_view}); // height : dummy(set properly by set_stretch_subview(true) on main_tab_view)
+	feed_videos_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::SUBSCRIPTION);
+	feed_videos_view = (new ScrollView(0, 0, 320, 0))->set_views({feed_videos_list_view});
 	feed_tab_view = (new VerticalListView(0, 0, 320))
 		->set_views({
 			(new TextView(0, 0, 320, FEED_RELOAD_BUTTON_HEIGHT))
@@ -115,7 +116,9 @@ void Subscription_exit(void) {
 	main_tab_view = NULL;
 	feed_tab_view = NULL;
 	feed_videos_view = NULL;
+	feed_videos_list_view = NULL;
 	channels_tab_view = NULL;
+	channels_tab_list_view = NULL;
 	
 	svcReleaseMutex(resource_lock);
 	
@@ -236,23 +239,15 @@ static void load_subscription_feed(void *) {
 	}
 	update_subscribed_channels(get_subscribed_channels());
 	
-	for (auto view : feed_videos_view->views) thumbnail_cancel_request(dynamic_cast<SuccinctVideoView *>(view)->thumbnail_handle);
-	feed_videos_view->recursive_delete_subviews();
-	video_thumbnail_request_l = video_thumbnail_request_r = 0;
-	feed_videos_view->views = new_feed_video_views;
-	feed_videos_view->reset();
+	feed_videos_list_view->recursive_delete_subviews();
+	feed_videos_list_view->views = new_feed_video_views;
 	svcReleaseMutex(resource_lock);
 }
 
 static void update_subscribed_channels(const std::vector<SubscriptionChannel> &new_subscribed_channels) {
 	subscribed_channels = new_subscribed_channels;
 	
-	// clean up previous views and thumbnail requests
-	for (auto view : channels_tab_view->views)
-		thumbnail_cancel_request(dynamic_cast<SuccinctChannelView *>(view)->thumbnail_handle);
-	channel_thumbnail_request_l = channel_thumbnail_request_r = 0;
-	
-	channels_tab_view->recursive_delete_subviews();
+	channels_tab_list_view->recursive_delete_subviews();
 	
 	// prepare new views
 	for (auto channel : new_subscribed_channels) {
@@ -265,7 +260,7 @@ static void update_subscribed_channels(const std::vector<SubscriptionChannel> &n
 			clicked_url = channel.url;
 			clicked_is_video = false;
 		});
-		channels_tab_view->views.push_back(cur_view);
+		channels_tab_list_view->views.push_back(cur_view);
 	}
 }
 
@@ -321,76 +316,6 @@ Intent Subscription_draw(void) {
 	
 
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-	
-	// thumbnail request update
-	int channels_num = subscribed_channels.size();
-	if (channels_num) {
-		int item_interval = CHANNEL_ICON_HEIGHT + SMALL_MARGIN;
-		int displayed_l = std::min(channels_num, channels_tab_view->get_offset() / item_interval);
-		int displayed_r = std::min(channels_num, (channels_tab_view->get_offset() + CONTENT_Y_HIGH - 1) / item_interval + 1);
-		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-		int request_target_r = std::min(channels_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
-		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
-		std::set<int> new_indexes, cancelling_indexes;
-		for (int i = channel_thumbnail_request_l; i < channel_thumbnail_request_r; i++) cancelling_indexes.insert(i);
-		for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
-		for (int i = channel_thumbnail_request_l; i < channel_thumbnail_request_r; i++) new_indexes.erase(i);
-		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
-		
-		for (auto i : cancelling_indexes) {
-			auto *cur_view = dynamic_cast<SuccinctChannelView *>(channels_tab_view->views[i]);
-			thumbnail_cancel_request(cur_view->thumbnail_handle);
-			cur_view->thumbnail_handle = -1;
-		}
-		for (auto i : new_indexes) {
-			auto *cur_view = dynamic_cast<SuccinctChannelView *>(channels_tab_view->views[i]);
-			cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url,
-				SceneType::SUBSCRIPTION, 0, ThumbnailType::ICON);
-		}
-		
-		channel_thumbnail_request_l = request_target_l;
-		channel_thumbnail_request_r = request_target_r;
-		
-		std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-		for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] =
-			{dynamic_cast<SuccinctChannelView *>(channels_tab_view->views[i])->thumbnail_handle, 500 - dist(i)};
-		thumbnail_set_priorities(priority_list);
-	}
-	int video_num = feed_videos_view->views.size();
-	if (video_num) {
-		int item_interval = VIDEO_LIST_THUMBNAIL_HEIGHT + SMALL_MARGIN;
-		int displayed_l = std::min(video_num, feed_videos_view->get_offset() / item_interval);
-		int displayed_r = std::min(video_num, (feed_videos_view->get_offset() + CONTENT_Y_HIGH - 1) / item_interval + 1);
-		int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-		int request_target_r = std::min(video_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
-		// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
-		std::set<int> new_indexes, cancelling_indexes;
-		for (int i = video_thumbnail_request_l; i < video_thumbnail_request_r; i++) cancelling_indexes.insert(i);
-		for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
-		for (int i = video_thumbnail_request_l; i < video_thumbnail_request_r; i++) new_indexes.erase(i);
-		for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
-		
-		for (auto i : cancelling_indexes) {
-			auto *cur_view = dynamic_cast<SuccinctVideoView *>(feed_videos_view->views[i]);
-			thumbnail_cancel_request(cur_view->thumbnail_handle);
-			cur_view->thumbnail_handle = -1;
-		}
-		for (auto i : new_indexes) {
-			auto *cur_view = dynamic_cast<SuccinctVideoView *>(feed_videos_view->views[i]);
-			cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url,
-				SceneType::SUBSCRIPTION, 0, ThumbnailType::VIDEO_THUMBNAIL);
-		}
-		
-		video_thumbnail_request_l = request_target_l;
-		video_thumbnail_request_r = request_target_r;
-		
-		std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-		for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] =
-			{dynamic_cast<SuccinctVideoView *>(feed_videos_view->views[i])->thumbnail_handle, 500 - dist(i)};
-		thumbnail_set_priorities(priority_list);
-	}
 
 	if (Util_err_query_error_show_flag()) {
 		Util_err_main(key);

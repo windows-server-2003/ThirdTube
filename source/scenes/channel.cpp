@@ -28,7 +28,7 @@
 #define COMMUNITY_POST_MAX_WIDTH (320 - (POST_ICON_SIZE + 2 * SMALL_MARGIN))
 
 #define COMMUNITY_POST_MAX_LINES 100
-#define MAX_THUMBNAIL_LOAD_REQUEST 20
+#define MAX_THUMBNAIL_LOAD_REQUEST 12
 
 #define TAB_NUM 2
 
@@ -83,7 +83,7 @@ void Channel_init(void)
 	
 	banner_view = new ImageView(0, 0, 320, BANNER_HEIGHT);
 	channel_view = new ChannelView(0, 0, 320, CHANNEL_ICON_SIZE + SMALL_MARGIN * 2);
-	video_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
+	video_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::CHANNEL);
 	video_load_more_view = (new TextView(0, 0, 320, 0));
 	video_load_more_view
 		->set_text((std::function<std::string ()>) [] () { return
@@ -201,7 +201,7 @@ View *get_playlist_categories_tab_view(const std::vector<std::pair<std::string, 
 			
 			VerticalListView *cur_list_view = (new VerticalListView(0, 0, 320))
 				->set_margin(SMALL_MARGIN)
-				->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
+				->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::CHANNEL);
 			for (auto playlist : playlist_category.second) cur_list_view->views.push_back(playlist2view(playlist));
 			res_view->views.push_back(cur_list_view);
 		}
@@ -626,7 +626,11 @@ Intent Channel_draw(void)
 			}
 			
 			std::vector<std::pair<int, int> > priority_list;
-			auto priority = [&] (float i) { return 500 + (i < 0 ? i : 240 - i) / 100; };
+			auto priority = [&] (float y) {
+				if (y < 0) return 500 + y / 100;
+				if (y < 240) return PRIORITY_FOREGROUND + y;
+				return 500 + (240 - y) / 100;
+			};
 			for (auto i : should_be_loaded) {
 				priority_list.push_back({i.second->author_icon_handle, priority(i.first)});
 				if (i.second->additional_image_handle != -1) priority_list.push_back({i.second->additional_image_handle, priority(i.first)});

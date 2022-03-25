@@ -37,8 +37,9 @@ public :
 		this->margin = margin;
 		return this;
 	}
-	VerticalListView *enable_thumbnail_request_update(int thumbnail_max_request) {
+	VerticalListView *enable_thumbnail_request_update(int thumbnail_max_request, SceneType scene_type) {
 		this->do_thumbnail_update = true;
+		this->thumbnail_scene = scene_type;
 		this->thumbnail_max_request = thumbnail_max_request;
 		return this;
 	}

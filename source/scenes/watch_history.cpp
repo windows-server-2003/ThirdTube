@@ -14,7 +14,7 @@
 #include "system/util/history.hpp"
 #include "system/util/misc_tasks.hpp"
 
-#define MAX_THUMBNAIL_LOAD_REQUEST 20
+#define MAX_THUMBNAIL_LOAD_REQUEST 12
 
 namespace WatchHistory {
 	bool thread_suspend = false;
@@ -79,7 +79,7 @@ static void update_watch_history(const std::vector<HistoryVideo> &new_watch_hist
 	// prepare new views
 	video_list_view = (new VerticalListView(0, 0, 320))
 		->set_margin(SMALL_MARGIN)
-		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::HISTORY);
 	for (auto i : watch_history) {
 		std::string view_count_str;
 		{

@@ -20,7 +20,7 @@
 
 #define URL_BUTTON_WIDTH 60
 
-#define MAX_THUMBNAIL_LOAD_REQUEST 20
+#define MAX_THUMBNAIL_LOAD_REQUEST 12
 
 
 namespace Search {
@@ -52,7 +52,8 @@ namespace Search {
 	TextView *search_box_view;
 	TextView *url_button_view;
 	
-	VerticalListView *result_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
+	VerticalListView *result_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::SEARCH);
 	View *result_bottom_view = new EmptyView(0, 0, 320, 0);
 	ScrollView *result_view;
 };

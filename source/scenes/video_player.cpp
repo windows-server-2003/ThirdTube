@@ -23,7 +23,8 @@
 #define COMMENT_LOAD_MORE_MARGIN 30
 #define CONTROL_BUTTON_HEIGHT 20
 
-#define MAX_THUMBNAIL_LOAD_REQUEST 20
+#define MAX_THUMBNAIL_LOAD_REQUEST 12
+#define MAX_COMMENT_ICON_LOAD_REQUEST 18
 #define MAX_RETRY_CNT 5
 
 #define TAB_GENERAL 0
@@ -118,7 +119,8 @@ namespace VideoPlayer {
 	ImageView *main_icon_view = (new ImageView(0, 0, ICON_SIZE, ICON_SIZE));
 	
 	// suggestion tab
-	VerticalListView *suggestion_main_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST);
+	VerticalListView *suggestion_main_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::VIDEO_PLAYER);
 	View *suggestion_bottom_view = new EmptyView(0, 0, 320, 0);
 	ScrollView *suggestion_view;
 	
@@ -138,10 +140,9 @@ namespace VideoPlayer {
 	constexpr int PLAYLIST_TOP_HEIGHT = 30;
 	VerticalListView *playlist_view;
 	ScrollView *playlist_list_view;
+	VerticalListView *playlist_list_videos_view;
 	TextView *playlist_title_view;
 	TextView *playlist_author_view;
-	int playlist_thumbnail_request_l = 0;
-	int playlist_thumbnail_request_r = 0;
 	
 	// playback tab
 	SuccinctVideoView *cur_playing_video_view;
@@ -351,7 +352,9 @@ void VideoPlayer_init(void) {
 		});
 	playlist_title_view = (new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL);
 	playlist_author_view = (new TextView(0, 0, 320, PLAYLIST_TOP_HEIGHT - MIDDLE_FONT_INTERVAL))->set_get_text_color([] () { return LIGHT0_TEXT_COLOR; });
-	playlist_list_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT))->set_margin(SMALL_MARGIN);
+	playlist_list_videos_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::VIDEO_PLAYER);
+	playlist_list_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT))->set_views({playlist_list_videos_view});
 	playlist_view = (new VerticalListView(0, 0, 320))->set_views({
 		playlist_title_view,
 		playlist_author_view,
@@ -990,11 +993,9 @@ static void load_video_page(void *arg) {
 		
 		playlist_title_view->set_text(tmp_video_info.playlist.title);
 		playlist_author_view->set_text(tmp_video_info.playlist.author_name);
-		for (auto view : playlist_list_view->views) thumbnail_cancel_request(dynamic_cast<SuccinctVideoView *>(view)->thumbnail_handle);
-		playlist_list_view->recursive_delete_subviews();
-		playlist_list_view->views = new_playlist_views;
+		playlist_list_videos_view->recursive_delete_subviews();
+		playlist_list_videos_view->views = new_playlist_views;
 		playlist_list_view->set_offset(playlist_view_scroll);
-		playlist_thumbnail_request_l = playlist_thumbnail_request_r = 0;
 		
 		is_loading = false;
 		var_need_reflesh = true;
@@ -1057,10 +1058,10 @@ static void load_video_page(void *arg) {
 		if (cur_video_info.playlist.id != "" && cur_video_info.playlist.id == tmp_video_info.playlist.id) {
 			for (size_t i = 0; i < cur_video_info.playlist.videos.size(); i++) {
 				if ((int) i == cur_video_info.playlist.selected_index)
-					playlist_list_view->views[i]->set_get_background_color([] (const View &) { return COLOR_LIGHT_BLUE; });
+					playlist_list_videos_view->views[i]->set_get_background_color([] (const View &) { return COLOR_LIGHT_BLUE; });
 				else if (youtube_get_video_id_by_url(tmp_video_info.playlist.videos[i].url) == tmp_video_info.id)
-					playlist_list_view->views[i]->set_get_background_color([] (const View &) { return COLOR_LIGHT_GREEN; });
-				else playlist_list_view->views[i]->set_get_background_color(View::STANDARD_BACKGROUND);
+					playlist_list_videos_view->views[i]->set_get_background_color([] (const View &) { return COLOR_LIGHT_GREEN; });
+				else playlist_list_videos_view->views[i]->set_get_background_color(View::STANDARD_BACKGROUND);
 			}
 		}
 		svcReleaseMutex(small_resource_lock);
@@ -1977,8 +1978,8 @@ Intent VideoPlayer_draw(void)
 		if (cur_video_info.comments.size()) { // comments
 			std::vector<std::pair<float, PostView *> > comments_list; // list of comment views whose author's thumbnails should be loaded
 			{
-				constexpr int LOW = -1000;
-				constexpr int HIGH = 1240;
+				constexpr int LOW = -800;
+				constexpr int HIGH = 1040;
 				float cur_y = -comment_all_view->get_offset();
 				for (size_t i = 0; i < comments_main_view->views.size(); i++) {
 					float cur_height = comments_main_view->views[i]->get_height();
@@ -1993,8 +1994,8 @@ Intent VideoPlayer_draw(void)
 					}
 					cur_y += cur_height;
 				}
-				if (comments_list.size() > MAX_THUMBNAIL_LOAD_REQUEST) {
-					int leftover = comments_list.size() - MAX_THUMBNAIL_LOAD_REQUEST;
+				if (comments_list.size() > MAX_COMMENT_ICON_LOAD_REQUEST) {
+					int leftover = comments_list.size() - MAX_COMMENT_ICON_LOAD_REQUEST;
 					comments_list.erase(comments_list.begin(), comments_list.begin() + leftover / 2);
 					comments_list.erase(comments_list.end() - (leftover - leftover / 2), comments_list.end());
 				}
@@ -2017,40 +2018,12 @@ Intent VideoPlayer_draw(void)
 			}
 			
 			std::vector<std::pair<int, int> > priority_list;
-			auto priority = [&] (float i) { return 500 + (i < 0 ? i : 240 - i) / 100; };
+			auto priority = [&] (float y) {
+				if (y < 0) return 500 + y / 100;
+				if (y < 240) return PRIORITY_FOREGROUND + y;
+				return 500 + (240 - y) / 100;
+			};
 			for (auto i : comments_list) priority_list.push_back({i.second->author_icon_handle, priority(i.first)});
-			thumbnail_set_priorities(priority_list);
-		}
-		if (cur_video_info.playlist.videos.size()) { // playlist
-			int item_num = cur_video_info.playlist.videos.size();
-			int displayed_l = std::min(item_num, std::max(0, playlist_list_view->get_offset() / SUGGESTIONS_VERTICAL_INTERVAL));
-			int displayed_r = std::min(item_num, std::max(0, (playlist_list_view->get_offset() + (CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT) - 1) / SUGGESTIONS_VERTICAL_INTERVAL + 1));
-			int request_target_l = std::max(0, displayed_l - (MAX_THUMBNAIL_LOAD_REQUEST - (displayed_r - displayed_l)) / 2);
-			int request_target_r = std::min(item_num, request_target_l + MAX_THUMBNAIL_LOAD_REQUEST);
-			// transition from [thumbnail_request_l, thumbnail_request_r) to [request_target_l, request_target_r)
-			std::set<int> new_indexes, cancelling_indexes;
-			for (int i = playlist_thumbnail_request_l; i < playlist_thumbnail_request_r; i++) cancelling_indexes.insert(i);
-			for (int i = request_target_l; i < request_target_r; i++) new_indexes.insert(i);
-			for (int i = playlist_thumbnail_request_l; i < playlist_thumbnail_request_r; i++) new_indexes.erase(i);
-			for (int i = request_target_l; i < request_target_r; i++) cancelling_indexes.erase(i);
-			
-			for (auto i : cancelling_indexes) {
-				SuccinctVideoView *cur_view = dynamic_cast<SuccinctVideoView *>(playlist_list_view->views[i]);
-				thumbnail_cancel_request(cur_view->thumbnail_handle);
-				cur_view->thumbnail_handle = -1;
-			}
-			for (auto i : new_indexes) {
-				SuccinctVideoView *cur_view = dynamic_cast<SuccinctVideoView *>(playlist_list_view->views[i]);
-				cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, SceneType::VIDEO_PLAYER, 0, ThumbnailType::VIDEO_THUMBNAIL);
-			}
-			
-			playlist_thumbnail_request_l = request_target_l;
-			playlist_thumbnail_request_r = request_target_r;
-			
-			std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-			auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
-			for (int i = request_target_l; i < request_target_r; i++) priority_list[i - request_target_l] = {
-				dynamic_cast<SuccinctVideoView *>(playlist_list_view->views[i])->thumbnail_handle, 500 - dist(i)};
 			thumbnail_set_priorities(priority_list);
 		}
 		
