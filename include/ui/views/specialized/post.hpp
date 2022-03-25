@@ -100,7 +100,7 @@ public :
 		float main_height = std::max(left_height(), right_height());
 		if (additional_image_url != "") main_height += SMALL_MARGIN * 2 + COMMUNITY_IMAGE_SIZE;
 		if (additional_video_view) main_height += additional_video_view->get_height() + SMALL_MARGIN * 2;
-		main_height += 16 + SMALL_MARGIN * 2;
+		main_height += 16 + SMALL_MARGIN * 2; // upvote icon/str
 		float reply_height = 0;
 		if (replies_shown) reply_height += SMALL_MARGIN + DEFAULT_FONT_INTERVAL + SMALL_MARGIN; // fold replies
 		for (size_t i = 0; i < replies_shown; i++) reply_height += replies[i]->get_height();
@@ -108,11 +108,11 @@ public :
 		
 		return main_height + reply_height + SMALL_MARGIN; // add margin between comments
 	}
-	float get_self_height() { return std::max(left_height(), right_height()); }
+	float get_self_height() { return std::max(left_height(), right_height()) + 16 + SMALL_MARGIN * 2; }
 	
 	std::vector<std::pair<float, PostView *> > get_reply_pos_list() {
 		std::vector<std::pair<float, PostView *> > res;
-		float cur_y = std::max(left_height(), right_height());
+		float cur_y = std::max(left_height(), right_height()) + 16 + SMALL_MARGIN * 2;
 		if (replies_shown) cur_y += SMALL_MARGIN + DEFAULT_FONT_INTERVAL + SMALL_MARGIN; // fold replies
 		for (size_t i = 0; i < replies_shown; i++) {
 			res.push_back({cur_y, replies[i]});

@@ -96,13 +96,17 @@ void VerticalListView::update_(Hid_info key) {
 		thumbnail_loaded_r = request_target_r;
 		
 		std::vector<std::pair<int, int> > priority_list(request_target_r - request_target_l);
-		auto dist = [&] (int i) { return i < displayed_l ? displayed_l - i : i - displayed_r + 1; };
+		auto priority = [&] (int i) {
+			if (i < displayed_l) return 500 - (displayed_l - i);
+			if (i >= displayed_r) return 500 - (i - displayed_r + 1);
+			return PRIORITY_FOREGROUND + displayed_r - i;
+		};
 		for (int i = request_target_l; i < request_target_r; i++) {
 			auto *cur_view = dynamic_cast<SuccinctVideoView *>(views[i]);
-			if (cur_view) priority_list[i - request_target_l] = {cur_view->thumbnail_handle, 500 - dist(i)};
+			if (cur_view) priority_list[i - request_target_l] = {cur_view->thumbnail_handle, priority(i)};
 			else {
 				auto *cur_view = dynamic_cast<SuccinctChannelView *>(views[i]);
-				if (cur_view) priority_list[i - request_target_l] = {cur_view->thumbnail_handle, 500 - dist(i)};
+				if (cur_view) priority_list[i - request_target_l] = {cur_view->thumbnail_handle, priority(i)};
 				else priority_list[i - request_target_l] = {-1, -1};
 			}
 		}

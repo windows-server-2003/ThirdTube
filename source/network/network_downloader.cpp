@@ -186,9 +186,9 @@ void NetworkStreamDownloader::downloader_thread() {
 		NetworkStream *cur_stream = streams[cur_stream_index];
 		svcReleaseMutex(streams_lock);
 		
+		confirm_thread_network_session_list_inited();
 		// whole download
 		if (cur_stream->whole_download) {
-			confirm_thread_network_session_list_inited();
 			auto &session_list = cur_stream->session_list ? *cur_stream->session_list : thread_network_session_list;
 			auto result = session_list.perform(HttpRequest::GET(cur_stream->url, {}));
 			cur_stream->url = result.redirected_url;
