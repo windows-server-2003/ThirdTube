@@ -123,14 +123,64 @@ void NetworkSessionList::curl_add_request(const HttpRequest &request, NetworkRes
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, request_headers_list);
 	
 	curl_multi_add_handle(curl_multi, curl);
-	curl_requests.push_back({curl, res, curl_errbuf, request.url});
+	curl_requests.push_back({curl, res, curl_errbuf, request.url, request.on_finish});
 }
 CURLMcode NetworkSessionList::curl_perform_requests() {
+	auto read_multi_info = [this] () {
+		CURLMsg *msg;
+		int msg_left;
+		while ((msg = curl_multi_info_read(curl_multi, &msg_left))) {
+			if (msg->msg == CURLMSG_DONE) {
+				CURL *curl = msg->easy_handle;
+				
+				int request_index = -1;
+				for (size_t i = 0; i < curl_requests.size(); i++) {
+					if (curl_requests[i].curl == msg->easy_handle) {
+						request_index = i;
+						break;
+					}
+				}
+				Util_log_save("bench", "finished #" + std::to_string(request_index));
+				
+				if (request_index == -1) {
+					Util_log_save("curl", "unexpected : while processing multi message corresponding request not found");
+					continue;
+				}
+				RequestInternal &req = curl_requests[request_index];
+				NetworkResult &res = *req.res;
+				
+				CURLcode each_result = msg->data.result;
+				if (each_result == CURLE_OK) {
+					long status_code;
+					curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+					res.status_code = status_code;
+					
+					char *redirected_url;
+					curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &redirected_url);
+					res.redirected_url = redirected_url;
+					if (res.redirected_url != req.orig_url) Util_log_save("curl", "redir : " + res.redirected_url);
+				} else {
+					Util_log_save("curl", std::string("deep fail : ") + curl_easy_strerror(each_result) + " / " + req.errbuf);
+					res.fail = true;
+					res.error = req.errbuf;
+				}
+				if (req.on_finish) req.on_finish(res, request_index);
+			}
+		}
+	};
+	
 	int running_request_num;
-	CURLMcode res;
 	do {
-		res = curl_multi_perform(curl_multi, &running_request_num);
-		if (res) break;
+		CURLMcode res = curl_multi_perform(curl_multi, &running_request_num);
+		if (res) {
+			std::string err = curl_multi_strerror(res);
+			Util_log_save("curl", "curl multi deep fail : " + err);
+			for (auto &i : curl_requests) {
+				i.res->fail = true;
+				i.res->error = err;
+			}
+			return res;
+		}
 		if (running_request_num) curl_multi_poll(curl_multi, NULL, 0, 10000, NULL);
 		if (exiting) {
 			for (auto &i : curl_requests) {
@@ -139,54 +189,10 @@ CURLMcode NetworkSessionList::curl_perform_requests() {
 			}
 			return CURLM_OK;
 		}
+		read_multi_info();
 	} while (running_request_num > 0);
 	
-	if (res != CURLM_OK) {
-		std::string err = curl_multi_strerror(res);
-		Util_log_save("curl", "curl multi deep fail : " + err);
-		for (auto &i : curl_requests) {
-			i.res->fail = true;
-			i.res->error = err;
-		}
-		return res;
-	}
-	
-	CURLMsg *msg;
-	int msg_left;
-	while ((msg = curl_multi_info_read(curl_multi, &msg_left))) {
-		if (msg->msg == CURLMSG_DONE) {
-			CURL *curl = msg->easy_handle;
-			NetworkResult *res = NULL;
-			char *errbuf = NULL;
-			std::string orig_url;
-			for (auto &i : curl_requests) if (i.curl == msg->easy_handle) {
-				res = i.res;
-				errbuf = i.errbuf;
-				orig_url = i.orig_url;
-			}
-			if (!res) {
-				Util_log_save("curl", "unexpected : while processing multi message corresponding request not found");
-				continue;
-			}
-			CURLcode each_result = msg->data.result;
-			if (each_result == CURLE_OK) {
-				long status_code;
-				curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-				res->status_code = status_code;
-				
-				char *redirected_url;
-				curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &redirected_url);
-				res->redirected_url = redirected_url;
-				if (res->redirected_url != orig_url) Util_log_save("curl", "redir : " + res->redirected_url);
-			} else {
-				Util_log_save("curl", std::string("deep fail : ") + curl_easy_strerror(each_result) + " / " + errbuf);
-				res->fail = true;
-				res->error = errbuf;
-			}
-		}
-	}
-	
-	return res;
+	return CURLM_OK;
 }
 void NetworkSessionList::curl_clear_requests() {
 	for (auto &i : curl_requests) {

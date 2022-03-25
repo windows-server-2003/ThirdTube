@@ -9,6 +9,9 @@ enum class ThumbnailType {
 	ICON, // rounded
 };
 
+#define PRIORITY_FOREGROUND   100000
+#define PRIORITY_ACTIVE_SCENE 1000000 // used internally
+
 // returns the 'handle' of the thumbnail
 int thumbnail_request(const std::string &url, SceneType scene_id, int priority, ThumbnailType type = ThumbnailType::DEFAULT);
 void thumbnail_cancel_request(int handle);

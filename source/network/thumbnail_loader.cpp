@@ -208,112 +208,168 @@ static std::vector<u8> http_get(const std::string &url, int &status_code) {
 static bool should_be_running = true;
 void thumbnail_downloader_thread_func(void *arg) {
 	while (should_be_running) {
-		const std::string *next_url_ = NULL;
-		ThumbnailType next_type = ThumbnailType::DEFAULT;
 		lock();
+		struct Item {
+			int priority;
+			std::string url;
+			ThumbnailType type;
+		};
+		std::vector<Item> download_list;
 		{
-			int max_priority = -1;
 			for (auto &i : requested_urls) {
 				if (i.second.is_loaded) continue;
 				if (i.second.error && (!i.second.waiting_retry || time(NULL) < i.second.next_retry)) continue;
-				int cur_url_priority = 0;
-				for (auto handle : i.second.handles) {
-					int cur_priority = requests[handle].priority;
-					if (requests[handle].scene == active_scene) cur_priority += 1000000;
-					cur_url_priority = std::max(cur_url_priority, cur_priority);
-				}
-				if (max_priority < cur_url_priority) {
-					max_priority = cur_url_priority;
-					next_url_ = &i.first;
-					next_type = i.second.type;
-				}
+				int priority = 0;
+				for (auto handle : i.second.handles) priority = std::max(priority,
+					 requests[handle].priority + (requests[handle].scene == active_scene ? PRIORITY_ACTIVE_SCENE : 0));
+				download_list.push_back({priority, i.first, i.second.type});
 			}
 		}
-		std::string next_url;
-		if (next_url_) next_url = *next_url_;
 		release();
 		
-		if (!next_url_) {
+		if (!download_list.size()) {
 			usleep(50000);
 			continue;
 		}
-		// Util_log_save("thumb-dl", "size:" + std::to_string(requests.size()));
-		int status_code;
-		auto encoded_data = http_get(next_url, status_code);
 		
-		int w, h;
-		u8 *decoded_data = Image_decode(&encoded_data[0], encoded_data.size(), &w, &h);
-		if (decoded_data) {
-			// some special operations on the picture here (it shouldn't be here but...)
-			// for video thumbnail, crop to 16:9
-			if (next_type == ThumbnailType::VIDEO_THUMBNAIL && h > w * 9 / 16 + 1) {
-				int new_h = w * 9 / 16;
-				int vertical_offset = (h - new_h) / 2;
-				memmove(decoded_data, decoded_data + vertical_offset * w * 2, new_h * w * 2);
-				h = new_h;
-			}
-			// channel banner : crop to 1024 to fit in the maximum texture size
-			if (next_type == ThumbnailType::VIDEO_BANNER && w == 1060) {
-				for (int i = 0; i < h; i++) memmove(decoded_data + i * 1024 * 2, decoded_data + (i * 1060 + 18) * 2, 1024 * 2);
-				w = 1024;
-			}
-			// channel icon : round (definitely not the recommended way but we will fill the area outside the circle with white)
-			if (next_type == ThumbnailType::ICON) {
-				float radius = (float) h / 2;
-				for (int i = 0; i < h; i++) for (int j = 0; j < w; j++) {
-					float distance = std::hypot(radius - (i + 0.5), radius - (j + 0.5));
-					u8 b = decoded_data[(i * w + j) * 2 + 0] & ((1 << 5) - 1);
-					u8 g = (decoded_data[(i * w + j) * 2 + 0] >> 5) | ((decoded_data[(i * w + j) * 2 + 1] & ((1 << 3) - 1)) << 3);
-					u8 r = decoded_data[(i * w + j) * 2 + 1] >> 3;
-					float proportion = std::max(0.0f, std::min(1.0f, radius + 0.5f - distance));
-					b = b * proportion + (var_night_mode ? 0 : ((1 << 5) - 1)) * (1 - proportion);
-					g = g * proportion + (var_night_mode ? 0 : ((1 << 6) - 1)) * (1 - proportion);
-					r = r * proportion + (var_night_mode ? 0 : ((1 << 5) - 1)) * (1 - proportion);
-					decoded_data[(i * w + j) * 2 + 0] = b | g << 5;
-					decoded_data[(i * w + j) * 2 + 1] = g >> 3 | r << 3;
-				}
-			}
-			
-			
-			Image_data result_image;
-			int texture_w = 1;
-			while (texture_w < w) texture_w <<= 1;
-			int texture_h = 1;
-			while (texture_h < h) texture_h <<= 1;
-			
-			Result_with_string result;
-			result = Draw_c2d_image_init(&result_image, texture_w, texture_h, GPU_RGB565);
-			if (result.code != 0) {
-				Util_log_save("thumb-dl", "out of linearmem");
-			} else {
-				result = Draw_set_texture_data(&result_image, decoded_data, w, h, texture_w, texture_h, GPU_RGB565);
-				if (result.code != 0) {
-					Util_log_save("thumb-dl", "Draw_set_texture_data() failed");
-				} else {
-					lock();
-					if (requested_urls.count(next_url)) { // in case the request is cancelled while downloading
-						requested_urls[next_url].is_loaded = true;
-						requested_urls[next_url].data = {w, h, texture_w, texture_h, result_image};
-					}
-					release();
-				}
-			}
-			free(decoded_data);
-			decoded_data = NULL;
-		} else {
-			lock();
-			if (requested_urls.count(next_url)) {
-				requested_urls[next_url].is_loaded = false;
-				requested_urls[next_url].error = true;
-				if (status_code / 100 != 4 && status_code / 100 != 2) {
-					requested_urls[next_url].waiting_retry = true;
-					requested_urls[next_url].next_retry = time(NULL) + 3;
-				} else requested_urls[next_url].waiting_retry = false;
-				requested_urls[next_url].last_status_code = status_code;
-			}
-			release();
-			Util_log_save("thumb-dl", "Image_decode() failed (http code : " + std::to_string(status_code) + ")");
+		// sort in the decreasing order of the priority
+		std::sort(download_list.begin(), download_list.end(), [] (const auto &i, const auto &j) { return i.priority > j.priority; });
+		
+		std::string priority_str;
+		for (auto i : download_list) priority_str += std::to_string(i.priority) + " ";
+		if (download_list[0].priority >= PRIORITY_ACTIVE_SCENE + PRIORITY_FOREGROUND) // load thumbnails in the foreground first
+			while (download_list.back().priority < PRIORITY_ACTIVE_SCENE + PRIORITY_FOREGROUND) download_list.pop_back();
+		
+		std::vector<NetworkResult> results(download_list.size());
+		std::vector<int> uncached_index_list;
+		std::vector<int> cached_index_list;
+		for (size_t i = 0; i < download_list.size(); i++) {
+			if (thumbnail_cache.count(download_list[i].url)) {
+				results[i].status_code = 0; // cached
+				results[i].data = thumbnail_cache[download_list[i].url];
+				cached_index_list.push_back(i);
+			} else uncached_index_list.push_back(i);
 		}
+		
+		auto load_downloaded_thumbnail = [&] (int i) {
+			auto &res = results[i];
+			auto &info = download_list[i];
+			
+			int w, h;
+			u8 *decoded_data = NULL;
+			if (res.data.size()) decoded_data = Image_decode(&res.data[0], res.data.size(), &w, &h);
+			if (decoded_data) {
+				// update cache
+				lock();
+				if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX) {
+					std::string erase_url;
+					int min_time = 1000000000;
+					for (auto &item : thumbnail_cache) {
+						if (!thumbnail_free_time.count(item.first)) continue;
+						int cur_time = thumbnail_free_time[item.first];
+						if (min_time > cur_time) {
+							min_time = cur_time;
+							erase_url = item.first;
+						}
+					}
+					if (erase_url != "") thumbnail_cache.erase(erase_url);
+				}
+				thumbnail_cache[info.url] = res.data;
+				if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) Util_log_save("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
+				release();
+				
+				// some special operations on the picture here (it shouldn't be here but...)
+				// for video thumbnail, crop to 16:9
+				if (info.type == ThumbnailType::VIDEO_THUMBNAIL && h > w * 9 / 16 + 1) {
+					int new_h = w * 9 / 16;
+					int vertical_offset = (h - new_h) / 2;
+					memmove(decoded_data, decoded_data + vertical_offset * w * 2, new_h * w * 2);
+					h = new_h;
+				}
+				// channel banner : crop to 1024 to fit in the maximum texture size
+				if (info.type == ThumbnailType::VIDEO_BANNER && w == 1060) {
+					for (int i = 0; i < h; i++) memmove(decoded_data + i * 1024 * 2, decoded_data + (i * 1060 + 18) * 2, 1024 * 2);
+					w = 1024;
+				}
+				// channel icon : round (definitely not the recommended way but we will fill the area outside the circle with white)
+				if (info.type == ThumbnailType::ICON) {
+					float radius = (float) h / 2;
+					for (int i = 0; i < h; i++) for (int j = 0; j < w; j++) {
+						float distance = std::hypot(radius - (i + 0.5), radius - (j + 0.5));
+						u8 b = decoded_data[(i * w + j) * 2 + 0] & ((1 << 5) - 1);
+						u8 g = (decoded_data[(i * w + j) * 2 + 0] >> 5) | ((decoded_data[(i * w + j) * 2 + 1] & ((1 << 3) - 1)) << 3);
+						u8 r = decoded_data[(i * w + j) * 2 + 1] >> 3;
+						float proportion = std::max(0.0f, std::min(1.0f, radius + 0.5f - distance));
+						b = b * proportion + (var_night_mode ? 0 : ((1 << 5) - 1)) * (1 - proportion);
+						g = g * proportion + (var_night_mode ? 0 : ((1 << 6) - 1)) * (1 - proportion);
+						r = r * proportion + (var_night_mode ? 0 : ((1 << 5) - 1)) * (1 - proportion);
+						decoded_data[(i * w + j) * 2 + 0] = b | g << 5;
+						decoded_data[(i * w + j) * 2 + 1] = g >> 3 | r << 3;
+					}
+				}
+				
+				Image_data result_image;
+				int texture_w = 1;
+				while (texture_w < w) texture_w <<= 1;
+				int texture_h = 1;
+				while (texture_h < h) texture_h <<= 1;
+				
+				Result_with_string result;
+				result = Draw_c2d_image_init(&result_image, texture_w, texture_h, GPU_RGB565);
+				if (result.code != 0) Util_log_save("thumb-dl", "out of linearmem");
+				else {
+					result = Draw_set_texture_data(&result_image, decoded_data, w, h, texture_w, texture_h, GPU_RGB565);
+					if (result.code != 0) Util_log_save("thumb-dl", "Draw_set_texture_data() failed");
+					else {
+						lock();
+						if (requested_urls.count(info.url)) { // in case the request is cancelled while downloading
+							requested_urls[info.url].is_loaded = true;
+							requested_urls[info.url].data = {w, h, texture_w, texture_h, result_image};
+						}
+						release();
+					}
+				}
+				free(decoded_data);
+				decoded_data = NULL;
+			} else {
+				lock();
+				if (requested_urls.count(info.url)) {
+					requested_urls[info.url].is_loaded = false;
+					requested_urls[info.url].error = true;
+					if (res.status_code / 100 != 4 && res.status_code / 100 != 2) {
+						requested_urls[info.url].waiting_retry = true;
+						requested_urls[info.url].next_retry = time(NULL) + 3;
+					} else requested_urls[info.url].waiting_retry = false;
+					requested_urls[info.url].last_status_code = res.status_code;
+				}
+				release();
+				std::string err_msg = "load failed (http code : " + std::to_string(res.status_code) + ") size:" + std::to_string(res.data.size()) +
+					" err:" + res.error;
+				
+				Util_log_save("thumb-dl", err_msg);
+			}
+		};
+		TickCounter counter;
+		osTickCounterStart(&counter);
+		// Util_log_save("thumb-dl", "load cached : " + std::to_string(cached_index_list.size()));
+		osTickCounterUpdate(&counter);
+		for (auto i : cached_index_list) load_downloaded_thumbnail(i);
+		osTickCounterUpdate(&counter);
+		// Util_log_save("thumb-dl", std::to_string((int) osTickCounterRead(&counter)) + " ms");
+		
+		// Util_log_save("thumb-dl", "start dl : " + std::to_string(uncached_index_list.size()));
+		// load uncached thumbnails
+		{
+			confirm_thread_network_session_list_inited();
+			std::vector<HttpRequest> requests;
+			for (auto i : uncached_index_list) requests.push_back(HttpRequest::GET(download_list[i].url, {}).with_on_finish_callback([&](NetworkResult &res, int index) {
+				results[uncached_index_list[index]] = res;
+				load_downloaded_thumbnail(uncached_index_list[index]);
+			}));
+			thread_network_session_list.perform(requests);
+		}
+		osTickCounterUpdate(&counter);
+		// Util_log_save("thumb-dl", std::to_string((int) osTickCounterRead(&counter)) + " ms");
 	}
 	
 	lock();

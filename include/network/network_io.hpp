@@ -2,8 +2,10 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <functional>
 #include <3ds.h>
 #include <curl/curl.h>
+
 
 struct NetworkResult {
 	std::string redirected_url;
@@ -24,6 +26,9 @@ struct HttpRequest { // including https
 	std::string body;
 	bool follow_redirect; // ignored when method == POST (never follow redirects when posting)
 	
+	using on_finish_callback_t = std::function<void (NetworkResult &, int)>;
+	on_finish_callback_t on_finish{};
+	
 	static std::map<std::string, std::string> default_headers_added(std::map<std::string, std::string> headers) {
 		static const std::string DEFAULT_USER_AGENT = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
 		static const std::map<std::string, std::string> default_headers = {
@@ -39,6 +44,9 @@ struct HttpRequest { // including https
 	}
 	static HttpRequest POST(const std::string &url, const std::map<std::string, std::string> &headers, const std::string &body) {
 		return HttpRequest{"POST", url, default_headers_added(headers), body, false};
+	}
+	HttpRequest with_on_finish_callback(std::function<void (NetworkResult &, int)> on_finish) const {
+		return HttpRequest{method, url, headers, body, follow_redirect, on_finish};
 	}
 };
 
@@ -57,6 +65,7 @@ public :
 		NetworkResult *res;
 		char *errbuf;
 		std::string orig_url;
+		HttpRequest::on_finish_callback_t on_finish;
 	};
 	std::vector<RequestInternal> curl_requests; // {curl context, corresponding result, error buffer}
 	
