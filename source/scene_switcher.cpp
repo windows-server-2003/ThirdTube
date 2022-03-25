@@ -40,7 +40,6 @@ void Menu_init(void)
 	Util_log_save(DEF_MENU_INIT_STR, "Initializing..." + DEF_CURRENT_APP_VER);
 	
 	osSetSpeedupEnable(true);
-	aptSetSleepAllowed(true);
 	svcSetThreadPriority(CUR_THREAD_HANDLE, DEF_THREAD_PRIORITY_HIGH - 1);
 	
 	Util_log_save(DEF_MENU_INIT_STR, "fsInit()...", fsInit());
@@ -64,6 +63,7 @@ void Menu_init(void)
 	lock_network_state();
 	
 	aptSetSleepAllowed(false);
+	set_apt_callback();
 	
 	APT_CheckNew3DS(&var_is_new3ds);
 	CFGU_GetSystemModel(&var_model);
@@ -160,6 +160,8 @@ void Menu_exit(void)
 	misc_tasks_thread_exit_request();
 	NetworkSessionList::exit_request();
 	unlock_network_state();
+	
+	remove_apt_callback();
 	
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_check_connectivity_thread, time_out));

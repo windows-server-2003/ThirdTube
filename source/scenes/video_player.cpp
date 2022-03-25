@@ -41,6 +41,7 @@ namespace VideoPlayer {
 	bool vid_thread_run = false;
 	bool vid_already_init = false;
 	bool vid_thread_suspend = true;
+	volatile bool should_suspend_decoding = false;
 	volatile bool vid_play_request = false;
 	volatile bool vid_seek_request = false;
 	volatile bool vid_change_video_request = false;
@@ -158,6 +159,8 @@ const char *get_network_waiting_status() {
 	if (network_waiting_status) return network_waiting_status;
 	return network_decoder.get_network_waiting_status();
 }
+
+void video_set_should_suspend_decoding(bool should_suspend) { should_suspend_decoding = should_suspend; }
 
 static void send_seek_request_wo_lock(double pos);
 static void send_change_video_request(std::string url, bool update_player, bool update_view, bool force_load);
@@ -1591,7 +1594,7 @@ static void decode_thread(void* arg) {
 			}
 			
 			osTickCounterUpdate(&counter1);
-			while (vid_play_request)
+			while (vid_play_request && !should_suspend_decoding)
 			{
 				if (vid_seek_request && !vid_change_video_request) {
 					network_waiting_status = "Seeking";
@@ -1721,7 +1724,7 @@ static void decode_thread(void* arg) {
 		else
 			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 
-		while (vid_thread_suspend && !vid_play_request && !vid_change_video_request)
+		while (vid_thread_run && (should_suspend_decoding || (vid_thread_suspend && !vid_play_request && !vid_change_video_request)))
 			usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
 	}
 	
@@ -1842,7 +1845,7 @@ static void convert_thread(void* arg) {
 			svcReleaseMutex(network_decoder_critical_lock);
 		} else usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 
-		while (vid_thread_suspend && !vid_play_request && !vid_change_video_request)
+		while (vid_thread_run && (should_suspend_decoding || (vid_thread_suspend && !vid_play_request && !vid_change_video_request)))
 			usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
 	}
 	

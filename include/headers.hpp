@@ -31,6 +31,7 @@
 // #include "system/util/swkbd.hpp"
 #include "system/util/util.hpp"
 #include "system/util/libctru_wrapper.hpp"
+#include "system/util/apt_handler.hpp"
 #include "variables.hpp"
 #include "scene_switcher.hpp"
 #include "types.hpp"
