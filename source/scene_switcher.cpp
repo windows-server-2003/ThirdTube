@@ -19,20 +19,16 @@
 namespace SceneSwitcher {
 	static bool menu_thread_run = false;
 	static bool menu_check_exit_request = false;
-	static Thread menu_worker_thread, menu_check_connectivity_thread, thumbnail_downloader_thread, async_task_thread, misc_tasks_thread;
-	static C2D_Image menu_app_icon[4];
+	static Thread menu_worker_thread, thumbnail_downloader_thread, async_task_thread, misc_tasks_thread;
 
 	static SceneType current_scene;
 
-	static void empty_thread(void* arg) {
-		threadExit(0);
-	}
+	static void empty_thread(void* arg) { threadExit(0); }
 
 	static Result sound_init_result;
 };
 using namespace SceneSwitcher;
 
-void Menu_check_connectivity_thread(void* arg);
 void Menu_worker_thread(void* arg);
 
 void Menu_init(void)
@@ -100,17 +96,10 @@ void Menu_init(void)
 	Exfont_request_load_external_font();
 	Exfont_request_load_system_font();
 	
-	/*
-	if (var_allow_send_app_info)
-		menu_send_app_info_thread = threadCreate(Menu_send_app_info_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_LOW, 1, true);
-	*/
-
-	result = Draw_load_texture("romfs:/gfx/draw/app_icon.t3x", 60, menu_app_icon, 0, 4);
 	Util_log_save(DEF_MENU_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 
 	menu_thread_run = true;
 	menu_worker_thread = threadCreate(Menu_worker_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 1, false);
-	menu_check_connectivity_thread = threadCreate(Menu_check_connectivity_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 1, false);
 	
 	Sem_init();
 	Sem_suspend();
@@ -166,14 +155,10 @@ void Menu_exit(void)
 	remove_apt_callback();
 	
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
-	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_check_connectivity_thread, time_out));
-	// Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_send_app_info_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(thumbnail_downloader_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(async_task_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(misc_tasks_thread, time_out));
 	threadFree(menu_worker_thread);
-	threadFree(menu_check_connectivity_thread);
-	// threadFree(menu_send_app_info_thread);
 	threadFree(thumbnail_downloader_thread);
 	threadFree(async_task_thread);
 	threadFree(misc_tasks_thread);
@@ -332,16 +317,7 @@ void Menu_get_system_info(void)
 	var_wifi_signal = osGetWifiStrength();
 	//Get wifi state from shared memory #0x1FF81067
 	var_wifi_state = *(u8 *) 0x1FF81067;
-	if(var_wifi_state == 2)
-	{
-		if (!var_connect_test_succes)
-			var_wifi_signal += 4;
-	}
-	else
-	{
-		var_wifi_signal = 8;
-		var_connect_test_succes = false;
-	}
+	if (var_wifi_state != 2) var_wifi_signal = 8;
 
 	//Get time
 	time_t unixTime = time(NULL);
@@ -379,68 +355,6 @@ int Menu_check_free_ram(void)
 	return count * 100; // return free KB
 }
 
-/*
-void Menu_send_app_info_thread(void* arg)
-{
-	Util_log_save(DEF_MENU_SEND_APP_INFO_STR, "Thread started.");
-	OS_VersionBin os_ver;
-	bool is_new3ds = false;
-	u8* dl_data = NULL;
-	u32 status_code = 0;
-	u32 downloaded_size = 0;
-	char system_ver_char[0x50] = " ";
-	std::string new3ds;
-	dl_data = (u8*)malloc(0x10000);
-
-	osGetSystemVersionDataString(&os_ver, &os_ver, system_ver_char, 0x50);
-	std::string system_ver = system_ver_char;
-
-	APT_CheckNew3DS(&is_new3ds);
-
-	if (is_new3ds)
-		new3ds = "yes";
-	else
-		new3ds = "no";
-
-	std::string send_data = "{ \"app_ver\": \"" + DEF_CURRENT_APP_VER + "\",\"system_ver\" : \"" + system_ver + "\",\"start_num_of_app\" : \"" + std::to_string(var_num_of_app_start) + "\",\"language\" : \"" + var_lang + "\",\"new3ds\" : \"" + new3ds + "\",\"time_to_enter_sleep\" : \"" + std::to_string(var_time_to_turn_off_lcd) + "\",\"scroll_speed\" : \"" + std::to_string(var_scroll_speed) + "\" }";
-	Util_httpc_post_and_dl_data(DEF_SEND_APP_INFO_URL, (char*)send_data.c_str(), send_data.length(), dl_data, 0x10000, &downloaded_size, &status_code, true, 5);
-	free(dl_data);
-	dl_data = NULL;
-
-	Util_log_save(DEF_MENU_SEND_APP_INFO_STR, "Thread exit.");
-	threadExit(0);
-}*/
-
-void Menu_check_connectivity_thread(void* arg)
-{
-	Util_log_save(DEF_MENU_CHECK_INTERNET_STR, "Thread started.");
-	u8* http_buffer = NULL;
-	u32 status_code = 0;
-	u32 dl_size = 0;
-	int count = 100;
-	std::string last_url;
-	http_buffer = (u8*)malloc(0x1000);
-
-	while (menu_thread_run)
-	{
-		if (count >= 100)
-		{
-			count = 0;
-			Util_httpc_dl_data(DEF_CHECK_INTERNET_URL, http_buffer, 0x1000, &dl_size, &status_code, false, 0);
-
-			if (status_code == 204)
-				var_connect_test_succes = true;
-			else
-				var_connect_test_succes = false;
-		}
-		else
-			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
-
-		count++;
-	}
-	Util_log_save(DEF_MENU_CHECK_INTERNET_STR, "Thread exit.");
-	threadExit(0);
-}
 
 void Menu_worker_thread(void* arg)
 {

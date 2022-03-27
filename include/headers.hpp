@@ -18,7 +18,6 @@
 #include "system/util/explorer.hpp"
 #include "system/util/file.hpp"
 #include "system/util/hid.hpp"
-#include "system/util/httpc.hpp"
 #include "system/util/log.hpp"
 // #include "system/util/camera.hpp"
 #include "system/util/converter.hpp"
