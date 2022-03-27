@@ -77,6 +77,11 @@ static int curl_set_socket_options(void *, curl_socket_t sockfd, curlsocktype pu
 	
 	return CURL_SOCKOPT_OK;
 }
+static int curl_progress_callback_func(void *data, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
+	if (*(std::function<void (u64, u64)> *) data)
+		(*(std::function<void (u64, u64)> *) data)(dlnow, dltotal);
+	return CURL_PROGRESSFUNC_CONTINUE;
+}
 static int curl_debug_callback_func(CURL *handle, curl_infotype type, char *data, size_t size, void *userptr) {
 	std::string prefix;
 	if (type == CURLINFO_HEADER_OUT) prefix = "h>";
@@ -103,6 +108,9 @@ void NetworkSessionList::curl_add_request(const HttpRequest &request, NetworkRes
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_receive_data_callback_func);
 	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, curl_receive_headers_callback_func);
 	curl_easy_setopt(curl, CURLOPT_SOCKOPTFUNCTION, curl_set_socket_options);
+	curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &request.progress_func);
+	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, curl_progress_callback_func);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, (long) 0);
 	// curl_easy_setopt(curl, CURLOPT_VERBOSE, (long) 1);
 	// curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, curl_debug_callback_func);
 	char *curl_errbuf = (char *) malloc(CURL_ERROR_SIZE);
@@ -140,7 +148,7 @@ CURLMcode NetworkSessionList::curl_perform_requests() {
 						break;
 					}
 				}
-				Util_log_save("bench", "finished #" + std::to_string(request_index));
+				// Util_log_save("bench", "finished #" + std::to_string(request_index));
 				
 				if (request_index == -1) {
 					Util_log_save("curl", "unexpected : while processing multi message corresponding request not found");

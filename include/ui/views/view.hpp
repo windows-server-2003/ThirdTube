@@ -77,7 +77,7 @@ public :
 	virtual float get_height() const = 0;
 	virtual void draw_background() const {
 		u32 color = get_background_color ? get_background_color(*this) : background_color;
-		if (color >> 24) Draw_texture(var_square_image[0], color, x0, y0, get_width(), get_height());
+		if (color >> 24) Draw_texture(var_square_image[0], color, (int) x0, (int) y0, (int) get_width(), (int) get_height());
 	}
 	void draw() const {
 		// Draw_line(x0, y0, 0xFF000000, x0 + get_width(), y0, 0xFF000000, 1);

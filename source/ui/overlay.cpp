@@ -21,7 +21,7 @@ struct Content {
 		SUBSCRIPTION,
 		EXIT,
 		SETTINGS,
-		ABOUT
+		ABOUT,
 	};
 	Type type;
 };
@@ -134,7 +134,7 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 				} else if (contents[id].type == Content::Type::HISTORY) {
 					intent->next_scene = SceneType::HISTORY;
 					intent->arg = "";
-				} else {
+				} else if (contents[id].type == Content::Type::SUBSCRIPTION) {
 					intent->next_scene = SceneType::SUBSCRIPTION;
 					intent->arg = "";
 				}

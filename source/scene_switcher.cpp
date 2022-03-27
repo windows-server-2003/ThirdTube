@@ -11,26 +11,29 @@
 #include "network/thumbnail_loader.hpp"
 #include "system/util/async_task.hpp"
 #include "system/util/misc_tasks.hpp"
-#include "ui/colors.hpp"
+#include "ui/ui.hpp"
+#include "json11/json11.hpp"
 // add here
 
-bool menu_thread_run = false;
-bool menu_check_exit_request = false;
-bool menu_update_available = false;
-Thread menu_worker_thread, menu_check_connectivity_thread, menu_update_thread, thumbnail_downloader_thread, async_task_thread, misc_tasks_thread;
-C2D_Image menu_app_icon[4];
 
-static SceneType current_scene;
+namespace SceneSwitcher {
+	static bool menu_thread_run = false;
+	static bool menu_check_exit_request = false;
+	static Thread menu_worker_thread, menu_check_connectivity_thread, thumbnail_downloader_thread, async_task_thread, misc_tasks_thread;
+	static C2D_Image menu_app_icon[4];
+
+	static SceneType current_scene;
+
+	static void empty_thread(void* arg) {
+		threadExit(0);
+	}
+
+	static Result sound_init_result;
+};
+using namespace SceneSwitcher;
 
 void Menu_check_connectivity_thread(void* arg);
 void Menu_worker_thread(void* arg);
-void Menu_update_thread(void* arg);
-static void empty_thread(void* arg) {
-	threadExit(0);
-}
-
-static Result sound_init_result;
-
 
 void Menu_init(void)
 {
@@ -108,7 +111,6 @@ void Menu_init(void)
 	menu_thread_run = true;
 	menu_worker_thread = threadCreate(Menu_worker_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 1, false);
 	menu_check_connectivity_thread = threadCreate(Menu_check_connectivity_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 1, false);
-	menu_update_thread = threadCreate(Menu_update_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 1, false);
 	
 	Sem_init();
 	Sem_suspend();
@@ -166,14 +168,12 @@ void Menu_exit(void)
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_check_connectivity_thread, time_out));
 	// Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_send_app_info_thread, time_out));
-	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_update_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(thumbnail_downloader_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(async_task_thread, time_out));
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(misc_tasks_thread, time_out));
 	threadFree(menu_worker_thread);
 	threadFree(menu_check_connectivity_thread);
 	// threadFree(menu_send_app_info_thread);
-	threadFree(menu_update_thread);
 	threadFree(thumbnail_downloader_thread);
 	threadFree(async_task_thread);
 	threadFree(misc_tasks_thread);
@@ -203,6 +203,9 @@ bool Menu_main(void)
 {
 	Util_hid_update_key_state();
 	
+	Hid_info key;
+	Util_hid_query_key_state(&key);
+	
 	if (sound_init_result != 0) {
 		std::string error_msg = 
 			"Could not initialize NDSP (sound service)\n"
@@ -211,8 +214,6 @@ bool Menu_main(void)
 			"https://github.com/zoogie/DSP1/releases/";
 		error_msg += "\n\nPress A to close the app";
 		
-		Hid_info key;
-		Util_hid_query_key_state(&key);
 		
 		Draw_frame_ready();
 		Draw_screen_ready(0, DEF_DRAW_WHITE);
@@ -489,35 +490,5 @@ void Menu_worker_thread(void* arg)
 		}
 	}
 	Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Thread exit.");
-	threadExit(0);
-}
-
-void Menu_update_thread(void* arg)
-{
-	Util_log_save(DEF_MENU_UPDATE_THREAD_STR, "Thread started.");
-	u8* http_buffer = NULL;
-	u32 status_code = 0;
-	u32 dl_size = 0;
-	size_t pos[2] = { 0, 0, };
-	std::string data = "";
-	Result_with_string result;
-	http_buffer = (u8*)malloc(0x1000);
-
-	result = Util_httpc_dl_data(DEF_CHECK_UPDATE_URL, http_buffer, 0x1000, &dl_size, &status_code, true, 3);
-	Util_log_save(DEF_MENU_UPDATE_THREAD_STR, "Util_httpc_dl_data()..." + result.string + result.error_description, result.code);
-	if(result.code == 0)
-	{
-		data = (char*)http_buffer;
-		pos[0] = data.find("<newest>");
-		pos[1] = data.find("</newest>");
-		if(pos[0] != std::string::npos && pos[1] != std::string::npos)
-		{
-			data = data.substr(pos[0] + 8, pos[1] - (pos[0] + 8));
-			if(DEF_CURRENT_APP_VER_INT < atoi(data.c_str()))
-				menu_update_available = true;
-		}
-	}
-
-	Util_log_save(DEF_MENU_UPDATE_THREAD_STR, "Thread exit.");
 	threadExit(0);
 }

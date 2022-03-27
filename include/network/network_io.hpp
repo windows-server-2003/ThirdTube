@@ -26,6 +26,8 @@ struct HttpRequest { // including https
 	std::string body;
 	bool follow_redirect; // ignored when method == POST (never follow redirects when posting)
 	
+	using progress_callback_t = std::function<void (u64, u64)>;
+	progress_callback_t progress_func{};
 	using on_finish_callback_t = std::function<void (NetworkResult &, int)>;
 	on_finish_callback_t on_finish{};
 	
@@ -45,8 +47,11 @@ struct HttpRequest { // including https
 	static HttpRequest POST(const std::string &url, const std::map<std::string, std::string> &headers, const std::string &body) {
 		return HttpRequest{"POST", url, default_headers_added(headers), body, false};
 	}
-	HttpRequest with_on_finish_callback(std::function<void (NetworkResult &, int)> on_finish) const {
-		return HttpRequest{method, url, headers, body, follow_redirect, on_finish};
+	HttpRequest with_progress_func(progress_callback_t progress_func) const {
+		return HttpRequest{method, url, headers, body, follow_redirect, progress_func, on_finish};
+	}
+	HttpRequest with_on_finish_callback(on_finish_callback_t on_finish) const {
+		return HttpRequest{method, url, headers, body, follow_redirect, progress_func, on_finish};
 	}
 };
 
