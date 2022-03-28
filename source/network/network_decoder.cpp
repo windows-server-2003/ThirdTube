@@ -562,7 +562,7 @@ Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	interrupt = false;
 	
 	// init decoder
-	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(VIDEO), "[v] ");
+	if (!audio_only) RETURN_WITH_PREFIX_ON_ERROR(init_decoder(VIDEO), "[v] ");
 	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(AUDIO), "[a] ");
 	
 	// init buffers based on decoder info
