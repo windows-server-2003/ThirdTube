@@ -12,14 +12,7 @@ double log_spend_time[LOG_BUFFER_LINES];
 std::string log_logs[LOG_BUFFER_LINES];
 TickCounter log_up_time_stopwatch;
 
-static Handle log_lock;
-
-static void lock() {
-	svcWaitSynchronization(log_lock, std::numeric_limits<s64>::max());
-}
-static void unlock() {
-	svcReleaseMutex(log_lock);
-}
+static Mutex log_lock;
 
 void Util_log_init(void)
 {
@@ -30,7 +23,6 @@ void Util_log_init(void)
 		log_spend_time[i] = 0;
 		log_logs[i] = "";
 	}
-	svcCreateMutex(&log_lock, false);
 }
 
 bool Util_log_query_log_show_flag(void)
@@ -51,7 +43,7 @@ int Util_log_save(std::string type, std::string text)
 
 int Util_log_save(std::string type, std::string text, int result)
 {
-	lock();
+	log_lock.lock();
 	
 	const int LOG_MAX_LEN = 110;
 	int return_log_num = 0;
@@ -81,7 +73,7 @@ int Util_log_save(std::string type, std::string text, int result)
 	if(log_show_logs)
 		var_need_reflesh = true;
 	
-	unlock();
+	log_lock.unlock();
 	return (return_log_num - 1);
 }
 
@@ -92,7 +84,7 @@ void Util_log_add(int add_log_num, std::string add_text)
 
 void Util_log_add(int add_log_num, std::string add_text, int result)
 {
-	lock();
+	log_lock.lock();
 	
 	char app_log_add_cache[2048];
 	memset(app_log_add_cache, 0x0, 2048);
@@ -109,7 +101,7 @@ void Util_log_add(int add_log_num, std::string add_text, int result)
 	if(log_show_logs)
 		var_need_reflesh = true;
 	
-	unlock();
+	log_lock.unlock();
 }
 
 void Util_log_main(Hid_info key)
@@ -152,8 +144,8 @@ void Util_log_main(Hid_info key)
 
 void Util_log_draw(void)
 {
-	lock();
+	log_lock.lock();
 	for (int i = 0; i < LOG_DISPLAYED_LINES; i++)
 		Draw(log_logs[log_y + i], log_x, 10.0 + (i * 10), 0.4, 0.4, DEF_LOG_COLOR);
-	unlock();
+	log_lock.unlock();
 }

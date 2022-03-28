@@ -28,7 +28,7 @@ namespace Search {
 	bool already_init = false;
 	bool exiting = false;
 	
-	Handle resource_lock;
+	Mutex resource_lock;
 	std::string cur_search_word = "";
 	YouTubeSearchResult search_result;
 	bool search_done = false;
@@ -66,8 +66,6 @@ static void load_more_search_results(void *);
 void Search_init(void) {
 	Util_log_save("search/init", "Initializing...");
 	Result_with_string result;
-	
-	svcCreateMutex(&resource_lock, false);
 	
 	search_box_view = (new TextView(0, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 3 - URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2));
 	search_box_view->set_text_offset(0, -1);
@@ -112,7 +110,7 @@ void Search_exit(void) {
 	thread_suspend = false;
 	exiting = true;
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	
 	top_bar_view->recursive_delete_subviews();
 	delete top_bar_view;
@@ -129,7 +127,7 @@ void Search_exit(void) {
 	result_list_view = NULL;
 	result_bottom_view = NULL;
 	
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	
 	Util_log_save("search/exit", "Exited.");
@@ -209,7 +207,7 @@ static std::pair<int *, std::string *> get_thumbnail_info_from_view(View *view) 
 }
 static void load_search_results(void *) {
 	// pre-access processing
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	std::string search_word = cur_search_word;
 	search_done = false;
 	
@@ -217,7 +215,7 @@ static void load_search_results(void *) {
 	set_loading_bottom_view();
 	search_result = YouTubeSearchResult();
 	var_need_reflesh = true;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	// actual loading
 	std::string search_url = "https://m.youtube.com/results?search_query=";
@@ -236,9 +234,9 @@ static void load_search_results(void *) {
 	for (size_t i = 0; i < new_result.results.size(); i++) new_result_views.push_back(result_item_to_view(new_result.results[i]));
 	Util_log_save("search", "truncate/view creation end");
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	if (exiting) { // app shut down while loading
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		return;
 	}
 	search_result = new_result;
@@ -247,13 +245,13 @@ static void load_search_results(void *) {
 	
 	search_done = true;
 	var_need_reflesh = true;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 }
 static void load_more_search_results(void *) {
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	auto prev_result = search_result;
 	var_need_reflesh = true;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	auto new_result = youtube_continue_search(prev_result);
 	
@@ -263,9 +261,9 @@ static void load_more_search_results(void *) {
 	Util_log_save("search-c", "truncate/view creation end");
 	
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	if (exiting) { // app shut down while loading
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		return;
 	}
 	if (new_result.error != "") search_result.error = new_result.error;
@@ -275,12 +273,12 @@ static void load_more_search_results(void *) {
 	}
 	update_result_bottom_view();
 	var_need_reflesh = true;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 }
 static void access_input_url(void *) {
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	auto url = last_url_input;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	YouTubePageType page_type = youtube_get_page_type(url);
 	
@@ -293,9 +291,9 @@ static void access_input_url(void *) {
 		url = result.redirected_url;
 	}
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	if (exiting) { // app shut down while loading
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		return;
 	}
 	if (page_type != YouTubePageType::INVALID) {
@@ -306,7 +304,7 @@ static void access_input_url(void *) {
 		toast_view->set_is_visible(true);
 		toast_view_visible_frames_left = 100;
 	}
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 }
 
 
@@ -328,11 +326,9 @@ static void search() {
 		remove_cpu_limit(40);
 		
 		if (button_pressed == SWKBD_BUTTON_RIGHT) {
-			svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 			cur_search_word = search_word;
 			search_box_view->set_text(search_word);
 			search_box_view->set_get_text_color([] () { return DEFAULT_TEXT_COLOR; });
-			svcReleaseMutex(resource_lock);
 			
 			remove_all_async_tasks_with_type(load_search_results);
 			remove_all_async_tasks_with_type(load_more_search_results);
@@ -357,9 +353,7 @@ static void url_input() {
 		remove_cpu_limit(40);
 		
 		if (button_pressed == SWKBD_BUTTON_RIGHT) {
-			svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 			last_url_input = url;
-			svcReleaseMutex(resource_lock);
 			
 			remove_all_async_tasks_with_type(access_input_url);
 			queue_async_task(access_input_url, NULL);
@@ -399,12 +393,12 @@ Intent Search_draw(void)
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
 		// (!) : I don't know how to draw textures truncated, so I will just fill the margin with white again
-		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+		resource_lock.lock();
 		result_view->draw(0, RESULT_Y_LOW);
 		Draw_texture(var_square_image[0], DEFAULT_BACK_COLOR, 0, 0, 320, RESULT_Y_LOW);
 		top_bar_view->draw();
 		if (toast_view_visible_frames_left > 0) toast_view->draw();
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		
 		// In night mode, the line between the search box and search results looks weird, so don't draw it
 		if (!var_night_mode) Draw_texture(var_square_image[0], DEFAULT_TEXT_COLOR, 0, RESULT_Y_LOW - 1, 320, 1);
@@ -425,7 +419,6 @@ Intent Search_draw(void)
 	else
 		gspWaitForVBlank();
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 
 	if (Util_err_query_error_show_flag()) {
 		Util_err_main(key);
@@ -434,6 +427,7 @@ Intent Search_draw(void)
 	} else {
 		update_overlay_menu(&key, &intent, SceneType::SEARCH);
 		
+		resource_lock.lock();
 		top_bar_view->update(key);
 		result_view->update(key, 0, RESULT_Y_LOW);
 		if (clicked_url != "") {
@@ -456,6 +450,9 @@ Intent Search_draw(void)
 			intent.arg = url_jump_request;
 			url_jump_request_type = YouTubePageType::INVALID;
 		}
+		
+		resource_lock.unlock();
+		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		
 		static int consecutive_scroll = 0;
@@ -477,7 +474,6 @@ Intent Search_draw(void)
 		if (key.p_b) intent.next_scene = SceneType::BACK;
 	}
 	
-	svcReleaseMutex(resource_lock);
 	
 	if(Util_log_query_log_show_flag())
 		Util_log_main(key);

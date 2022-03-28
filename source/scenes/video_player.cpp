@@ -99,9 +99,9 @@ namespace VideoPlayer {
 	
 	Thread livestream_initer_thread;
 	NetworkMultipleDecoder network_decoder;
-	Handle network_decoder_critical_lock; // locked when seeking or deiniting
+	Mutex network_decoder_critical_lock; // locked when seeking or deiniting
 	
-	Handle small_resource_lock; // locking basically all std::vector, std::string, etc
+	Mutex small_resource_lock; // locking basically all std::vector, std::string, etc
 	YouTubeVideoDetail cur_video_info;
 	YouTubeVideoDetail playing_video_info;
 	std::map<std::string, YouTubeVideoDetail> video_info_cache;
@@ -183,10 +183,6 @@ void VideoPlayer_init(void) {
 	
 	vid_thread_run = true;
 
-	
-	svcCreateMutex(&network_decoder_critical_lock, false);
-	svcCreateMutex(&small_resource_lock, false);
-	
 	tab_selector_scroller = VerticalScroller(0, 320, CONTENT_Y_HIGH, CONTENT_Y_HIGH + TAB_SELECTOR_HEIGHT);
 	suggestion_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH))->set_views({suggestion_main_view, suggestion_bottom_view});
 	comment_all_view = (new ScrollView(0, 0, 320, CONTENT_Y_HIGH))->set_views({comments_top_view, comments_main_view, comments_bottom_view});
@@ -386,7 +382,6 @@ void VideoPlayer_init(void) {
 		vid_convert_thread = threadCreate(convert_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 		livestream_initer_thread = threadCreate(livestream_initer_thread_func, &network_decoder, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 1, false);
 	}
-	stream_downloader = NetworkStreamDownloader();
 	stream_downloader_thread = threadCreate(network_downloader_thread, &stream_downloader, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	
 	vid_total_time = 0;
@@ -484,7 +479,7 @@ void VideoPlayer_exit(void) {
 	threadFree(livestream_initer_thread);
 	stream_downloader.delete_all();
 	
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	
 	// clean up views
 	suggestion_view->recursive_delete_subviews();
@@ -518,7 +513,7 @@ void VideoPlayer_exit(void) {
 	delete playlist_view;
 	playlist_view = NULL;
 	
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 	
 	remove_cpu_limit(CPU_LIMIT);
 
@@ -672,7 +667,7 @@ static PostView *comment_to_view(const YouTubeVideoDetail::Comment &comment, int
 //   cur_displaying_url : only update the displayed data
 //   NULL : both
 static void load_video_page(void *arg) {
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	bool is_to_play = ((const std::string *) arg) == &cur_playing_url;
 	bool is_to_display = ((const std::string *) arg) == &cur_displaying_url;
 	std::string url;
@@ -685,7 +680,7 @@ static void load_video_page(void *arg) {
 	if (video_info_cache.count(url)) tmp_video_info = video_info_cache[url];
 	else need_loading = true;
 	if (need_loading && is_to_display) is_loading = true;
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 	
 	if (need_loading) {
 		Util_log_save("player/load-v", "request : " + url);
@@ -954,9 +949,9 @@ static void load_video_page(void *arg) {
 		
 		
 		// acquire lock and perform actual replacements
-		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		small_resource_lock.lock();
 		if (!vid_already_init) { // app shut down while loading
-			svcReleaseMutex(small_resource_lock);
+			small_resource_lock.unlock();
 			return;
 		}
 		cur_video_info = tmp_video_info;
@@ -1002,13 +997,13 @@ static void load_video_page(void *arg) {
 		
 		is_loading = false;
 		var_need_reflesh = true;
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 	}
 	
 	if (is_to_play && tmp_video_info.is_playable()) {
-		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		small_resource_lock.lock();
 		if (!vid_already_init) { // app shut down while loading
-			svcReleaseMutex(small_resource_lock);
+			small_resource_lock.unlock();
 			return;
 		}
 		playing_video_info = tmp_video_info;
@@ -1067,7 +1062,7 @@ static void load_video_page(void *arg) {
 				else playlist_list_videos_view->views[i]->set_get_background_color(View::STANDARD_BACKGROUND);
 			}
 		}
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 	}
 }
 static void load_more_suggestions(void *arg_) {
@@ -1083,9 +1078,9 @@ static void load_more_suggestions(void *arg_) {
 	for (size_t i = arg->suggestions.size(); i < new_result.suggestions.size(); i++) new_suggestion_views.push_back(suggestion_to_view(new_result.suggestions[i]));
 	Util_log_save("player/load-s", "truncate/view creation end");
 	
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	if (!vid_already_init) { // app shut down while loading
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 		return;
 	}
 	if (new_result.error != "") cur_video_info.error = new_result.error;
@@ -1096,7 +1091,7 @@ static void load_more_suggestions(void *arg_) {
 		video_info_cache[cur_video_info.url] = new_result;
 	}
 	var_need_reflesh = true;
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 }
 
 static void load_more_comments(void *arg_) {
@@ -1112,9 +1107,9 @@ static void load_more_comments(void *arg_) {
 	for (size_t i = arg->comments.size(); i < new_result.comments.size(); i++) new_comment_views.push_back(comment_to_view(new_result.comments[i], i));
 	Util_log_save("player/load-c", "truncate/views creation end");
 	
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	if (!vid_already_init) { // app shut down while loading
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 		return;
 	}
 	cur_video_info = new_result;
@@ -1122,7 +1117,7 @@ static void load_more_comments(void *arg_) {
 	comments_main_view->views.insert(comments_main_view->views.end(), new_comment_views.begin(), new_comment_views.end());
 	update_comment_bottom_view();
 	var_need_reflesh = true;
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 }
 
 static void load_more_replies(void *arg_) {
@@ -1165,16 +1160,16 @@ static void load_more_replies(void *arg_) {
 	}
 	Util_log_save("player/load-r", "truncate end");
 	
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	if (!vid_already_init) { // app shut down while loading
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 		return;
 	}
 	comment = new_comment; // do not apply to the cache because it's a mess to also save the folding status
 	comment_view->replies.insert(comment_view->replies.end(), new_reply_views.begin(), new_reply_views.end());
 	comment_view->replies_shown = comment_view->replies.size();
 	comment_view->is_loading_replies = false;
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 	var_need_reflesh = true;
 }
 static void load_caption(void *arg_) {
@@ -1257,9 +1252,9 @@ static void load_caption(void *arg_) {
 		->set_caption_data(new_video_info.caption_data[{base_lang_id, translation_lang_id}]);
 	
 	
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	if (!vid_already_init) { // app shut down while loading
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 		return;
 	}
 	caption_main_view->recursive_delete_subviews();
@@ -1271,7 +1266,7 @@ static void load_caption(void *arg_) {
 	caption_overlay_view = new_caption_overlay_view;
 	caption_overlay_view->set_is_visible(true);
 	
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 }
 
 /* -------------------------------------------------------------------------------------------------------------- */
@@ -1312,9 +1307,9 @@ static void send_change_video_request_wo_lock(std::string url, bool update_playe
 	var_need_reflesh = true;
 }
 static void send_change_video_request(std::string url, bool update_player, bool update_view, bool force_load) {
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	send_change_video_request_wo_lock(url, update_player, update_view, force_load);
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 }
 
 static void send_seek_request_wo_lock(double pos) {
@@ -1325,18 +1320,18 @@ static void send_seek_request_wo_lock(double pos) {
 		network_decoder.interrupt = true;
 }
 static void send_seek_request(double pos) {
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	send_seek_request_wo_lock(pos);
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 }
 
 
 bool video_is_playing() {
 	if (!vid_play_request && vid_pausing_seek) {
-		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		small_resource_lock.lock();
 		vid_pausing_seek = false;
 		if (!vid_pausing) Util_speaker_resume(0);
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 	}
 	return vid_play_request;
 }
@@ -1425,7 +1420,7 @@ namespace Bar {
 			intent->next_scene = SceneType::VIDEO_PLAYER;
 			intent->arg = cur_playing_url;
 		}
-		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		small_resource_lock.lock();
 		if (!vid_pausing_seek && bar_grabbed && !vid_pausing) Util_speaker_pause(0);
 		if (vid_pausing_seek && !bar_grabbed && !vid_pausing) Util_speaker_resume(0);
 		vid_pausing_seek = bar_grabbed;
@@ -1446,7 +1441,7 @@ namespace Bar {
 				send_change_video_request_wo_lock(cur_displaying_url, true, false, false);
 			}
 		}
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 		
 		last_touch_x = key.touch_x;
 		last_touch_y = key.touch_y;
@@ -1599,14 +1594,14 @@ static void decode_thread(void* arg) {
 				if (vid_seek_request && !vid_change_video_request) {
 					network_waiting_status = "Seeking";
 					Util_speaker_clear_buffer(0);
-					svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
+					network_decoder_critical_lock.lock(); // the converter thread is now suspended
 					vid_current_pos = vid_seek_pos;
 					while (vid_seek_request && !vid_change_video_request && vid_play_request) {
-						svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+						small_resource_lock.lock();
 						double seek_pos_bak = vid_seek_pos;
 						vid_seek_request = false;
 						network_decoder.interrupt = false;
-						svcReleaseMutex(small_resource_lock);
+						small_resource_lock.unlock();
 						
 						result = network_decoder.seek(seek_pos_bak * 1000 * 1000); // nano seconds
 						// if seek failed because of the lock, it's probably another seek request or other requests (change video etc...), so we can ignore it
@@ -1618,7 +1613,7 @@ static void decode_thread(void* arg) {
 						if (result.code != 0) vid_play_request = false;
 						break;
 					}
-					svcReleaseMutex(network_decoder_critical_lock);
+					network_decoder_critical_lock.unlock();
 					if (eof_reached) vid_pausing = false;
 					network_waiting_status = NULL;
 					var_need_reflesh = true;
@@ -1631,11 +1626,11 @@ static void decode_thread(void* arg) {
 				if (type == NetworkMultipleDecoder::PacketType::EoF) {
 					vid_pausing = true;
 					if (!eof_reached) { // the first time it reaches EOF
-						svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+						small_resource_lock.lock();
 						if ((var_autoplay_level == 2 && playing_video_info.has_next_video()) ||
 							(var_autoplay_level == 1 && playing_video_info.has_next_video_in_playlist()))
 								send_change_video_request_wo_lock(playing_video_info.get_next_video().url, true, false, false);
-						svcReleaseMutex(small_resource_lock);
+						small_resource_lock.unlock();
 					}
 					eof_reached = true;
 					usleep(10000);
@@ -1712,9 +1707,9 @@ static void decode_thread(void* arg) {
 				vid_play_request = false;
 			
 			// make sure the convert thread stops before closing network_decoder
-			svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max()); // the converter thread is now suspended
+			network_decoder_critical_lock.lock(); // the converter thread is now suspended
 			network_decoder.deinit();
-			svcReleaseMutex(network_decoder_critical_lock);
+			network_decoder_critical_lock.unlock();
 			
 			var_need_reflesh = true;
 			vid_pausing = false;
@@ -1747,7 +1742,7 @@ static void convert_thread(void* arg) {
 	{
 		if (vid_play_request && !vid_seek_request && !vid_change_video_request)
 		{
-			svcWaitSynchronization(network_decoder_critical_lock, std::numeric_limits<s64>::max());
+			network_decoder_critical_lock.lock();
 			while(vid_play_request && !vid_seek_request && !vid_change_video_request)
 			{
 				double pts;
@@ -1842,7 +1837,7 @@ static void convert_thread(void* arg) {
 				for(int i = 1; i < 320; i++)
 					vid_time[1][i - 1] = vid_time[1][i];
 			}
-			svcReleaseMutex(network_decoder_critical_lock);
+			network_decoder_critical_lock.unlock();
 		} else usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 
 		while (vid_thread_run && (should_suspend_decoding || (vid_thread_suspend && !vid_play_request && !vid_change_video_request)))
@@ -1857,20 +1852,20 @@ static void convert_thread(void* arg) {
 
 void video_set_show_debug_info(bool show) {
 	if (vid_already_init) {
-		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		small_resource_lock.lock();
 		if (show) {
 			if (playback_tab_view->views.back() != debug_info_view) playback_tab_view->views.push_back(debug_info_view);
 		} else {
 			if (playback_tab_view->views.back() == debug_info_view) playback_tab_view->views.pop_back();
 		}
-		svcReleaseMutex(small_resource_lock);
+		small_resource_lock.unlock();
 	}
 }
 
 
 #define DURATION_FONT_SIZE 0.4
 static void draw_video_content(Hid_info key) {
-	svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+	small_resource_lock.lock();
 	if (selected_tab == TAB_PLAYLIST) playlist_view->draw();
 	else if (selected_tab == TAB_PLAYBACK) playback_tab_view->draw();
 	else if (is_loading) Draw_x_centered(LOCALIZED(LOADING), 0, 320, 0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
@@ -1881,7 +1876,7 @@ static void draw_video_content(Hid_info key) {
 		else if (selected_tab == TAB_CAPTIONS) captions_tab_view->draw();
 	}
 	
-	svcReleaseMutex(small_resource_lock);
+	small_resource_lock.unlock();
 }
 
 Intent VideoPlayer_draw(void)
@@ -1974,7 +1969,7 @@ Intent VideoPlayer_draw(void)
 	else
 	{
 		/* ****************************** LOCK START ******************************  */
-		svcWaitSynchronization(small_resource_lock, std::numeric_limits<s64>::max());
+		small_resource_lock.lock();
 		
 		// thumbnail request update (this should be done while `small_resource_lock` is locked)
 		// YES, this section needs refactoring, seriously
@@ -2049,6 +2044,9 @@ Intent VideoPlayer_draw(void)
 			suggestion_clicked_url = "";
 		}
 		
+		small_resource_lock.unlock();
+		/* ****************************** LOCK END ******************************  */
+		
 		// tab selector
 		{
 			auto released_point = tab_selector_scroller.update(key, TAB_SELECTOR_HEIGHT);
@@ -2064,7 +2062,7 @@ Intent VideoPlayer_draw(void)
 			if(vid_play_request) {
 				if (vid_pausing) {
 					if (!vid_pausing_seek) Util_speaker_resume(0);
-					if (eof_reached) send_seek_request_wo_lock(0);
+					if (eof_reached) send_seek_request(0);
 					vid_pausing = false;
 				} else {
 					if (!vid_pausing_seek) Util_speaker_pause(0);
@@ -2084,12 +2082,9 @@ Intent VideoPlayer_draw(void)
 				pos += key.p_d_right ? 10 : -10;
 				pos = std::max<double>(0, pos);
 				pos = std::min<double>(vid_duration, pos);
-				send_seek_request_wo_lock(pos);
+				send_seek_request(pos);
 			}
 		} else if (key.h_touch || key.p_touch) var_need_reflesh = true;
-		
-		svcReleaseMutex(small_resource_lock);
-		/* ****************************** LOCK END ******************************  */
 		
 		static int consecutive_scroll = 0;
 		if (key.h_c_up || key.h_c_down) {

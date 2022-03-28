@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 #include <3ds.h>
+#include "system/util/libctru_wrapper.hpp"
 #include "network/network_io.hpp"
 
 // one instance per one url (once constructed, the url is not changeable)
@@ -14,7 +15,7 @@ struct NetworkStream {
 	
 	u64 block_num = 0;
 	std::string url;
-	Handle downloaded_data_lock; // std::map needs locking when searching and inserting at the same time
+	Mutex downloaded_data_lock; // std::map needs locking when searching and inserting at the same time
 	std::map<u64, std::vector<u8> > downloaded_data;
 	bool whole_download = false;
 	NetworkSessionList *session_list = NULL;
@@ -35,10 +36,8 @@ struct NetworkStream {
 	bool livestream_eof = false;
 	bool livestream_private = false;
 	
-	~NetworkStream();
-	
 	// if `whole_download` is true, it will not use Range request but download the whole content at once (used for livestreams)
-	NetworkStream (std::string url, bool whole_download, NetworkSessionList *session_list);
+	NetworkStream (std::string url, bool whole_download, NetworkSessionList *session_list) : url(url), whole_download(whole_download), session_list(session_list) {}
 	
 	double get_download_percentage();
 	std::vector<double> get_buffering_progress_bar(int res_len);
@@ -63,12 +62,12 @@ private :
 	static constexpr u64 MAX_FORWARD_READ_BLOCKS = 50;
 	static constexpr const char * USER_AGENT = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
 	
-	Handle streams_lock;
+	Mutex streams_lock;
 	std::vector<NetworkStream *> streams;
 	
 	bool thread_exit_reqeusted = false;
 public :
-	NetworkStreamDownloader ();
+	NetworkStreamDownloader () = default;
 	
 	// the pointer must be one that has been new-ed : it will be deleted once quit_request is made
 	void add_stream(NetworkStream *stream);

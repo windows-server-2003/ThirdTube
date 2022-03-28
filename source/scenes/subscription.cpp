@@ -26,7 +26,7 @@ namespace Subscription {
 	bool already_init = false;
 	bool exiting = false;
 	
-	Handle resource_lock;
+	Mutex resource_lock;
 	
 	std::vector<SubscriptionChannel> subscribed_channels;
 	bool clicked_is_video;
@@ -52,8 +52,6 @@ static void update_subscribed_channels(const std::vector<SubscriptionChannel> &n
 
 void Subscription_init(void) {
 	Util_log_save("subsc/init", "Initializing...");
-	
-	svcCreateMutex(&resource_lock, false);
 	
 	channels_tab_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
 		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::SUBSCRIPTION);
@@ -108,7 +106,7 @@ void Subscription_exit(void) {
 	thread_suspend = false;
 	exiting = true;
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	
 	main_view->recursive_delete_subviews();
 	delete main_view;
@@ -120,7 +118,7 @@ void Subscription_exit(void) {
 	channels_tab_view = NULL;
 	channels_tab_list_view = NULL;
 	
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	Util_log_save("subsc/exit", "Exited.");
 }
@@ -141,9 +139,9 @@ void Subscription_resume(std::string arg) {
 
 // async functions
 static void load_subscription_feed(void *) {
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	auto channels = subscribed_channels;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	feed_loading_progress = 0;
 	feed_loading_total = channels.size();
@@ -232,16 +230,16 @@ static void load_subscription_feed(void *) {
 	
 	misc_tasks_request(TASK_SAVE_SUBSCRIPTION);
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	if (exiting) { // app shut down while loading
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		return;
 	}
 	update_subscribed_channels(get_subscribed_channels());
 	
 	feed_videos_list_view->recursive_delete_subviews();
 	feed_videos_list_view->views = new_feed_video_views;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 }
 
 static void update_subscribed_channels(const std::vector<SubscriptionChannel> &new_subscribed_channels) {
@@ -294,9 +292,9 @@ Intent Subscription_draw(void) {
 		
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
-		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+		resource_lock.lock();
 		main_view->draw();
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		draw_overlay_menu(CONTENT_Y_HIGH - OVERLAY_MENU_ICON_SIZE - main_tab_view->tab_selector_height);
@@ -315,7 +313,7 @@ Intent Subscription_draw(void) {
 		gspWaitForVBlank();
 	
 
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 
 	if (Util_err_query_error_show_flag()) {
 		Util_err_main(key);
@@ -352,7 +350,7 @@ Intent Subscription_draw(void) {
 		
 		if (key.p_b) intent.next_scene = SceneType::BACK;
 	}
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 
 	if(Util_log_query_log_show_flag())
 		Util_log_main(key);

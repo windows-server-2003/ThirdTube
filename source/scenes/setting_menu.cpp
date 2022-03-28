@@ -54,7 +54,7 @@ namespace Settings {
 	static std::string update_url_cia;
 	static std::string update_url_3dsx;
 	static std::string next_version_str;
-	static Handle resource_lock;
+	static Mutex resource_lock;
 	static std::string install_progress_str;
 	
 	static Thread update_worker_thread;
@@ -72,9 +72,9 @@ std::string install_update(NetworkSessionList &session_list) {
 	auto url = is_3dsx ? update_url_3dsx : update_url_cia;
 	// auto url = update_url_cia;
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	install_progress_str = LOCALIZED(ACCESSING);
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	update_progress_bar_view->set_progress(0);
 	update_progress_bar_view->set_is_visible(true);
 	
@@ -83,9 +83,9 @@ std::string install_update(NetworkSessionList &session_list) {
 		if (total < 10000) return; // ignore header(?)
 		if (first) {
 			first = false;
-			svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+			resource_lock.lock();
 			install_progress_str = LOCALIZED(DOWNLOADING);
-			svcReleaseMutex(resource_lock);
+			resource_lock.unlock();
 		}
 		update_progress_bar_view->set_progress((double) now / total);
 	}));
@@ -93,9 +93,9 @@ std::string install_update(NetworkSessionList &session_list) {
 	if (result.fail) return "curl deep fail : " + result.error;
 	if (result.status_code != 200) return "http returned " + std::to_string(result.status_code);
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	install_progress_str = LOCALIZED(INSTALLING);
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	update_progress_bar_view->set_progress(1.0);
 	
 	Result libctru_result;
@@ -182,18 +182,18 @@ static void update_worker_thread_func(void *) {
 			} else new_error_message = "http returned " + std::to_string(result.status_code);
 			if (!check_success) update_state = UpdateState::FAILED_CHECKING;
 			if (new_error_message != "") {
-				svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+				resource_lock.lock();
 				update_error_message = new_error_message;
-				svcReleaseMutex(resource_lock);
+				resource_lock.unlock();
 			}
 		}
 		if (update_state == UpdateState::INSTALLING) {
 			std::string error = install_update(session_list);
 			if (error == "") update_state = UpdateState::SUCCEEDED_INSTALLING;
 			else {
-				svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+				resource_lock.lock();
 				update_error_message = error;
-				svcReleaseMutex(resource_lock);
+				resource_lock.unlock();
 				update_state = UpdateState::FAILED_INSTALLING;
 			}
 		}
@@ -578,7 +578,6 @@ void Sem_init(void) {
 			if (path_3dsx.substr(0, 6) == "sdmc:/") path_3dsx = path_3dsx.substr(5, path_3dsx.size() - 5);
 		}
 	}
-	svcCreateMutex(&resource_lock, false);
 	
 	update_worker_thread = threadCreate(update_worker_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_LOW, 1, false);
 	
@@ -595,9 +594,6 @@ void Sem_exit(void) {
 	u64 time_out = 10000000000;
 	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(update_worker_thread, time_out));
 	threadFree(update_worker_thread);
-	
-	svcCloseHandle(resource_lock);
-	resource_lock = 0;
 	
 	main_view->recursive_delete_subviews();
 	delete main_view;
@@ -645,11 +641,11 @@ Intent Sem_draw(void)
 		
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
-		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+		resource_lock.lock();
 		main_view->draw();
 		popup_view->draw();
 		toast_view->draw();
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		draw_overlay_menu(CONTENT_Y_HIGH - main_tab_view->tab_selector_height - OVERLAY_MENU_ICON_SIZE);
@@ -677,10 +673,10 @@ Intent Sem_draw(void)
 		update_overlay_menu(&key, &intent, SceneType::SETTINGS);
 		
 		// toast_view is never 'updated'
-		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+		resource_lock.lock();
 		if (popup_view->is_visible) popup_view->update(key);
 		else main_view->update(key);
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		

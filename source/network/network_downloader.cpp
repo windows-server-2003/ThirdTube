@@ -9,13 +9,6 @@
 // NetworkStream implementation
 // --------------------------------
 
-NetworkStream::NetworkStream(std::string url, bool whole_download, NetworkSessionList *session_list) : url(url), whole_download(whole_download), session_list(session_list) {
-	svcCreateMutex(&downloaded_data_lock, false);
-}
-NetworkStream::~NetworkStream() {
-	svcCloseHandle(downloaded_data_lock);
-	downloaded_data_lock = 0;
-}
 bool NetworkStream::is_data_available(u64 start, u64 size) {
 	if (!ready) return false;
 	if (start + size > len) return false;
@@ -24,12 +17,12 @@ bool NetworkStream::is_data_available(u64 start, u64 size) {
 	u64 end_block = end / BLOCK_SIZE;
 	
 	bool res = true;
-	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	downloaded_data_lock.lock();
 	for (u64 block = start_block; block <= end_block; block++) if (!downloaded_data.count(block)) {
 		res = false;
 		break;
 	}
-	svcReleaseMutex(downloaded_data_lock);
+	downloaded_data_lock.unlock();
 	return res;
 }
 std::vector<u8> NetworkStream::get_data(u64 start, u64 size) {
@@ -40,7 +33,7 @@ std::vector<u8> NetworkStream::get_data(u64 start, u64 size) {
 	u64 end_block = end / BLOCK_SIZE;
 	std::vector<u8> res;
 	
-	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	downloaded_data_lock.lock();
 	auto itr = downloaded_data.find(start_block);
 	my_assert(itr != downloaded_data.end());
 	for (u64 block = start_block; block <= end_block; block++) {
@@ -50,11 +43,11 @@ std::vector<u8> NetworkStream::get_data(u64 start, u64 size) {
 		res.insert(res.end(), itr->second.begin() + cur_l, itr->second.begin() + cur_r);
 		itr++;
 	}
-	svcReleaseMutex(downloaded_data_lock);
+	downloaded_data_lock.unlock();
 	return res;
 }
 void NetworkStream::set_data(u64 block, const std::vector<u8> &data) {
-	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	downloaded_data_lock.lock();
 	downloaded_data[block] = data;
 	if (downloaded_data.size() > MAX_CACHE_BLOCKS) { // ensure it doesn't cache too much and run out of memory
 		u64 read_head_block = read_head / BLOCK_SIZE;
@@ -66,16 +59,16 @@ void NetworkStream::set_data(u64 block, const std::vector<u8> &data) {
 			downloaded_data.erase(std::prev(downloaded_data.end()));
 		}
 	}
-	svcReleaseMutex(downloaded_data_lock);
+	downloaded_data_lock.unlock();
 }
 double NetworkStream::get_download_percentage() {
-	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	downloaded_data_lock.lock();
 	double res = (double) downloaded_data.size() * BLOCK_SIZE / len * 100;
-	svcReleaseMutex(downloaded_data_lock);
+	downloaded_data_lock.unlock();
 	return res;
 }
 std::vector<double> NetworkStream::get_buffering_progress_bar(int res_len) {
-	svcWaitSynchronization(downloaded_data_lock, std::numeric_limits<s64>::max());
+	downloaded_data_lock.lock();
 	std::vector<double> res(res_len);
 	auto itr = downloaded_data.begin();
 	for (int i = 0; i < res_len; i++) {
@@ -95,7 +88,7 @@ std::vector<double> NetworkStream::get_buffering_progress_bar(int res_len) {
 		res[i] /= r - l;
 		res[i] *= 100;
 	}
-	svcReleaseMutex(downloaded_data_lock);
+	downloaded_data_lock.unlock();
 	return res;
 }
 
@@ -104,11 +97,8 @@ std::vector<double> NetworkStream::get_buffering_progress_bar(int res_len) {
 // NetworkStreamDownloader implementation
 // --------------------------------
 
-NetworkStreamDownloader::NetworkStreamDownloader() {
-	svcCreateMutex(&streams_lock, false);
-}
 void NetworkStreamDownloader::add_stream(NetworkStream *stream) {
-	svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
+	streams_lock.lock();
 	size_t index = (size_t) -1;
 	for (size_t i = 0; i < streams.size(); i++) if (!streams[i]) {
 		streams[i] = stream;
@@ -119,7 +109,7 @@ void NetworkStreamDownloader::add_stream(NetworkStream *stream) {
 		index = streams.size();
 		streams.push_back(stream);
 	}
-	svcReleaseMutex(streams_lock);
+	streams_lock.unlock();
 }
 
 static bool thread_network_session_list_inited = false;
@@ -136,7 +126,7 @@ static void confirm_thread_network_session_list_inited() {
 void NetworkStreamDownloader::downloader_thread() {
 	while (!thread_exit_reqeusted) {
 		size_t cur_stream_index = (size_t) -1; // the index of the stream on which we will perform a download in this loop
-		svcWaitSynchronization(streams_lock, std::numeric_limits<s64>::max());
+		streams_lock.lock();
 		// back up 'read_head's as those can be changed from another thread
 		std::vector<u64> read_heads(streams.size());
 		for (size_t i = 0; i < streams.size(); i++) if (streams[i]) read_heads[i] = streams[i]->read_head;
@@ -179,12 +169,12 @@ void NetworkStreamDownloader::downloader_thread() {
 		}
 		
 		if (cur_stream_index == (size_t) -1) {
-			svcReleaseMutex(streams_lock);
+			streams_lock.unlock();
 			usleep(20000);
 			continue;
 		}
 		NetworkStream *cur_stream = streams[cur_stream_index];
-		svcReleaseMutex(streams_lock);
+		streams_lock.unlock();
 		
 		confirm_thread_network_session_list_inited();
 		// whole download

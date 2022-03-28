@@ -1,9 +1,6 @@
 #include "network/network_decoder_multiple.hpp"
 #include "headers.hpp"
 
-NetworkMultipleDecoder::NetworkMultipleDecoder() {
-	svcCreateMutex(&fragments_lock, false);
-}
 void NetworkMultipleDecoder::deinit() {
 	initer_stop_request = true;
 	while (!initer_stopping) usleep(10000);
@@ -147,9 +144,9 @@ NetworkMultipleDecoder::PacketType NetworkMultipleDecoder::next_decode_type() {
 	PacketType res = decoder.next_decode_type();
 	if (res == PacketType::EoF) {
 		while (!initer_exit_request && !interrupt && seq_using + 1 < seq_num) {
-			svcWaitSynchronization(fragments_lock, std::numeric_limits<s64>::max());
+			fragments_lock.lock();
 			if (fragments.count(seq_using + 1)) break;
-			svcReleaseMutex(fragments_lock);
+			fragments_lock.unlock();
 			usleep(30000);
 		}
 		/*
@@ -165,7 +162,7 @@ NetworkMultipleDecoder::PacketType NetworkMultipleDecoder::next_decode_type() {
 			res = decoder.next_decode_type();
 			// Util_log_save("net-mul", "after change ffmpeg res : " + std::to_string((int) res));
 		}
-		svcReleaseMutex(fragments_lock);
+		fragments_lock.unlock();
 	}
 	return res;
 }
@@ -201,9 +198,9 @@ Result_with_string NetworkMultipleDecoder::seek(s64 microseconds) {
 		next_fragment = std::min(next_fragment, (int) seq_head); // just to be safe
 		seq_using = next_fragment;
 		while (!initer_exit_request && !decoder.interrupt) {
-			svcWaitSynchronization(fragments_lock, std::numeric_limits<s64>::max());
+			fragments_lock.lock();
 			if (fragments.count((int) seq_using)) break;
-			svcReleaseMutex(fragments_lock);
+			fragments_lock.unlock();
 			usleep(30000);
 		}
 		if (initer_exit_request || decoder.interrupt) {
@@ -214,7 +211,7 @@ Result_with_string NetworkMultipleDecoder::seek(s64 microseconds) {
 		recalc_buffered_head();
 		decoder.clear_buffer();
 		decoder.change_ffmpeg_io_data(fragments[(int) seq_using], adjust_timestamp ? seq_using * fragment_len : 0);
-		svcReleaseMutex(fragments_lock);
+		fragments_lock.unlock();
 	} else {
 		decoder.clear_buffer();
 		decoder.change_ffmpeg_io_data(fragments[(int) seq_using], adjust_timestamp ? seq_using * fragment_len : 0);
@@ -305,7 +302,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			both_stream->disable_interrupt = false;
 		}
 		
-		svcWaitSynchronization(fragments_lock, std::numeric_limits<s64>::max());
+		fragments_lock.lock();
 		fragments[seq_next] = tmp_ffmpeg_data;
 		if (fragments.size() > MAX_CACHE_FRAGMENTS_NUM) {
 			if (fragments.begin()->first < seq_using) {
@@ -317,7 +314,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			}
 		}
 		recalc_buffered_head();
-		svcReleaseMutex(fragments_lock);
+		fragments_lock.unlock();
 		
 		Util_log_save("net/live-init", "finish : " + std::to_string(seq_next));
 	}

@@ -60,7 +60,7 @@ namespace Channel {
 	
 	std::set<PostView *> community_thumbnail_loaded_list;
 	
-	Handle resource_lock;
+	Mutex resource_lock;
 	std::string cur_channel_url;
 	YouTubeChannelDetail channel_info;
 	std::map<std::string, YouTubeChannelDetail> channel_info_cache;
@@ -77,9 +77,6 @@ void Channel_init(void)
 {
 	Util_log_save("channel/init", "Initializing...");
 	Result_with_string result;
-	
-	svcCreateMutex(&resource_lock, false);
-	
 	
 	banner_view = new ImageView(0, 0, 320, BANNER_HEIGHT);
 	channel_view = new ChannelView(0, 0, 320, CHANNEL_ICON_SIZE + SMALL_MARGIN * 2);
@@ -137,7 +134,7 @@ void Channel_exit(void)
 	thread_suspend = false;
 	exiting = true;
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	
 	delete main_view;
 	main_view = NULL;
@@ -153,7 +150,7 @@ void Channel_exit(void)
 	delete load_more_view;
 	load_more_view = NULL;
 	
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	Util_log_save("search/exit", "Exited.");
 }
@@ -257,7 +254,7 @@ View *community_post_2_view(const YouTubeChannelDetail::CommunityPost &post) {
 }
 
 static void load_channel(void *) {
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	auto url = cur_channel_url;
 	YouTubeChannelDetail result;
 	bool need_loading = false;
@@ -265,7 +262,7 @@ static void load_channel(void *) {
 	else need_loading = true;
 	main_view->set_views({load_more_view});
 	load_more_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(LOADING); });
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	if (need_loading) {
 		add_cpu_limit(ADDITIONAL_CPU_LIMIT);
@@ -313,9 +310,9 @@ static void load_channel(void *) {
 	}
 	
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	if (exiting) { // app shut down while loading
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		return;
 	}
 	channel_info = result;
@@ -402,12 +399,12 @@ static void load_channel(void *) {
 	
 	main_view->set_views({banner_view, channel_view, tab_view}); 
 	var_need_reflesh = true;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 }
 static void load_channel_more(void *) {
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	auto prev_result = channel_info;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	auto new_result = youtube_channel_page_continue(prev_result);
 	
@@ -418,9 +415,9 @@ static void load_channel_more(void *) {
 	Util_log_save("channel-c", "truncate end");
 	
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	if (exiting) { // app shut down while loading
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		return;
 	}
 	if (new_result.error != "") channel_info.error = new_result.error;
@@ -437,12 +434,12 @@ static void load_channel_more(void *) {
 		video_load_more_view->set_is_visible(false);
 	}
 	var_need_reflesh = true;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 }
 static void load_channel_playlists(void *) {
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	auto prev_result = channel_info;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	auto new_result = youtube_channel_load_playlists(prev_result);
 	
@@ -451,9 +448,9 @@ static void load_channel_playlists(void *) {
 	Util_log_save("channel-p", "truncate end");
 	
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	if (exiting) { // app shut down while loading
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		return;
 	}
 	if (new_result.error != "") channel_info.error = new_result.error;
@@ -466,12 +463,12 @@ static void load_channel_playlists(void *) {
 	tab_view->views[1] = playlist_tab_view;
 	
 	var_need_reflesh = true;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 }
 static void load_channel_community_posts(void *) {
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	auto prev_result = channel_info;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 	auto new_result = youtube_channel_load_community(prev_result);
 	
@@ -482,9 +479,9 @@ static void load_channel_community_posts(void *) {
 	Util_log_save("channel-com", "truncate end");
 	
 	
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	resource_lock.lock();
 	if (exiting) { // app shut down while loading
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		return;
 	}
 	if (new_result.error != "") channel_info.error = new_result.error;
@@ -504,16 +501,16 @@ static void load_channel_community_posts(void *) {
 	}
 	
 	var_need_reflesh = true;
-	svcReleaseMutex(resource_lock);
+	resource_lock.unlock();
 	
 }
 static bool send_load_request(std::string url) {
 	if (!is_async_task_running(load_channel)) {
 		remove_all_async_tasks_with_type(load_channel_more);
 		
-		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+		resource_lock.lock();
 		cur_channel_url = url;
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		
 		queue_async_task(load_channel, NULL);
 		return true;
@@ -547,9 +544,9 @@ Intent Channel_draw(void)
 		
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
-		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+		resource_lock.lock();
 		main_view->draw();
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);
@@ -575,7 +572,7 @@ Intent Channel_draw(void)
 	} else {
 		update_overlay_menu(&key, &intent, SceneType::CHANNEL);
 		
-		svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+		resource_lock.lock();
 		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		main_view->update(key);
@@ -638,7 +635,7 @@ Intent Channel_draw(void)
 			}
 			thumbnail_set_priorities(priority_list);
 		}
-		svcReleaseMutex(resource_lock);
+		resource_lock.unlock();
 		
 		if (clicked_url != "") {
 			intent.next_scene = SceneType::VIDEO_PLAYER;

@@ -31,7 +31,7 @@ private :
 	std::string both_url;
 	
 	NetworkDecoder decoder;
-	Handle fragments_lock;
+	Mutex fragments_lock;
 	std::map<int, NetworkDecoderFFmpegIOData> fragments;
 	std::map<int, int> error_count;
 	int fragment_len = -1;
@@ -61,7 +61,7 @@ public :
 	volatile double pitch_change_request = -1;
 	const char *get_network_waiting_status() { return decoder.get_network_waiting_status(); }
 	
-	NetworkMultipleDecoder ();
+	NetworkMultipleDecoder () = default;
 	
 	void deinit();
 	// pass fragment_len == -1 if it's not a livestream

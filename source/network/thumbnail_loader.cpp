@@ -29,8 +29,7 @@ struct Request {
 };
 
 static volatile SceneType active_scene = SceneType::SEARCH;
-static Handle resource_lock;
-static bool lock_initialized = false;
+static Mutex resource_lock;
 static std::vector<Request> requests;
 static std::queue<int> free_list;
 
@@ -53,21 +52,11 @@ struct URLStatus {
 };
 static std::map<std::string, URLStatus> requested_urls;
 
-static void lock() {
-	if (!lock_initialized) {
-		svcCreateMutex(&resource_lock, false);
-		lock_initialized = true;
-	}
-	svcWaitSynchronization(lock_initialized, std::numeric_limits<s64>::max());
-}
-static void release() {
-	svcReleaseMutex(lock_initialized);
-}
 
 int thumbnail_request(const std::string &url, SceneType scene_id, int priority, ThumbnailType type) {
 	if (url == "") return -1;
 	int handle;
-	lock();
+	resource_lock.lock();
 	if (free_list.size()) {
 		handle = free_list.front();
 		free_list.pop();
@@ -79,7 +68,7 @@ int thumbnail_request(const std::string &url, SceneType scene_id, int priority, 
 	requested_urls[url].handles.insert(handle);
 	requested_urls[url].type = type;
 	thumbnail_free_time.erase(url);
-	release();
+	resource_lock.unlock();
 	if (requests.size() > 180) Util_log_save("tloader", "WARNING : request size too large, possible resource leak : " + std::to_string(requests.size()));
 	return handle;
 }
@@ -97,28 +86,28 @@ inline static void thumbnail_cancel_request_wo_lock(int handle) {
 }
 void thumbnail_cancel_request(int handle) {
 	if (handle == -1) return;
-	lock();
+	resource_lock.lock();
 	thumbnail_cancel_request_wo_lock(handle);
-	release();
+	resource_lock.unlock();
 }
 void thumbnail_cancel_requests(const std::vector<int> &handles) {
-	lock();
+	resource_lock.lock();
 	for (auto handle : handles) if (handle != -1) thumbnail_cancel_request_wo_lock(handle);
-	release();
+	resource_lock.unlock();
 }
 void thumbnail_set_priority(int handle, int value) {
 	if (handle == -1) return;
-	lock();
+	resource_lock.lock();
 	requests[handle].priority = value;
-	release();
+	resource_lock.unlock();
 }
 void thumbnail_set_priorities(const std::vector<std::pair<int, int> > &priority_list) {
-	lock();
+	resource_lock.lock();
 	for (auto i : priority_list) {
 		if (i.first == -1) continue;
 		requests[i.first].priority = i.second;
 	}
-	release();
+	resource_lock.unlock();
 }
 void thumbnail_set_active_scene(SceneType type) {
 	active_scene = type;
@@ -126,9 +115,9 @@ void thumbnail_set_active_scene(SceneType type) {
 
 bool thumbnail_is_available(const std::string &url) {
 	if (url == "") return false;
-	lock();
+	resource_lock.lock();
 	bool res = requested_urls.count(url) && requested_urls[url].is_loaded;
-	release();
+	resource_lock.unlock();
 	return res;
 }
 bool thumbnail_is_available(int handle) {
@@ -138,9 +127,9 @@ bool thumbnail_is_available(int handle) {
 
 int thumbnail_get_status_code(const std::string &url) {
 	if (url == "") return false;
-	lock();
+	resource_lock.lock();
 	int res = requested_urls.count(url) ? requested_urls[url].last_status_code : -2;
-	release();
+	resource_lock.unlock();
 	return res;
 }
 int thumbnail_get_status_code(int handle) {
@@ -151,22 +140,22 @@ int thumbnail_get_status_code(int handle) {
 bool thumbnail_draw(int handle, int x_offset, int y_offset, int x_len, int y_len) {
 	if (handle == -1) return false;
 	bool res;
-	lock();
+	resource_lock.lock();
 	std::string url = requests[handle].url;
 	if (requested_urls.count(url) && requested_urls[url].is_loaded) {
 		LoadedThumbnail thumbnail = requested_urls[url].data;
 		Draw_texture(thumbnail.data.c2d, x_offset, y_offset, x_len, y_len);
 		res = true;
 	} else res = false;
-	release();
+	resource_lock.unlock();
 	return res;
 }
 
 static std::vector<u8> http_get(const std::string &url, int &status_code) {
 	std::vector<u8> res;
-	lock();
+	resource_lock.lock();
 	if (thumbnail_cache.count(url)) res = thumbnail_cache[url];
-	release();
+	resource_lock.unlock();
 	
 	if (res.size()) {
 		status_code = 0;
@@ -180,7 +169,7 @@ static std::vector<u8> http_get(const std::string &url, int &status_code) {
 		Util_log_save("thumb-dl", "access fail : " + result.error);
 	} else {
 		if (result.data.size() && result.status_code / 100 == 2) {
-			lock();
+			resource_lock.lock();
 			if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX) {
 				std::string erase_url;
 				int min_time = 1000000000;
@@ -198,7 +187,7 @@ static std::vector<u8> http_get(const std::string &url, int &status_code) {
 			
 			if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) Util_log_save("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
 			
-			release();
+			resource_lock.unlock();
 		}
 		status_code = result.status_code;
 	}
@@ -208,7 +197,7 @@ static std::vector<u8> http_get(const std::string &url, int &status_code) {
 static bool should_be_running = true;
 void thumbnail_downloader_thread_func(void *arg) {
 	while (should_be_running) {
-		lock();
+		resource_lock.lock();
 		struct Item {
 			int priority;
 			std::string url;
@@ -225,7 +214,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 				download_list.push_back({priority, i.first, i.second.type});
 			}
 		}
-		release();
+		resource_lock.unlock();
 		
 		if (!download_list.size()) {
 			usleep(50000);
@@ -260,7 +249,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 			if (res.data.size()) decoded_data = Image_decode(&res.data[0], res.data.size(), &w, &h);
 			if (decoded_data) {
 				// update cache
-				lock();
+				resource_lock.lock();
 				if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX) {
 					std::string erase_url;
 					int min_time = 1000000000;
@@ -276,7 +265,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 				}
 				thumbnail_cache[info.url] = res.data;
 				if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) Util_log_save("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
-				release();
+				resource_lock.unlock();
 				
 				// some special operations on the picture here (it shouldn't be here but...)
 				// for video thumbnail, crop to 16:9
@@ -321,18 +310,18 @@ void thumbnail_downloader_thread_func(void *arg) {
 					result = Draw_set_texture_data(&result_image, decoded_data, w, h, texture_w, texture_h, GPU_RGB565);
 					if (result.code != 0) Util_log_save("thumb-dl", "Draw_set_texture_data() failed");
 					else {
-						lock();
+						resource_lock.lock();
 						if (requested_urls.count(info.url)) { // in case the request is cancelled while downloading
 							requested_urls[info.url].is_loaded = true;
 							requested_urls[info.url].data = {w, h, texture_w, texture_h, result_image};
 						}
-						release();
+						resource_lock.unlock();
 					}
 				}
 				free(decoded_data);
 				decoded_data = NULL;
 			} else {
-				lock();
+				resource_lock.lock();
 				if (requested_urls.count(info.url)) {
 					requested_urls[info.url].is_loaded = false;
 					requested_urls[info.url].error = true;
@@ -342,7 +331,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 					} else requested_urls[info.url].waiting_retry = false;
 					requested_urls[info.url].last_status_code = res.status_code;
 				}
-				release();
+				resource_lock.unlock();
 				std::string err_msg = "load failed (http code : " + std::to_string(res.status_code) + ") size:" + std::to_string(res.data.size()) +
 					" err:" + res.error;
 				
@@ -372,10 +361,10 @@ void thumbnail_downloader_thread_func(void *arg) {
 		// Util_log_save("thumb-dl", std::to_string((int) osTickCounterRead(&counter)) + " ms");
 	}
 	
-	lock();
+	resource_lock.lock();
 	for (auto i : requested_urls) if (i.second.is_loaded) Draw_c2d_image_free(i.second.data.data);
 	requested_urls.clear();
-	release();
+	resource_lock.unlock();
 	
 	Util_log_save("thumb-dl", "Thread exit.");
 	threadExit(0);

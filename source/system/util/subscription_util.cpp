@@ -7,19 +7,7 @@
 using namespace json11;
 
 static std::vector<SubscriptionChannel> subscribed_channels;
-static bool lock_initialized = false;
-static Handle resource_lock;
-
-static void lock() {
-	if (!lock_initialized) {
-		lock_initialized = true;
-		svcCreateMutex(&resource_lock, false);
-	}
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-}
-static void release() {
-	svcReleaseMutex(resource_lock);
-}
+static Mutex resource_lock;
 
 #define SUBSCRIPTION_VERSION 0
 
@@ -57,9 +45,9 @@ void load_subscription() {
 				else loaded_channels.push_back(cur_channel);
 			}
 			std::sort(loaded_channels.begin(), loaded_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
-			lock();
+			resource_lock.lock();
 			subscribed_channels = loaded_channels;
-			release();
+			resource_lock.unlock();
 			Util_log_save("subsc/load" , "loaded subsc(" + std::to_string(subscribed_channels.size()) + " items)");
 		} else {
 			Util_log_save("subsc/load" , "failed to load subsc, json err:" + error);
@@ -68,9 +56,9 @@ void load_subscription() {
 	free(buf);
 }
 void save_subscription() {
-	lock();
+	resource_lock.lock();
 	auto channels_backup = subscribed_channels;
-	release();
+	resource_lock.unlock();
 	
 	std::string data = 
 		std::string() +
@@ -102,18 +90,18 @@ void save_subscription() {
 
 
 bool subscription_is_subscribed(const std::string &id) {
-	lock();
+	resource_lock.lock();
 	bool found = false;
 	for (auto channel : subscribed_channels) if (channel.id == id) {
 		found = true;
 		break;
 	}
-	release();
+	resource_lock.unlock();
 	return found;
 }
 
 void subscription_subscribe(const SubscriptionChannel &new_channel) {
-	lock();
+	resource_lock.lock();
 	bool found = false;
 	for (auto channel : subscribed_channels) if (channel.id == new_channel.id) {
 		found = true;
@@ -121,21 +109,21 @@ void subscription_subscribe(const SubscriptionChannel &new_channel) {
 	}
 	if (!found) subscribed_channels.push_back(new_channel);
 	std::sort(subscribed_channels.begin(), subscribed_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
-	release();
+	resource_lock.unlock();
 }
 void subscription_unsubscribe(const std::string &id) {
-	lock();
+	resource_lock.lock();
 	std::vector<SubscriptionChannel> new_subscribed_channels;
 	for (auto channel : subscribed_channels) if (channel.id != id) new_subscribed_channels.push_back(channel);
 	subscribed_channels = new_subscribed_channels;
 	std::sort(subscribed_channels.begin(), subscribed_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
-	release();
+	resource_lock.unlock();
 }
 
 std::vector<SubscriptionChannel> get_subscribed_channels() {
-	lock();
+	resource_lock.lock();
 	auto res = subscribed_channels;
-	release();
+	resource_lock.unlock();
 	return res;
 }
 

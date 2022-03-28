@@ -148,7 +148,7 @@ private :
 	network_decoder_::output_buffer<u8 *> video_mvd_tmp_frames;
 	u8 *mvd_frame = NULL; // internal buffer written directly by the mvd service
 	u8 *sw_video_output_tmp = NULL;
-	Handle buffered_pts_list_lock; // lock of buffered_pts_list
+	Mutex buffered_pts_list_lock; // lock of buffered_pts_list
 	std::multiset<double> buffered_pts_list; // used for HW decoder to determine the pts when outputting a frame
 	bool mvd_first = false;
 	

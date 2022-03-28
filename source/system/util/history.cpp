@@ -7,19 +7,7 @@
 using namespace json11;
 
 static std::vector<HistoryVideo> watch_history;
-static bool lock_initialized = false;
-static Handle resource_lock;
-
-static void lock() {
-	if (!lock_initialized) {
-		lock_initialized = true;
-		svcCreateMutex(&resource_lock, false);
-	}
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-}
-static void release() {
-	svcReleaseMutex(resource_lock);
-}
+static Mutex resource_lock;
 
 #define HISTORY_VERSION 0
 
@@ -65,9 +53,9 @@ void load_watch_history() {
 			std::sort(loaded_watch_history.begin(), loaded_watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
 				return i.last_watch_time > j.last_watch_time;
 			});
-			lock();
+			resource_lock.lock();
 			watch_history = loaded_watch_history;
-			release();
+			resource_lock.unlock();
 			Util_log_save("history/load" , "loaded history(" + std::to_string(loaded_watch_history.size()) + " items)");
 		} else {
 			Util_log_save("history/load" , "failed to load history, json err:" + error);
@@ -76,9 +64,9 @@ void load_watch_history() {
 	free(buf);
 }
 void save_watch_history() {
-	lock();
+	resource_lock.lock();
 	auto backup = watch_history;
-	release();
+	resource_lock.unlock();
 	
 	std::string data = 
 		std::string() +
@@ -110,7 +98,7 @@ void save_watch_history() {
 }
 void add_watched_video(HistoryVideo video) {
 	if (var_history_enabled) {
-		lock();
+		resource_lock.lock();
 		bool found = false;
 		for (auto &i : watch_history) if (i.id == video.id) {
 			i.my_view_count++;
@@ -124,25 +112,25 @@ void add_watched_video(HistoryVideo video) {
 		std::sort(watch_history.begin(), watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
 			return i.last_watch_time > j.last_watch_time;
 		});
-		release();
+		resource_lock.unlock();
 	}
 }
 void history_erase_by_id(const std::string &id) {
-	lock();
+	resource_lock.lock();
 	std::vector<HistoryVideo> tmp_watch_history;
 	for (auto video : watch_history) if (video.id != id) tmp_watch_history.push_back(video);
 	watch_history = tmp_watch_history;
-	release();
+	resource_lock.unlock();
 }
 void history_erase_all() {
-	lock();
+	resource_lock.lock();
 	watch_history.clear();
-	release();
+	resource_lock.unlock();
 }
 std::vector<HistoryVideo> get_watch_history() {
-	lock();
+	resource_lock.lock();
 	std::vector<HistoryVideo> res = watch_history;
-	release();
+	resource_lock.unlock();
 	return res;
 }
 

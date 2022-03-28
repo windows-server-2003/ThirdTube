@@ -416,11 +416,6 @@ void NetworkDecoder::deinit() {
 	free(sw_video_output_tmp);
 	sw_video_output_tmp = NULL;
 	
-	if (buffered_pts_list_lock) {
-		svcCloseHandle(buffered_pts_list_lock);
-		buffered_pts_list_lock = 0;
-	}
-	
 	// its members should be freed by NetworkMultipleDecoder, not here
 	// just to prevent use-after-free, we set the pointers NULL
 	ffmpeg_io_data = NetworkDecoderFFmpegIOData();
@@ -562,7 +557,6 @@ Result_with_string NetworkDecoder::init_decoder(int type) {
 
 Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	Result_with_string result;
-	Result libctru_result;
 	
 	hw_decoder_enabled = request_hw_decoder;
 	interrupt = false;
@@ -578,15 +572,6 @@ Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 			result.error_description = "[out buf] " + result.error_description;
 			return result;
 		}
-	}
-	
-	libctru_result = svcCreateMutex(&buffered_pts_list_lock, false);
-	if (libctru_result != 0) {
-		Util_log_save("debug", "decoder mutex fail");
-		usleep(1000000);
-		result.code = libctru_result;
-		result.error_description = "Failed to create mutex";
-		return result;
 	}
 	
 	mvd_first = true;
@@ -771,9 +756,9 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		if (packet_read->pts != AV_NOPTS_VALUE) cur_pos = packet_read->pts * time_base;
 		else cur_pos = packet_read->dts * time_base;
 		
-		svcWaitSynchronization(buffered_pts_list_lock, std::numeric_limits<s64>::max());
+		buffered_pts_list_lock.lock();
 		buffered_pts_list.insert(cur_pos + timestamp_offset);
-		svcReleaseMutex(buffered_pts_list_lock);
+		buffered_pts_list_lock.unlock();
 	}
 	if (result.code == MVD_STATUS_FRAMEREADY) {
 		result.code = 0;
@@ -921,14 +906,14 @@ Result_with_string NetworkDecoder::get_decoded_video_frame(int width, int height
 		*data = video_mvd_tmp_frames.get_next_poped(); // it's valid until the next pop() is called
 		video_mvd_tmp_frames.pop();
 		
-		svcWaitSynchronization(buffered_pts_list_lock, std::numeric_limits<s64>::max());
+		buffered_pts_list_lock.lock();
 		if (!buffered_pts_list.size()) {
 			Util_log_save("decoder", "SET EMPTY");
 		} else {
 			*cur_pos = *buffered_pts_list.begin();
 			buffered_pts_list.erase(buffered_pts_list.begin());
 		}
-		svcReleaseMutex(buffered_pts_list_lock);
+		buffered_pts_list_lock.unlock();
 		return result;
 	} else {
 		if (video_tmp_frames.empty()) {
