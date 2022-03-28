@@ -12,6 +12,7 @@
 #include "views/image.hpp"
 #include "views/empty.hpp"
 #include "views/overlay.hpp"
+#include "views/progress_bar.hpp"
 #include "views/custom.hpp"
 #include "views/specialized/post.hpp"
 #include "views/specialized/caption_overlay.hpp"

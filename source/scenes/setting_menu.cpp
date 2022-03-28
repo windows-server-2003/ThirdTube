@@ -30,6 +30,8 @@ namespace Settings {
 	VerticalListView *main_view;
 	TabView *main_tab_view;
 	
+	ProgressBarView *update_progress_bar_view;
+	
 	int CONTENT_Y_HIGH = 240;
 	constexpr int TOP_HEIGHT = MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2;
 	
@@ -73,39 +75,42 @@ std::string install_update(NetworkSessionList &session_list) {
 	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
 	install_progress_str = LOCALIZED(ACCESSING);
 	svcReleaseMutex(resource_lock);
-	var_need_reflesh = true;
+	update_progress_bar_view->set_progress(0);
+	update_progress_bar_view->set_is_visible(true);
 	
-	int percentage = 0;
+	bool first = true;
 	auto result = session_list.perform(HttpRequest::GET(url, {}).with_progress_func([&] (u64 now, u64 total) {
-		int new_percentage = now * 100 / total;
-		if (new_percentage != percentage) {
-			percentage = new_percentage;
+		if (total < 10000) return; // ignore header(?)
+		if (first) {
+			first = false;
 			svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-			install_progress_str = LOCALIZED(DOWNLOADING) + " : " + std::to_string(percentage) + "%";
+			install_progress_str = LOCALIZED(DOWNLOADING);
 			svcReleaseMutex(resource_lock);
-			var_need_reflesh = true;
 		}
+		update_progress_bar_view->set_progress((double) now / total);
 	}));
-	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
-	install_progress_str = LOCALIZED(INSTALLING);
-	svcReleaseMutex(resource_lock);
-	var_need_reflesh = true;
 	
 	if (result.fail) return "curl deep fail : " + result.error;
 	if (result.status_code != 200) return "http returned " + std::to_string(result.status_code);
+	
+	svcWaitSynchronization(resource_lock, std::numeric_limits<s64>::max());
+	install_progress_str = LOCALIZED(INSTALLING);
+	svcReleaseMutex(resource_lock);
+	update_progress_bar_view->set_progress(1.0);
 	
 	Result libctru_result;
 	if (is_3dsx) {
 		char *slash_ptr = strrchr(path_3dsx.c_str(), '/');
 		if (!slash_ptr) return "no slash in 3dsx path : " + path_3dsx;
 		size_t slash_index = slash_ptr - path_3dsx.c_str();
-		// Util_log_save("debug", path_3dsx.substr(0, slash_index + 1) + " " + path_3dsx.substr(slash_index + 1, path_3dsx.size()));
 		libctru_result = Util_file_save_to_file(path_3dsx.substr(slash_index + 1, path_3dsx.size()), path_3dsx.substr(0, slash_index + 1),
 			result.data.data(), result.data.size(), true).code;
 		if (libctru_result) return "Failed to write to .3dsx file : " + std::to_string(libctru_result);
 	} else {
 		Handle am_handle = 0;
 		if ((libctru_result = AM_StartCiaInstall(MEDIATYPE_SD, &am_handle))) return "AM_StartCiaInstall() returned " + std::to_string(libctru_result);
+		
+		update_progress_bar_view->set_progress(0.0);
 		
 		const size_t BLOCK_SIZE = 200000;
 		for (size_t i = 0; i < result.data.size(); ) {
@@ -114,7 +119,10 @@ std::string install_update(NetworkSessionList &session_list) {
 			libctru_result = FSFILE_Write(am_handle, &size_written, i, result.data.data() + i, size, FS_WRITE_FLUSH);
 			i += size_written;
 			if (libctru_result) return "FSFILE_Write() returned " + std::to_string(libctru_result);
+			update_progress_bar_view->set_progress((double) i / result.data.size());
 		}
+		update_progress_bar_view->set_progress(1.0);
+		
 		libctru_result = AM_FinishCiaInstall(am_handle);
 		if (libctru_result) return "AM_FinishCiaInstall() returned " + std::to_string(libctru_result);
 	}
@@ -424,7 +432,11 @@ void Sem_init(void) {
 							return "";
 						}),
 					(new EmptyView(0, 0, 320, SMALL_MARGIN)),
-					(new TextView(10, 0, 100, DEFAULT_FONT_INTERVAL + SMALL_MARGIN))
+					(update_progress_bar_view = (new ProgressBarView(10, 0, 300, 5)))
+						->set_get_color([] () { return DEF_DRAW_BLUE; })
+						->set_is_visible(false),
+					(new EmptyView(0, 0, 320, SMALL_MARGIN)),
+					(new TextView(10, 0, 100, DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 2))
 						->set_text((std::function<std::string ()>) [] () -> std::string {
 							if (update_state == UpdateState::FAILED_CHECKING) return LOCALIZED(RETRY);
 							if (update_state == UpdateState::UPDATES_AVAILABLE) return LOCALIZED(UPDATE);
@@ -474,6 +486,7 @@ void Sem_init(void) {
 									->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; })
 								);
 								popup_view->set_is_visible(true);
+								var_need_reflesh = true;
 							}
 						})
 						->set_get_background_color([] (const View &view) -> u32 {
