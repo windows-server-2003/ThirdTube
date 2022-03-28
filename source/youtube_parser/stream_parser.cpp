@@ -80,7 +80,6 @@ static bool extract_player_data(YouTubeVideoDetail &res, Json player_response, b
 #			endif
 			}
 		}
-		debug("start cipher");
 		
 		for (auto &i : formats) { // handle decipher
 			if (i["url"] != Json()) continue;
@@ -91,7 +90,6 @@ static bool extract_player_data(YouTubeVideoDetail &res, Json player_response, b
 			tmp["url"] = Json(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + yt_deobfuscate_signature(cipher_params["s"], transform_procedure));
 			i = Json(tmp);
 		}
-		debug("start n param");
 		static auto nparam_regex = std::regex(std::string("[\?&]n=([^&]+)"));
 		for (auto &i : formats) { // modify the `n` parameter
 			std::string url = i["url"].string_value();
@@ -111,7 +109,6 @@ static bool extract_player_data(YouTubeVideoDetail &res, Json player_response, b
 			tmp["url"] = url;
 			i = Json(tmp);
 		}
-		debug("end n param");
 	}
 	for (auto &i : formats) { // something like %2C still appears in the url, so decode them back
 		auto tmp = i.object_items();
@@ -403,11 +400,8 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 		
 		if (res.id.size() != 11) res.id = youtube_get_video_id_by_url(url);
 	}
-	debug("json ok");
 	extract_metadata(res, json[0]);
-	debug("metadata ok");
 	extract_player_data(res, json[1], true);
-	debug("player ok");
 
 #	ifdef _WIN32
 	if (res.audio_stream_url != "") {
