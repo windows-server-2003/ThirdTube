@@ -202,18 +202,25 @@ static void extract_owner(Json slimOwnerRenderer, YouTubeVideoDetail &res) {
 	res.author.url = slimOwnerRenderer["channelUrl"].string_value();
 	res.author.subscribers = get_text_from_object(slimOwnerRenderer["expandedSubtitle"]);
 	
-	constexpr int target_height = 48;
-	int min_distance = 100000;
-	std::string best_icon;
-	for (auto icon : slimOwnerRenderer["thumbnail"]["thumbnails"].array_items()) {
-		int cur_height = icon["height"].int_value();
-		if (cur_height >= 256) continue; // too large
-		if (min_distance > std::abs(target_height - cur_height)) {
-			min_distance = std::abs(target_height - cur_height);
-			best_icon = icon["url"].string_value();
-		}
+	if (!slimOwnerRenderer["thumbnail"]["thumbnails"].array_items().size()) {
+		debug("extract_owner : thumbnail not found");
+		return;
 	}
-	res.author.icon_url = best_icon;
+	auto thumbnail = slimOwnerRenderer["thumbnail"]["thumbnails"].array_items()[0];
+	
+	constexpr int height = 72;
+	
+	std::string icon_url = thumbnail["url"].string_value();
+	std::string icon_url_modified;
+	std::string replace_from = "s" + std::to_string(thumbnail["width"].int_value()) + "-";
+	std::string replace_to = "s" + std::to_string(height) + "-";
+	for (size_t i = 0; i < icon_url.size(); ) {
+		if (icon_url.substr(i, replace_from.size()) == replace_from) {
+			i += replace_from.size();
+			icon_url_modified += replace_to;
+		} else icon_url_modified.push_back(icon_url[i++]);
+	}
+	res.author.icon_url = icon_url_modified;
 	
 	if (res.author.icon_url.substr(0, 2) == "//") res.author.icon_url = "https:" + res.author.icon_url;
 }
