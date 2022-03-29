@@ -1797,7 +1797,6 @@ static void convert_thread(void* arg) {
 					
 					// sync with sound
 					double cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
-					// Util_log_save("conv", "pos : " + std::to_string(pts) + " / " + std::to_string(cur_sound_pos));
 					if (cur_sound_pos < 0) { // sound is not playing, probably because the video is lagging behind, so draw immediately
 						
 					} else {

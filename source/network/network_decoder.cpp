@@ -818,10 +818,16 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 		if (ffmpeg_result == 0) {
 			*width = cur_frame->width;
 			*height = cur_frame->height;
+			
 			double time_base = av_q2d(get_stream(VIDEO)->time_base);
 			if (cur_frame->pts != AV_NOPTS_VALUE) *cur_pos = cur_frame->pts * time_base;
 			else *cur_pos = cur_frame->pkt_dts * time_base;
 			*cur_pos += timestamp_offset;
+			
+			buffered_pts_list_lock.lock();
+			buffered_pts_list.insert(*cur_pos);
+			buffered_pts_list_lock.unlock();
+			
 			video_tmp_frames.push();
 		} else if (ffmpeg_result == AVERROR(EAGAIN)) result.code = DEF_ERR_NEED_MORE_INPUT;
 		else {
@@ -849,11 +855,6 @@ Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cu
 	
 	AVPacket *packet_read = packet_buffer[AUDIO][0];
 	
-	double time_base = av_q2d(get_stream(AUDIO)->time_base);
-	if (packet_read->pts != AV_NOPTS_VALUE) *cur_pos = packet_read->pts * time_base;
-	else *cur_pos = packet_read->dts * time_base;
-	*cur_pos += timestamp_offset;
-	
 	AVFrame *cur_frame = av_frame_alloc();
 	if (!cur_frame) {
 		result.error_description = "av_frame_alloc() failed";
@@ -869,6 +870,10 @@ Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cu
 			*data = (u8 *) malloc(out_frame->nb_samples * 2 * decoder_context[AUDIO]->channels);
 			*size = swr_convert(swr_context, data, out_frame->nb_samples, (const u8 **) out_frame->data, out_frame->nb_samples);
 			*size *= 2;
+			
+			double time_base = av_q2d(get_stream(AUDIO)->time_base);
+			my_assert(out_frame->pts != AV_NOPTS_VALUE);
+			*cur_pos = out_frame->pts * time_base + timestamp_offset;
 		} else {
 			result.error_description = "avcodec_receive_frame() failed " + std::to_string(ffmpeg_result);
 			goto fail;
@@ -905,16 +910,6 @@ Result_with_string NetworkDecoder::get_decoded_video_frame(int width, int height
 		}
 		*data = video_mvd_tmp_frames.get_next_poped(); // it's valid until the next pop() is called
 		video_mvd_tmp_frames.pop();
-		
-		buffered_pts_list_lock.lock();
-		if (!buffered_pts_list.size()) {
-			Util_log_save("decoder", "SET EMPTY");
-		} else {
-			*cur_pos = *buffered_pts_list.begin();
-			buffered_pts_list.erase(buffered_pts_list.begin());
-		}
-		buffered_pts_list_lock.unlock();
-		return result;
 	} else {
 		if (video_tmp_frames.empty()) {
 			result.code = DEF_ERR_NEED_MORE_INPUT;
@@ -922,7 +917,6 @@ Result_with_string NetworkDecoder::get_decoded_video_frame(int width, int height
 		}
 		AVFrame *cur_frame = video_tmp_frames.get_next_poped();
 		video_tmp_frames.pop();
-		
 		
 		int cpy_size[2] = { 0, 0, };
 
@@ -935,16 +929,21 @@ Result_with_string NetworkDecoder::get_decoded_video_frame(int width, int height
 		memcpy_asm(sw_video_output_tmp + (width * height), cur_frame->data[1], cpy_size[1]);
 		memcpy_asm(sw_video_output_tmp + (width * height) + (width * height / 4), cur_frame->data[2], cpy_size[1]);
 		
-		double time_base = av_q2d(get_stream(VIDEO)->time_base);
-		if (cur_frame->pts != AV_NOPTS_VALUE) *cur_pos = cur_frame->pts * time_base;
-		else *cur_pos = cur_frame->pkt_dts * time_base;
-		*cur_pos += timestamp_offset;
-		
 		*data = sw_video_output_tmp;
 		
 		av_frame_unref(cur_frame);
-		return result;
 	}
+	
+	buffered_pts_list_lock.lock();
+	if (!buffered_pts_list.size()) {
+		Util_log_save("decoder", "SET EMPTY");
+	} else {
+		*cur_pos = *buffered_pts_list.begin();
+		buffered_pts_list.erase(buffered_pts_list.begin());
+	}
+	buffered_pts_list_lock.unlock();
+	
+	return result;
 }
 
 Result_with_string NetworkDecoder::seek(s64 microseconds) {
