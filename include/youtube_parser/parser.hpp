@@ -2,10 +2,11 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <functional>
 
 struct YouTubeChannelSuccinct {
 	std::string name;
-	std::string url;
+	std::string id;
 	std::string icon_url;
 	std::string subscribers;
 	std::string video_num;
@@ -42,7 +43,8 @@ struct YouTubeSuccinctItem {
 	YouTubeSuccinctItem (YouTubeChannelSuccinct channel) : type(CHANNEL), channel(channel) {}
 	YouTubeSuccinctItem (YouTubePlaylistSuccinct playlist) : type(PLAYLIST), playlist(playlist) {}
 	
-	std::string get_url() const { return type == VIDEO ? video.url : type == CHANNEL ? channel.url : playlist.url; }
+	// returns channel id in case of type == CHANNEL
+	std::string get_url() const { return type == VIDEO ? video.url : type == CHANNEL ? channel.id : playlist.url; }
 	std::string get_thumbnail_url() const { return type == VIDEO ? video.thumbnail_url : type == CHANNEL ? channel.icon_url : playlist.thumbnail_url; }
 	std::string get_name() const { return type == VIDEO ? video.title : type == CHANNEL ? channel.name : playlist.title; }
 };
@@ -203,7 +205,8 @@ struct YouTubeChannelDetail {
 	bool has_playlist_to_load() const { return playlist_tab_browse_id != "" && playlist_tab_params != ""; }
 	bool has_community_posts_to_load() const { return !community_loaded || community_continuation_token != ""; }
 };
-YouTubeChannelDetail youtube_parse_channel_page(std::string url);
+YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id);
+std::vector<YouTubeChannelDetail> youtube_parse_channel_page_multi(std::vector<std::string> ids, std::function<void (int, int)> progress);
 // takes the previous result, returns the new result with both old items and new items
 YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result);
 YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &prev_result);

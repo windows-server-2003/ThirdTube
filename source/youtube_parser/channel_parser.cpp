@@ -2,6 +2,7 @@
 #include "internal_common.hpp"
 #include "parser.hpp"
 
+
 static Json get_initial_data(const std::string &html) {
 	Json res;
 	if (fast_extract_initial(html, "ytInitialData", res)) return res;
@@ -13,49 +14,17 @@ static Json get_initial_data(const std::string &html) {
 	return res;
 }
 
-YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
-	YouTubeChannelDetail res;
-	
-	res.url_original = url;
-	
-	url = convert_url_to_mobile(url);
-	
-	// append "/videos" at the end of the url
-	{
-		bool ok = false;
-		for (auto pattern : std::vector<std::string>{"https://m.youtube.com/channel/", "https://m.youtube.com/c/", "https://m.youtube.com/user/"}) {
-			if (url.substr(0, pattern.size()) == pattern) {
-				url = url.substr(pattern.size(), url.size());
-				auto next_slash = std::find(url.begin(), url.end(), '/');
-				url = pattern + std::string(url.begin(), next_slash) + "/videos";
-				ok = true;
-				break;
-			}
-		}
-		if (!ok) {
-			res.error = "invalid URL : " + url;
-			return res;
-		}
-	}
-	
-	std::string html = http_get(url);
-	if (!html.size()) {
-		res.error = "failed to download video page";
-		return res;
-	}
-	
+static void parse_channel_data(Json data, YouTubeChannelDetail &res) {
 	std::string channel_name = "stub channel name";
 	
-	auto initial_data = get_initial_data(html);
-	
-	auto metadata_renderer = initial_data["metadata"]["channelMetadataRenderer"];
+	auto metadata_renderer = data["metadata"]["channelMetadataRenderer"];
 	res.name = metadata_renderer["title"].string_value();
-	res.subscriber_count_str = get_text_from_object(initial_data["header"]["c4TabbedHeaderRenderer"]["subscriberCountText"]);
+	res.subscriber_count_str = get_text_from_object(data["header"]["c4TabbedHeaderRenderer"]["subscriberCountText"]);
 	res.id = metadata_renderer["externalId"].string_value();
 	res.url = "https://m.youtube.com/channel/" + metadata_renderer["externalId"].string_value();
 	res.description = metadata_renderer["description"].string_value();
 	
-	for (auto tab : initial_data["contents"]["singleColumnBrowseResultsRenderer"]["tabs"].array_items()) {
+	for (auto tab : data["contents"]["singleColumnBrowseResultsRenderer"]["tabs"].array_items()) {
 		if (tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"] != Json()) {
 			for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items()) if (i["itemSectionRenderer"] != Json()) {
 				for (auto content : i["itemSectionRenderer"]["contents"].array_items()) {
@@ -84,7 +53,7 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 		}
 	}
 	{ // top banner
-		for (auto banner : initial_data["header"]["c4TabbedHeaderRenderer"]["banner"]["thumbnails"].array_items()) {
+		for (auto banner : data["header"]["c4TabbedHeaderRenderer"]["banner"]["thumbnails"].array_items()) {
 			int cur_width = banner["width"].int_value();
 			if (cur_width == 1060) {
 				res.banner_url = banner["url"].string_value();
@@ -100,7 +69,7 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 	}
 	{ // icon
 		int min_width = 1000000000;
-		for (auto icon : initial_data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"].array_items()) {
+		for (auto icon : data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"].array_items()) {
 			int cur_width = icon["width"].int_value();
 			if (min_width > cur_width) {
 				min_width = cur_width;
@@ -109,9 +78,131 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url) {
 		}
 		if (res.icon_url.substr(0, 2) == "//") res.icon_url = "https:" + res.icon_url;
 	}
+}
+
+YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id) {
+	YouTubeChannelDetail res;
 	
+	Json data;
+	if (starts_with(url_or_id, "http://") || starts_with(url_or_id, "https://")) {
+		std::string &url = url_or_id;
+		res.url_original = url;
+		
+		url = convert_url_to_mobile(url);
+		
+		// append "/videos" at the end of the url
+		{
+			bool ok = false;
+			for (auto pattern : std::vector<std::string>{"https://m.youtube.com/channel/", "https://m.youtube.com/c/", "https://m.youtube.com/user/"}) {
+				if (url.substr(0, pattern.size()) == pattern) {
+					url = url.substr(pattern.size(), url.size());
+					auto next_slash = std::find(url.begin(), url.end(), '/');
+					url = pattern + std::string(url.begin(), next_slash) + "/videos";
+					ok = true;
+					break;
+				}
+			}
+			if (!ok) {
+				res.error = "invalid URL : " + url;
+				return res;
+			}
+		}
+		
+		std::string html = http_get(url);
+		if (!html.size()) {
+			res.error = "failed to download video page";
+			return res;
+		}
+		data = get_initial_data(html);
+	} else {
+		if (innertube_key == "") fetch_innertube_key_and_player();
+		if (innertube_key == "") {
+			res.error = "innertube key empty";
+			return res;
+		}
+		
+		std::string &id = url_or_id;
+		res.url_original = "https://m.youtube.com/channel/" + id;
+		
+		{
+			std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00"}}, "browseId": "%2", "params":"EgZ2aWRlb3M%3D"})";
+			post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
+			post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
+			post_content = std::regex_replace(post_content, std::regex("%2"), id);
+			
+			std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + innertube_key;
+			
+			std::string received_str = http_post_json(post_url, post_content);
+			if (received_str != "") {
+				std::string json_err;
+				data = Json::parse(received_str, json_err);
+				if (json_err != "") {
+					debug("[post] json parsing failed : " + json_err);
+					res.error = "[post] json parsing failed";
+					return res;
+				}
+			}
+		}
+		if (data == Json()) {
+			debug("[continue] failed (json empty)");
+			res.error = "received json empty";
+			return res;
+		}
+	}
+	
+	parse_channel_data(data, res);
 	return res;
 }
+std::vector<YouTubeChannelDetail> youtube_parse_channel_page_multi(std::vector<std::string> ids, std::function<void (int, int)> progress) {
+	std::vector<YouTubeChannelDetail> res;
+	if (progress) progress(0, ids.size());
+#ifdef _WIN32
+	int finished = 0;
+	for (auto id : ids) {
+		res.push_back(youtube_parse_channel_page(id));
+		if (progress) progress(++finished, ids.size());
+	}
+#else
+	std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + innertube_key + "&prettyPrint=false";
+	
+	std::vector<HttpRequest> requests;
+	int n = ids.size();
+	int finished = 0;
+	for (int i = 0; i < n; i++) {
+		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00"}}, "browseId": "%2", "params":"EgZ2aWRlb3M%3D"})";
+		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
+		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
+		post_content = std::regex_replace(post_content, std::regex("%2"), ids[i]);
+		requests.push_back(http_post_json_request(post_url, post_content).with_on_finish_callback([&] (NetworkResult &, int cur) {
+			if (progress) progress(++finished, n);
+		}));
+	}
+	debug("access(multi)...");
+	auto results = thread_network_session_list.perform(requests);
+	debug("ok");
+	for (auto result : results) {
+		std::string received_str = std::string(result.data.begin(), result.data.end());
+		if (received_str != "") {
+			std::string json_err;
+			data = Json::parse(received_str, json_err);
+			if (json_err != "") {
+				debug("[post] json parsing failed : " + json_err);
+				res.error = "[post] json parsing failed";
+				return res;
+			}
+		}
+		if (data == Json()) {
+			debug("[continue] failed (json empty)");
+			res.error = "received json empty";
+			return res;
+		}
+		if (cur_res.error == "") parse_channel_data(data, cur_res);
+		res.push_back(cur_res);
+	}
+#endif
+	return res;
+}
+
 
 YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result) {
 	YouTubeChannelDetail new_result = prev_result;

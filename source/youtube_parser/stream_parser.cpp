@@ -198,8 +198,9 @@ static void extract_like_dislike_counts(Json buttons, YouTubeVideoDetail &res) {
 }
 
 static void extract_owner(Json slimOwnerRenderer, YouTubeVideoDetail &res) {
+	res.author.id = slimOwnerRenderer["navigationEndpoint"]["browseEndpoint"]["browseId"].string_value();
+	// !!! res.author.url = slimOwnerRenderer["channelUrl"].string_value();
 	res.author.name = slimOwnerRenderer["channelName"].string_value();
-	res.author.url = slimOwnerRenderer["channelUrl"].string_value();
 	res.author.subscribers = get_text_from_object(slimOwnerRenderer["expandedSubtitle"]);
 	
 	if (!slimOwnerRenderer["thumbnail"]["thumbnails"].array_items().size()) {
@@ -493,8 +494,10 @@ YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(Json comment_r
 	cur_comment.id = comment_renderer["commentId"].string_value();
 	cur_comment.content = get_text_from_object(comment_renderer["contentText"]);
 	cur_comment.reply_num = comment_renderer["replyCount"].int_value(); // Json.int_value() defaults to zero, so... it works
+	debug(comment_renderer.dump() + "\n");
+	cur_comment.author.id = comment_renderer["authorEndpoint"]["browseEndpoint"]["browseId"].string_value();
+	// !!! cur_comment.author.url = "https://m.youtube.com" + comment_renderer["authorEndpoint"]["browseEndpoint"]["canonicalBaseUrl"].string_value();
 	cur_comment.author.name = get_text_from_object(comment_renderer["authorText"]);
-	cur_comment.author.url = "https://m.youtube.com" + comment_renderer["authorEndpoint"]["browseEndpoint"]["canonicalBaseUrl"].string_value();
 	cur_comment.publish_date = get_text_from_object(comment_renderer["publishedTimeText"]);
 	cur_comment.upvotes_str = get_text_from_object(comment_renderer["voteCount"]);
 	if (comment_renderer["authorThumbnail"]["thumbnails"].array_items().size()) {

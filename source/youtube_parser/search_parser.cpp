@@ -61,8 +61,9 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSuccinctItem> &
 	} else if (content["compactChannelRenderer"] != Json()) {
 		auto channel_renderer = content["compactChannelRenderer"];
 		YouTubeChannelSuccinct cur_result;
+		cur_result.id = channel_renderer["navigationEndpoint"]["browseEndpoint"]["browseId"].string_value();
+		// !!! cur_result.url = "https://m.youtube.com/channel/" + channel_renderer["channelId"].string_value();
 		cur_result.name = get_text_from_object(channel_renderer["displayName"]);
-		cur_result.url = "https://m.youtube.com/channel/" + channel_renderer["channelId"].string_value();
 		cur_result.subscribers = get_text_from_object(channel_renderer["subscriberCountText"]);
 		cur_result.video_num = get_text_from_object(channel_renderer["videoCountText"]);
 		

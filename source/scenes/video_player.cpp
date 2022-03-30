@@ -110,7 +110,7 @@ namespace VideoPlayer {
 	std::set<PostView *> comment_thumbnail_loaded_list;
 	
 	volatile bool is_loading = false;
-	std::string channel_url_pressed;
+	std::string channel_id_pressed;
 	std::string suggestion_clicked_url; // also used for playlist
 	
 	int TAB_NUM = 5;
@@ -647,7 +647,7 @@ static PostView *comment_to_view(const YouTubeVideoDetail::Comment &comment, int
 		if (next_itr != cur_content.end()) itr = std::next(next_itr);
 		else break;
 	}
-	std::string author_url = comment.author.url;
+	std::string author_id = comment.author.id;
 	return (new PostView(0, 0, 320))
 		->set_author_name(comment.author.name)
 		->set_author_icon_url(comment.author.icon_url)
@@ -655,7 +655,7 @@ static PostView *comment_to_view(const YouTubeVideoDetail::Comment &comment, int
 		->set_upvote_str(comment.upvotes_str)
 		->set_content_lines(cur_lines)
 		->set_has_more_replies([comment_index] () { return cur_video_info.comments[comment_index].has_more_replies(); })
-		->set_on_author_icon_pressed([author_url] (const PostView &view) { channel_url_pressed = author_url; })
+		->set_on_author_icon_pressed([author_id] (const PostView &view) { channel_id_pressed = author_id; })
 		->set_on_load_more_replies_pressed([comment_index] (PostView &view) {
 			queue_async_task(load_more_replies, (void *) comment_index);
 			view.is_loading_replies = true;
@@ -709,10 +709,10 @@ static void load_video_page(void *arg) {
 				title_font_size = 0.5;
 			} else title_font_size = MIDDLE_FONT_SIZE;
 			
-			std::string author_url = tmp_video_info.author.url;
+			std::string author_id = tmp_video_info.author.id;
 			new_main_icon_view
 				->set_handle(thumbnail_request(tmp_video_info.author.icon_url, SceneType::VIDEO_PLAYER, 1000, ThumbnailType::ICON))
-				->set_on_view_released([author_url] (View &) { channel_url_pressed = author_url; });
+				->set_on_view_released([author_id] (View &) { channel_id_pressed = author_id; });
 			main_tab_views = {
 				(new TextView(0, 0, 320, 15 * title_lines.size())) // title
 					->set_text_lines(title_lines)
@@ -1146,7 +1146,7 @@ static void load_more_replies(void *arg_) {
 			if (next_itr != cur_content.end()) itr = std::next(next_itr);
 			else break;
 		}
-		std::string author_url = cur_reply.author.url;
+		std::string author_id = cur_reply.author.id;
 		new_reply_views.push_back((new PostView(REPLY_INDENT, 0, 320 - REPLY_INDENT))
 			->set_author_name(cur_reply.author.name)
 			->set_author_icon_url(cur_reply.author.icon_url)
@@ -1154,7 +1154,7 @@ static void load_more_replies(void *arg_) {
 			->set_upvote_str(cur_reply.upvotes_str)
 			->set_content_lines(cur_lines)
 			->set_has_more_replies([] () { return false; })
-			->set_on_author_icon_pressed([author_url] (const PostView &view) { channel_url_pressed = author_url; })
+			->set_on_author_icon_pressed([author_id] (const PostView &view) { channel_id_pressed = author_id; })
 			->set_is_reply(true)
 		);
 	}
@@ -2032,10 +2032,10 @@ Intent VideoPlayer_draw(void)
 		else if (selected_tab == TAB_PLAYBACK) playback_tab_view->update(key);
 		else if (selected_tab == TAB_PLAYLIST) playlist_view->update(key);
 		
-		if (channel_url_pressed != "") {
+		if (channel_id_pressed != "") {
 			intent.next_scene = SceneType::CHANNEL;
-			intent.arg = channel_url_pressed;
-			channel_url_pressed = "";
+			intent.arg = channel_id_pressed;
+			channel_id_pressed = "";
 		}
 		if (suggestion_clicked_url != "") {
 			intent.next_scene = SceneType::VIDEO_PLAYER;

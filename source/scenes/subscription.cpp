@@ -143,15 +143,18 @@ static void load_subscription_feed(void *) {
 	auto channels = subscribed_channels;
 	resource_lock.unlock();
 	
-	feed_loading_progress = 0;
-	feed_loading_total = channels.size();
+	std::vector<std::string> ids;
+	for (auto channel : channels) ids.push_back(channel.id);
+	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
+	auto results = youtube_parse_channel_page_multi(ids, [] (int cur, int total) {
+		feed_loading_progress = cur;
+		feed_loading_total = total;
+		var_need_reflesh = true;
+	});
+	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
+	
 	std::map<std::pair<int, int>, std::vector<YouTubeVideoSuccinct> > loaded_videos;
-	for (auto channel : channels) {
-		Util_log_save("subsc", "load " + channel.name);
-		add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-		auto result = youtube_parse_channel_page(channel.url);
-		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
-		
+	for (auto result : results) {
 		// update the subscription metadata at the same time
 		if (result.name != "") {
 			SubscriptionChannel new_info;
@@ -164,9 +167,7 @@ static void load_subscription_feed(void *) {
 			subscription_subscribe(new_info);
 		}
 		
-		misc_tasks_request(TASK_SAVE_SUBSCRIPTION);
-		var_need_reflesh = true;
-		
+		int loaded_cnt = 0;
 		for (auto video : result.videos) {
 			std::string date_number_str;
 			for (auto c : video.publish_date) if (isdigit(c)) date_number_str.push_back(c);
@@ -204,11 +205,12 @@ static void load_subscription_feed(void *) {
 				continue;
 			}
 			if (std::pair<int, int>{unit, number} > std::pair<int, int>{5, 2}) continue; // more than 2 months old
-			Util_log_save("subsc", "+ : " + video.title);
+			loaded_cnt++;
 			loaded_videos[{unit, number}].push_back(video);
 		}
-		feed_loading_progress++;
+		Util_log_save("subsc", "loaded " + result.name + " : " + std::to_string(loaded_cnt) + " video(s)");
 	}
+	
 	std::vector<View *> new_feed_video_views;
 	for (auto &i : loaded_videos) {
 		for (auto video : i.second) {
