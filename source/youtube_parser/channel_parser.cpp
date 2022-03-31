@@ -127,10 +127,8 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id) {
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		post_content = std::regex_replace(post_content, std::regex("%2"), id);
 		
-		std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + innertube_key;
-		
 		access_and_parse_json(
-			[&] () { return http_post_json(post_url, post_content); },
+			[&] () { return http_post_json(get_innertube_api_url("browse"), post_content); },
 			[&] (Document &, RJson json) { parse_channel_data(json, res); },
 			[&] (const std::string &error) {
 				res.error = "[ch-id] " + error;
@@ -150,7 +148,6 @@ std::vector<YouTubeChannelDetail> youtube_parse_channel_page_multi(std::vector<s
 		if (progress) progress(++finished, ids.size());
 	}
 #else
-	std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + innertube_key + "&prettyPrint=false";
 	
 	std::vector<HttpRequest> requests;
 	int n = ids.size();
@@ -160,7 +157,7 @@ std::vector<YouTubeChannelDetail> youtube_parse_channel_page_multi(std::vector<s
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		post_content = std::regex_replace(post_content, std::regex("%2"), ids[i]);
-		requests.push_back(http_post_json_request(post_url, post_content).with_on_finish_callback([&] (NetworkResult &, int cur) {
+		requests.push_back(http_post_json_request(get_innertube_api_url("browse"), post_content).with_on_finish_callback([&] (NetworkResult &, int cur) {
 			if (progress) progress(++finished, n);
 		}));
 	}
@@ -203,10 +200,8 @@ YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &p
 	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
-	std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + innertube_key;
-	
 	access_and_parse_json(
-		[&] () { return http_post_json(post_url, post_content); },
+		[&] () { return http_post_json(get_innertube_api_url("browse"), post_content); },
 		[&] (Document &, RJson yt_result) {
 			new_result.continue_token = "";
 			
@@ -306,10 +301,8 @@ YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &
 	post_content = std::regex_replace(post_content, std::regex("%2"), prev_result.playlist_tab_browse_id);
 	post_content = std::regex_replace(post_content, std::regex("%3"), prev_result.playlist_tab_params);
 	
-	std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + innertube_key;
-	
 	access_and_parse_json(
-		[&] () { return http_post_json(post_url, post_content); },
+		[&] () { return http_post_json(get_innertube_api_url("browse"), post_content); },
 		[&] (Document &, RJson json) { channel_load_playlists_(json, new_result); },
 		[&] (const std::string &error) {
 			new_result.error = "[ch/pl] " + error;
@@ -411,10 +404,8 @@ YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		post_content = std::regex_replace(post_content, std::regex("%2"), prev_result.community_continuation_token);
 		
-		std::string post_url = "https://m.youtube.com/youtubei/v1/browse?key=" + innertube_key;
-		
 		access_and_parse_json(
-			[&] () { return http_post_json(post_url, post_content); },
+			[&] () { return http_post_json(get_innertube_api_url("browse"), post_content); },
 			[&] (Document &, RJson yt_result) {
 				RJson contents;
 				for (auto i : yt_result["onResponseReceivedEndpoints"].array_items()) if (i.has_key("appendContinuationItemsAction"))

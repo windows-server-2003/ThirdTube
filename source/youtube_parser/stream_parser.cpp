@@ -358,8 +358,8 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 		post_content = std::regex_replace(post_content, std::regex("%3"), country_code);
 		post_content = std::regex_replace(post_content, std::regex("%4"), std::to_string(sts));
 		std::string urls[2] = {
-			"https://www.youtube.com/youtubei/v1/next?key=" + innertube_key,
-			"https://www.youtube.com/youtubei/v1/player?key=" + innertube_key
+			get_innertube_api_url("next"),
+			get_innertube_api_url("player")
 		};
 #		ifdef _WIN32
 		std::string json_str[2]; // {/next, /player}
@@ -468,10 +468,8 @@ YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDe
 	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
-	std::string post_url = "https://m.youtube.com/youtubei/v1/next?key=" + innertube_key;
-	
 	access_and_parse_json(
-		[&] () { return http_post_json(post_url, post_content); },
+		[&] () { return http_post_json(get_innertube_api_url("next"), post_content); },
 		[&] (Document &, RJson yt_result) {
 			new_result.suggestions_continue_token = "";
 			for (auto i : yt_result["onResponseReceivedEndpoints"].array_items())
@@ -565,7 +563,7 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		
 		access_and_parse_json(
-			[&] () { return http_post_json("https://m.youtube.com/youtubei/v1/next?key=" + innertube_key, post_content); },
+			[&] () { return http_post_json(get_innertube_api_url("next"), post_content); },
 			[&] (Document &, RJson yt_result) {
 				new_result.comment_continue_type = -1;
 				new_result.comment_continue_token = "";
@@ -608,7 +606,7 @@ YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVi
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
 	access_and_parse_json(
-		[&] () { return http_post_json("https://m.youtube.com/youtubei/v1/next?key=" + innertube_key, post_content); },
+		[&] () { return http_post_json(get_innertube_api_url("next"), post_content); },
 		[&] (Document &, RJson yt_result) {
 			for (auto i : yt_result["onResponseReceivedEndpoints"].array_items()) {
 				for (auto item : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {

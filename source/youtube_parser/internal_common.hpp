@@ -114,6 +114,8 @@ namespace youtube_parser {
 	extern int sts;
 	extern bool quick_mode;
 	
+	inline std::string get_innertube_api_url(std::string api_name) { return "https://m.youtube.com/youtubei/v1/" + api_name + "?key=" + innertube_key + "&prettyPrint=false"; }
+	
 #	ifndef _WIN32
 	extern NetworkSessionList thread_network_session_list;
 	HttpRequest http_get_request(const std::string &url, std::map<std::string, std::string> headers = {});

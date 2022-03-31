@@ -2,17 +2,6 @@
 #include "internal_common.hpp"
 #include "parser.hpp"
 
-static RJson get_initial_data(Document &json_root, const std::string &html) {
-	RJson res;
-	if (fast_extract_initial(json_root, html, "ytInitialData", res)) return res;
-	res = get_succeeding_json_regexes(json_root, html, {
-		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]",
-		"ytInitialData\\s*=\\s*['\\{]"
-	});
-	if (!res.is_valid()) return get_error_json("did not match any of the ytInitialData regexes");
-	return res;
-}
-
 static bool parse_searched_item(RJson content, std::vector<YouTubeSuccinctItem> &res) {
 	if (content.has_key("compactVideoRenderer")) {
 		auto video_renderer = content["compactVideoRenderer"];
@@ -99,24 +88,54 @@ static bool parse_searched_item(RJson content, std::vector<YouTubeSuccinctItem> 
 YouTubeSearchResult youtube_parse_search(std::string url) {
 	YouTubeSearchResult res;
 	
-	url = convert_url_to_mobile(url);
-	
-	std::string html = http_get(url);
-	if (!html.size()) {
-		res.error = "failed to download video page";
-		return res;
+	std::string query_word;
+	auto pos = url.find("?search_query=");
+	if (pos == std::string::npos) pos = url.find("&search_query=");
+	if (pos != std::string::npos) {
+		size_t head = pos + std::string("?search_query=").size();
+		while (head < url.size() && url[head] != '&') query_word.push_back(url[head++]);
+	}
+	{ // decode back %?? url encoding because the API parameter doesn't seem to need it
+		std::string new_query_word;
+		for (size_t i = 0; i < query_word.size(); ) {
+			auto hex_to_int = [] (char c) {
+				if (isdigit(c)) return c - '0';
+				if (isupper(c)) return c - 'A' + 10;
+				if (islower(c)) return c - 'a' + 10;
+				return 0;
+			};
+			if (query_word[i] == '%' && i + 2 < query_word.size()) {
+				new_query_word.push_back(hex_to_int(query_word[i + 1]) * 16 + hex_to_int(query_word[i + 2]));
+				i += 3;
+			} else new_query_word.push_back(query_word[i++]);
+		}
+		query_word = new_query_word;
 	}
 	
-	Document json_root;
-	auto initial_data = get_initial_data(json_root, html);
-	res.estimated_result_num = std::stoll(initial_data["estimatedResults"].string_value());
+	std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00"}}, "query": ")"
+		+ query_word + "\"}";
+	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
+	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
-	for (auto i : initial_data["contents"]["sectionListRenderer"]["contents"].array_items()) {
-		if (i.has_key("itemSectionRenderer"))
-			for (auto j : i["itemSectionRenderer"]["contents"].array_items()) parse_searched_item(j, res.results);
-		if (i.has_key("continuationItemRenderer"))
-			res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
-	}
+	access_and_parse_json(
+		[&] () { return http_post_json(get_innertube_api_url("search"), post_content); },
+		[&] (Document &, RJson yt_result) {
+			res.estimated_result_num = std::stoll(yt_result["estimatedResults"].string_value());
+			res.continue_token = "";
+			for (auto i : yt_result["contents"]["sectionListRenderer"]["contents"].array_items()) {
+				if (i.has_key("itemSectionRenderer"))
+					for (auto j : i["itemSectionRenderer"]["contents"].array_items()) parse_searched_item(j, res.results);
+				if (i.has_key("continuationItemRenderer"))
+					res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
+			}
+			if (res.continue_token == "") debug("failed to get next continue token");
+		},
+		[&] (const std::string &error) {
+			res.error = "[se] " + error;
+			debug(res.error);
+		}
+	);
+	
 	return res;
 }
 YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result) {
@@ -138,10 +157,8 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
-	std::string post_url = "https://m.youtube.com/youtubei/v1/search?key=" + innertube_key;
-	
 	access_and_parse_json(
-		[&] () { return http_post_json(post_url, post_content); },
+		[&] () { return http_post_json(get_innertube_api_url("search"), post_content); },
 		[&] (Document &, RJson yt_result) {
 			new_result.estimated_result_num = std::stoll(yt_result["estimatedResults"].string_value());
 			new_result.continue_token = "";

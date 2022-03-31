@@ -44,7 +44,7 @@ namespace youtube_parser {
 		}
 		std::string command = "curl -X POST -H \"Content-Type: application/json\" ";
 		for (auto header : headers) command += "-H \"" + header.first + ": " + header.second + "\" ";
-		command += url + " -o curl_tmp.txt --data-binary \"@post_tmp.txt\"";
+		command += "\"" + url + "\" -o curl_tmp.txt --data-binary \"@post_tmp.txt\"";
 		system(command.c_str());
 		
 		std::ifstream file("curl_tmp.txt", std::ios::binary);
@@ -302,7 +302,6 @@ namespace youtube_parser {
 			sts = -1;
 			debug("could not find STS");
 		}
-		debug(std::to_string(sts));
 	}
 	RJson get_error_json(const std::string &error) {
 		Document data;
