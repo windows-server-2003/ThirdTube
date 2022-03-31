@@ -2,37 +2,19 @@
 #include "internal_common.hpp"
 #include "parser.hpp"
 
-static Json get_initial_data(const std::string &html) {
-	Json res;
-	{ // fast extraction
-		size_t head = 0;
-		while (head < html.size()) {
-			auto pos = html.find("ytInitialData", head);
-			if (pos == std::string::npos) break;
-			pos += std::string("ytInitialData").size();
-			while (pos < html.size() && isspace(html[pos])) pos++;
-			if (pos < html.size() && html[pos] == '=') {
-				pos++;
-				while (pos < html.size() && isspace(html[pos])) pos++;
-				if (pos < html.size() && (html[pos] == '\'' || html[pos] == '\\' || html[pos] == '{')) {
-					res = to_json(html, pos);
-					break;
-				}
-			}
-			head = pos;
-		}
-	}
-	if (res != Json()) return res;
-	res = get_succeeding_json_regexes(html, {
-		"ytInitialData\\s*=\\s*['\\{]",
-		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]"
+static RJson get_initial_data(Document &json_root, const std::string &html) {
+	RJson res;
+	if (fast_extract_initial(json_root, html, "ytInitialData", res)) return res;
+	res = get_succeeding_json_regexes(json_root, html, {
+		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]",
+		"ytInitialData\\s*=\\s*['\\{]"
 	});
-	if (res == Json()) return Json::object{{{"Error", "did not match any of the ytInitialData regexes"}}};
+	if (!res.is_valid()) return get_error_json("did not match any of the ytInitialData regexes");
 	return res;
 }
 
-static bool parse_searched_item(Json content, std::vector<YouTubeSuccinctItem> &res) {
-	if (content["compactVideoRenderer"] != Json()) {
+static bool parse_searched_item(RJson content, std::vector<YouTubeSuccinctItem> &res) {
+	if (content.has_key("compactVideoRenderer")) {
 		auto video_renderer = content["compactVideoRenderer"];
 		YouTubeVideoSuccinct cur_result;
 		std::string video_id = video_renderer["videoId"].string_value();
@@ -58,7 +40,7 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSuccinctItem> &
 		}*/
 		res.push_back(YouTubeSuccinctItem(cur_result));
 		return true;
-	} else if (content["compactChannelRenderer"] != Json()) {
+	} else if (content.has_key("compactChannelRenderer")) {
 		auto channel_renderer = content["compactChannelRenderer"];
 		YouTubeChannelSuccinct cur_result;
 		cur_result.id = channel_renderer["navigationEndpoint"]["browseEndpoint"]["browseId"].string_value();
@@ -86,15 +68,15 @@ static bool parse_searched_item(Json content, std::vector<YouTubeSuccinctItem> &
 		
 		res.push_back(YouTubeSuccinctItem(cur_result));
 		return true;
-	} else if (content["compactRadioRenderer"] != Json() || content["compactPlaylistRenderer"] != Json()) {
-		auto playlist_renderer = content["compactRadioRenderer"];
-		if (playlist_renderer == Json()) playlist_renderer = content["compactPlaylistRenderer"];
+	} else if (content.has_key("compactRadioRenderer") || content.has_key("compactPlaylistRenderer")) {
+		auto playlist_renderer = content.has_key("compactRadioRenderer") ? content["compactRadioRenderer"] : content["compactPlaylistRenderer"];
 		
 		YouTubePlaylistSuccinct cur_list;
 		cur_list.title = get_text_from_object(playlist_renderer["title"]);
 		cur_list.video_count_str = get_text_from_object(playlist_renderer["videoCountText"]);
 		for (auto thumbnail : playlist_renderer["thumbnail"]["thumbnails"].array_items())
-			if (thumbnail["url"].string_value().find("/default.jpg") != std::string::npos) cur_list.thumbnail_url = thumbnail["url"].string_value();
+			if (thumbnail["url"].string_value().find("/default.jpg") != std::string::npos)
+				cur_list.thumbnail_url = thumbnail["url"].string_value();
 		
 		cur_list.url = convert_url_to_mobile(playlist_renderer["shareUrl"].string_value());
 		if (!starts_with(cur_list.url, "https://m.youtube.com/watch", 0)) {
@@ -125,25 +107,16 @@ YouTubeSearchResult youtube_parse_search(std::string url) {
 		return res;
 	}
 	
-	auto initial_data = get_initial_data(html);
+	Document json_root;
+	auto initial_data = get_initial_data(json_root, html);
 	res.estimated_result_num = std::stoll(initial_data["estimatedResults"].string_value());
 	
 	for (auto i : initial_data["contents"]["sectionListRenderer"]["contents"].array_items()) {
-		if (i["itemSectionRenderer"] != Json()) {
-			for (auto j : i["itemSectionRenderer"]["contents"].array_items()) {
-				parse_searched_item(j, res.results);
-			}
-		}
-		if (i["continuationItemRenderer"] != Json()) {
+		if (i.has_key("itemSectionRenderer"))
+			for (auto j : i["itemSectionRenderer"]["contents"].array_items()) parse_searched_item(j, res.results);
+		if (i.has_key("continuationItemRenderer"))
 			res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
-		}
 	}
-	
-	/*
-	for (auto i : res.results) {
-		debug(i.title + " " + i.author + " " + i.duration_text + " " + i.url + " " + i.thumbnail_url);
-	}
-	debug(res.estimated_result_num);*/
 	return res;
 }
 YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result) {
@@ -160,45 +133,33 @@ YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_resu
 	}
 	
 	// POST to get more results
-	Json yt_result;
-	{
-		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
-			+ prev_result.continue_token + "\"}";
-		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
-		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
-		
-		std::string post_url = "https://m.youtube.com/youtubei/v1/search?key=" + innertube_key;
-		
-		std::string received_str = http_post_json(post_url, post_content);
-		if (received_str != "") {
-			std::string json_err;
-			yt_result = Json::parse(received_str, json_err);
-			if (json_err != "") {
-				debug("[post] json parsing failed : " + json_err);
-				new_result.error = "[post] json parsing failed";
-				return new_result;
-			}
-		}
-	}
-	if (yt_result == Json()) {
-		debug("[continue] failed (json empty)");
-		new_result.error = "received json empty";
-		return new_result;
-	}
+	std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
+		+ prev_result.continue_token + "\"}";
+	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
+	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
-	new_result.estimated_result_num = stoll(yt_result["estimatedResults"].string_value());
-	new_result.continue_token = "";
-	for (auto i : yt_result["onResponseReceivedCommands"].array_items()) if (i["appendContinuationItemsAction"] != Json()) {
-		for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
-			if (j["itemSectionRenderer"] != Json()) {
-				for (auto item : j["itemSectionRenderer"]["contents"].array_items()) {
-					parse_searched_item(item, new_result.results);
+	std::string post_url = "https://m.youtube.com/youtubei/v1/search?key=" + innertube_key;
+	
+	access_and_parse_json(
+		[&] () { return http_post_json(post_url, post_content); },
+		[&] (Document &, RJson yt_result) {
+			new_result.estimated_result_num = std::stoll(yt_result["estimatedResults"].string_value());
+			new_result.continue_token = "";
+			for (auto i : yt_result["onResponseReceivedCommands"].array_items()) {
+				for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
+					if (j.has_key("itemSectionRenderer")) {
+						for (auto item : j["itemSectionRenderer"]["contents"].array_items()) parse_searched_item(item, new_result.results);
+					} else if (j.has_key("continuationItemRenderer"))
+						new_result.continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 				}
-			} else if (j["continuationItemRenderer"] != Json()) {
-				new_result.continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 			}
+			if (new_result.continue_token == "") debug("failed to get next continue token");
+		},
+		[&] (const std::string &error) {
+			new_result.error = "[se+] " + error;
+			debug(new_result.error);
 		}
-	}
-	if (new_result.continue_token == "") debug("failed to get next continue token");
+	);
+	
 	return new_result;
 }

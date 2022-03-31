@@ -131,9 +131,9 @@ namespace youtube_parser {
 		return res;
 	}
 
-	std::string get_text_from_object(Json json) {
-		if (json["simpleText"] != Json()) return json["simpleText"].string_value();
-		if (json["runs"] != Json()) {
+	std::string get_text_from_object(RJson json) {
+		if (json["simpleText"].is_valid()) return json["simpleText"].string_value();
+		if (json["runs"].is_valid()) {
 			std::string res;
 			for (auto i : json["runs"].array_items()) res += i["text"].string_value();
 			return res;
@@ -209,18 +209,15 @@ namespace youtube_parser {
 		}
 	}
 	// `html` can contain unnecessary garbage at the end of the actual json data
-	Json to_json(const std::string &html, size_t start) {
-		auto error_json = [&] (std::string error) {
-			return Json::object{{{"Error", error}}};
-		};
+	RJson to_json(Document &json_root, const std::string &html, size_t start) {
 		auto content = remove_garbage(html, start);
 		std::string error;
-		auto res = Json::parse(content, error);
-		if (error != "") return error_json(error);
+		auto res = RJson::parse(json_root, (char *) &content[0], error);
+		if (error != "") get_error_json(error);
 		return res;
 	}
 	// search for `var_name` = ' or `var_name` = {
-	bool fast_extract_initial(const std::string &html, const std::string &var_name, Json &res) {
+	bool fast_extract_initial(Document &json_root, const std::string &html, const std::string &var_name, RJson &res) {
 		size_t head = 0;
 		while (head < html.size()) {
 			auto pos = html.find(var_name, head);
@@ -231,25 +228,26 @@ namespace youtube_parser {
 				pos++;
 				while (pos < html.size() && isspace(html[pos])) pos++;
 				if (pos < html.size() && (html[pos] == '\'' || html[pos] == '{')) {
-					res = to_json(html, pos);
-					if (res != Json()) return true;
+					res = to_json(json_root, html, pos);
+					if (res.has_key("Error")) debug(std::string("fast_extract_initial : ") + res["Error"].string_value());
+					else if (res.is_valid()) return true;
 				}
 			}
 			head = pos;
 		}
 		return false;
 	}
-	Json get_succeeding_json_regexes(const std::string &html, std::vector<const char *> patterns) {
+	RJson get_succeeding_json_regexes(Document &json_root, const std::string &html, std::vector<const char *> patterns) {
 		for (auto pattern_str : patterns) {
 			std::regex pattern = std::regex(std::string(pattern_str));
 			std::smatch match_res;
 			if (std::regex_search(html, match_res, pattern)) {
 				size_t start = match_res.suffix().first - html.begin() - 1;
-				auto res = to_json(html, start);
-				if (res["Error"] == Json()) return res;
+				auto res = to_json(json_root, html, start);
+				if (!res.has_key("Error")) return res;
 			}
 		}
-		return Json();
+		return RJson();
 	}
 
 	std::string convert_url_to_mobile(std::string url) {
@@ -304,5 +302,16 @@ namespace youtube_parser {
 			sts = -1;
 			debug("could not find STS");
 		}
+		debug(std::to_string(sts));
+	}
+	RJson get_error_json(const std::string &error) {
+		Document data;
+		data.SetObject();
+		Value key;
+		key = "Error";
+		Value value;
+		value.SetString(error.c_str(), data.GetAllocator());
+		data.AddMember(key, value, data.GetAllocator());
+		return RJson(data);
 	}
 }

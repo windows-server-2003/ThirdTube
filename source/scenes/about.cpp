@@ -35,6 +35,7 @@ namespace About {
 	const std::vector<std::pair<std::string, std::vector<std::string> > > third_party_licenses = {
 		{"FFmpeg", {"by the FFmpeg developers under LGPLv2"} },
 		{"json11", {"by Dropbox under MIT License"} },
+		{"rapidjson", {"by Tencent and Milo Yip under MIT license"}},
 		{"Duktape", {"by Duktape authors under MIT License"} },
 		{"libctru", {"by devkitPro under zlib License"} },
 		{"libcurl", {"by Daniel Stenberg and many contributors", "under the curl license"} },
