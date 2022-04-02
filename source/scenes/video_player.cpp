@@ -78,7 +78,7 @@ namespace VideoPlayer {
 	int vid_height_org = 0;
 	int vid_tex_width[2] = {0, 0};
 	int vid_tex_height[2] = {0, 0};
-	int vid_mvd_image_num = 0; // write the texture alternately to avoid scattering 
+	int texture_index_head = 0; // write the texture alternately to avoid scattering 
 	std::string cur_displaying_url = "";
 	std::string cur_playing_url = "";
 	std::string vid_video_format = "n/a";
@@ -1459,6 +1459,24 @@ void video_set_linear_filter_enabled(bool enabled) {
 }
 void video_set_skip_drawing(bool skip) { video_skip_drawing = skip; }
 
+bool video_should_draw_top_bar() { return !var_full_screen_mode || !network_decoder.ready; }
+u32 video_get_top_screen_background_color() { return vid_play_request && network_decoder.ready && !audio_only_mode ? DEF_DRAW_BLACK : DEFAULT_BACK_COLOR; }
+void video_draw_video_frame() {
+	int texture_index = !texture_index_head;
+	if (vid_play_request && network_decoder.ready && !audio_only_mode) {
+		Draw_texture(vid_image[texture_index].c2d, vid_x, vid_y, vid_tex_width[texture_index] * vid_zoom, vid_tex_height[texture_index] * vid_zoom);
+		caption_overlay_view->cur_timestamp = vid_current_pos;
+		caption_overlay_view->draw();
+	} else Draw_texture(vid_banner[var_night_mode], 0, 15, 400, 225);
+}
+void video_draw_top_screen() {
+	Draw_screen_ready(0, video_get_top_screen_background_color());
+	video_draw_video_frame();
+	if (Util_log_query_log_show_flag()) Util_log_draw();
+	if (video_should_draw_top_bar()) Draw_top_ui();
+	if (var_debug_mode) Draw_debug_info();
+}
+
 
 static void decode_thread(void* arg) {
 	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Thread started.");
@@ -1490,7 +1508,7 @@ static void decode_thread(void* arg) {
 			vid_zoom = 1;
 			vid_width = 0;
 			vid_height = 0;
-			vid_mvd_image_num = 0;
+			texture_index_head = 0;
 			vid_video_format = "n/a";
 			vid_audio_format = "n/a";
 			vid_change_video_request = false;
@@ -1786,9 +1804,6 @@ static void convert_thread(void* arg) {
 				
 				if(result.code == 0)
 				{
-					vid_tex_width[vid_mvd_image_num] = vid_width_org;
-					vid_tex_height[vid_mvd_image_num] = vid_height_org;
-					
 					// we don't want to include the sleep time in the performance profiling
 					osTickCounterUpdate(&counter0);
 					vid_copy_time[1] = osTickCounterRead(&counter0);
@@ -1812,10 +1827,12 @@ static void convert_thread(void* arg) {
 					osTickCounterUpdate(&counter1);
 					
 					if (!video_skip_drawing) {
-						result = Draw_set_texture_data(&vid_image[vid_mvd_image_num], video, vid_width, vid_height_org, 1024, 1024, GPU_RGB565);
+						vid_tex_width[texture_index_head] = vid_width_org;
+						vid_tex_height[texture_index_head] = vid_height_org;
+						result = Draw_set_texture_data(&vid_image[texture_index_head], video, vid_width, vid_height_org, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
 							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
-						vid_mvd_image_num = !vid_mvd_image_num;
+						texture_index_head = !texture_index_head;
 					}
 
 					osTickCounterUpdate(&counter0);
@@ -1886,8 +1903,6 @@ Intent VideoPlayer_draw(void)
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	
-	int image_num = !vid_mvd_image_num;
-
 	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 	
 	//fit to screen size
@@ -1901,24 +1916,10 @@ Intent VideoPlayer_draw(void)
 	
 	if(var_need_reflesh || !var_eco_mode)
 	{
-		bool video_playing = vid_play_request && network_decoder.ready && !audio_only_mode;
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, video_playing ? DEF_DRAW_BLACK : DEFAULT_BACK_COLOR);
-
-		if (video_playing) {
-			//video
-			Draw_texture(vid_image[image_num].c2d, vid_x, vid_y, vid_tex_width[image_num] * vid_zoom, vid_tex_height[image_num] * vid_zoom);
-		} else Draw_texture(vid_banner[var_night_mode], 0, 15, 400, 225);
-
-		if(Util_log_query_log_show_flag())
-			Util_log_draw();
-
-		if (!var_full_screen_mode || !network_decoder.ready) Draw_top_ui();
-		if (var_debug_mode) Draw_debug_info();
-		caption_overlay_view->cur_timestamp = vid_current_pos;
-		caption_overlay_view->draw();
-
+		video_draw_top_screen();
+		
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 
 		draw_video_content(key);

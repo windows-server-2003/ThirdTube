@@ -631,13 +631,7 @@ Intent Sem_draw(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, DEFAULT_BACK_COLOR);
-
-		if(Util_log_query_log_show_flag())
-			Util_log_draw();
-
-		Draw_top_ui();
-		if (var_debug_mode) Draw_debug_info();
+		video_draw_top_screen();
 		
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
