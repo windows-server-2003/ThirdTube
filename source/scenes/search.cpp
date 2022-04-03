@@ -455,32 +455,10 @@ Intent Search_draw(void)
 		
 		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
 		
-		static int consecutive_scroll = 0;
-		if (key.h_c_up || key.h_c_down) {
-			if (key.h_c_up) consecutive_scroll = std::max(0, consecutive_scroll) + 1;
-			else consecutive_scroll = std::min(0, consecutive_scroll) - 1;
-			
-			float scroll_amount = DPAD_SCROLL_SPEED0;
-			if (std::abs(consecutive_scroll) > DPAD_SCROLL_SPEED1_THRESHOLD) scroll_amount = DPAD_SCROLL_SPEED1;
-			if (key.h_c_up) scroll_amount *= -1;
-			
-			result_view->scroll(scroll_amount);
-			var_need_reflesh = true;
-		} else consecutive_scroll = 0;
-		
 		if (key.p_a) search();
-		else if(key.h_touch || key.p_touch) var_need_reflesh = true;
 		
 		if (key.p_b) intent.next_scene = SceneType::BACK;
 	}
-	
-	
-	if(Util_log_query_log_show_flag())
-		Util_log_main(key);
-	
-	if ((key.h_x && key.p_y) || (key.h_y && key.p_x)) var_debug_mode = !var_debug_mode;
-	if ((key.h_x && key.p_a) || (key.h_x && key.p_a)) var_show_fps = !var_show_fps;
-	if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	
 	return intent;
 }

@@ -19,6 +19,7 @@ protected :
 	std::deque<int> touch_moves;
 	float inertia = 0;
 	float selected_darkness = 0;
+	int consecutive_cpad_scroll = 0;
 	bool grabbed = false;
 	bool scrolling = false;
 public :

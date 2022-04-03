@@ -1470,6 +1470,13 @@ void video_draw_video_frame() {
 	} else Draw_texture(vid_banner[var_night_mode], 0, 15, 400, 225);
 }
 void video_draw_top_screen() {
+	// fit to screen size
+	vid_zoom = std::min(401.0 / vid_width_org, (var_full_screen_mode ? 241.0 : 226.0) / vid_height_org);
+	vid_zoom = std::min(10.0, std::max(0.05, vid_zoom));
+	vid_x = (400 - (vid_width_org * vid_zoom)) / 2;
+	vid_y = ((var_full_screen_mode ? 240 : 225) - (vid_height_org * vid_zoom)) / 2;
+	if (!var_full_screen_mode) vid_y += 15;
+	
 	Draw_screen_ready(0, video_get_top_screen_background_color());
 	video_draw_video_frame();
 	if (Util_log_query_log_show_flag()) Util_log_draw();
@@ -1880,7 +1887,7 @@ void video_set_show_debug_info(bool show) {
 
 
 #define DURATION_FONT_SIZE 0.4
-static void draw_video_content(Hid_info key) {
+static void draw_video_content() {
 	small_resource_lock.lock();
 	if (selected_tab == TAB_PLAYLIST) playlist_view->draw();
 	else if (selected_tab == TAB_PLAYBACK) playback_tab_view->draw();
@@ -1905,13 +1912,6 @@ Intent VideoPlayer_draw(void)
 	
 	thumbnail_set_active_scene(SceneType::VIDEO_PLAYER);
 	
-	//fit to screen size
-	vid_zoom = std::min(401.0 / vid_width_org, (var_full_screen_mode ? 241.0 : 226.0) / vid_height_org);
-	vid_zoom = std::min(10.0, std::max(0.05, vid_zoom));
-	vid_x = (400 - (vid_width_org * vid_zoom)) / 2;
-	vid_y = ((var_full_screen_mode ? 240 : 225) - (vid_height_org * vid_zoom)) / 2;
-	if (!var_full_screen_mode) vid_y += 15;
-	
 	bool video_playing_bar_show = video_is_playing();
 	
 	if(var_need_reflesh || !var_eco_mode)
@@ -1922,7 +1922,7 @@ Intent VideoPlayer_draw(void)
 		
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 
-		draw_video_content(key);
+		draw_video_content();
 		
 		// tab selector
 		Draw_texture(var_square_image[0], LIGHT1_BACK_COLOR, 0, CONTENT_Y_HIGH, 320, TAB_SELECTOR_HEIGHT);
@@ -2053,7 +2053,6 @@ Intent VideoPlayer_draw(void)
 			if (released_point.first != -1) {
 				int next_tab = released_point.first * TAB_NUM / 320;
 				selected_tab = next_tab;
-				var_need_reflesh = true;
 			}
 		}
 		
@@ -2069,11 +2068,8 @@ Intent VideoPlayer_draw(void)
 					vid_pausing = true;
 				}
 			}
-
-			var_need_reflesh = true;
 		} else if ((key.h_x && key.p_b) || (key.h_b && key.p_x)) {
 			vid_play_request = false;
-			var_need_reflesh = true;
 		} else if (key.p_b) {
 			intent.next_scene = SceneType::BACK;
 		} else if (key.p_d_right || key.p_d_left) {
@@ -2084,34 +2080,8 @@ Intent VideoPlayer_draw(void)
 				pos = std::min<double>(vid_duration, pos);
 				send_seek_request(pos);
 			}
-		} else if (key.h_touch || key.p_touch) var_need_reflesh = true;
-		
-		static int consecutive_scroll = 0;
-		if (key.h_c_up || key.h_c_down) {
-			if (key.h_c_up) consecutive_scroll = std::max(0, consecutive_scroll) + 1;
-			else consecutive_scroll = std::min(0, consecutive_scroll) - 1;
-			
-			float scroll_amount = DPAD_SCROLL_SPEED0;
-			if (std::abs(consecutive_scroll) > DPAD_SCROLL_SPEED1_THRESHOLD) scroll_amount = DPAD_SCROLL_SPEED1;
-			if (key.h_c_up) scroll_amount *= -1;
-			
-			if (selected_tab == TAB_GENERAL) main_tab_view->scroll(scroll_amount);
-			else if (selected_tab == TAB_SUGGESTIONS) suggestion_view->scroll(scroll_amount);
-			else if (selected_tab == TAB_COMMENTS) comment_all_view->scroll(scroll_amount);
-			else if (selected_tab == TAB_CAPTIONS) {
-				if (captions_tab_view == caption_main_view) caption_main_view->scroll(scroll_amount);
-			} else if (selected_tab == TAB_PLAYBACK) playback_tab_view->scroll(scroll_amount);
-			else if (selected_tab == TAB_PLAYLIST) playlist_list_view->scroll(scroll_amount);
-			var_need_reflesh = true;
-		} else consecutive_scroll = 0;
-		
-		if ((key.h_x && key.p_y) || (key.h_y && key.p_x)) var_debug_mode = !var_debug_mode;
-		if ((key.h_x && key.p_a) || (key.h_x && key.p_a)) var_show_fps = !var_show_fps;
-		if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
+		}
 	}
-
-	if(Util_log_query_log_show_flag())
-		Util_log_main(key);
 	
 	return intent;
 }

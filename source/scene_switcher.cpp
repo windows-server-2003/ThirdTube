@@ -249,6 +249,13 @@ bool Menu_main(void)
 	}
 	// add here
 	
+	// common updates
+	if ((key.h_x && key.p_y) || (key.h_y && key.p_x)) var_debug_mode = !var_debug_mode;
+	if ((key.h_x && key.p_a) || (key.h_x && key.p_a)) var_show_fps = !var_show_fps;
+	if (key.p_select) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
+	if (Util_log_query_log_show_flag()) Util_log_main(key);
+	if (key.h_touch || key.p_touch) var_need_reflesh = true;
+	
 	if (intent.next_scene == SceneType::EXIT) return false;
 	else if (intent.next_scene != SceneType::NO_CHANGE && intent != scene_stack.back()) {
 		if (scene_stack.size() >= 2 && intent == scene_stack[scene_stack.size() - 2]) intent.next_scene = SceneType::BACK;

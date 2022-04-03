@@ -54,6 +54,20 @@ void ScrollView::update_scroller(Hid_info key) {
 		scrolling = grabbed = false;
 		touch_frames = 0;
 	} else touch_frames++;
+	
+	// c-pad scroll
+	if (key.h_c_up || key.h_c_down) {
+		if (key.h_c_up) consecutive_cpad_scroll = std::max(0, consecutive_cpad_scroll) + 1;
+		else consecutive_cpad_scroll = std::min(0, consecutive_cpad_scroll) - 1;
+		
+		float scroll_amount = DPAD_SCROLL_SPEED0;
+		if (std::abs(consecutive_cpad_scroll) > DPAD_SCROLL_SPEED1_THRESHOLD) scroll_amount = DPAD_SCROLL_SPEED1;
+		if (key.h_c_up) scroll_amount *= -1;
+		
+		scroll(scroll_amount);
+		var_need_reflesh = true;
+	} else consecutive_cpad_scroll = 0;
+	
 	last_touch_x = key.touch_x;
 	last_touch_y = key.touch_y;
 }
