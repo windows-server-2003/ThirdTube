@@ -390,7 +390,7 @@ static void load_channel(void *) {
 		(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
 			->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CHANNEL_DESCRIPTION); })
 			->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL),
-		(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN)),
+		(new RuleView(0, 0, 320, SMALL_MARGIN)),
 		(new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * description_lines.size()))
 			->set_text_lines(description_lines),
 		(new EmptyView(0, 0, 320, SMALL_MARGIN * 2))

@@ -8,7 +8,6 @@
 #include "scenes/search.hpp"
 #include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
-#include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"
 #include "ui/ui.hpp"

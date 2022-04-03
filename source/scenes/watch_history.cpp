@@ -156,7 +156,7 @@ static void update_watch_history(const std::vector<HistoryVideo> &new_watch_hist
 						}, cur_sort_type)
 						->set_on_change([](const SelectorView &view) { sort_request = cur_sort_type = view.selected_button; })
 				}),
-			(new HorizontalRuleView(0, 0, 320, 3)),
+			(new RuleView(0, 0, 320, 3)),
 			video_list_view
 		});
 }

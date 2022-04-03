@@ -1,8 +1,7 @@
 #include "ui/overlay.hpp"
 #include "variables.hpp"
 #include "headers.hpp"
-#include "ui/dialog.hpp"
-#include "ui/colors.hpp"
+#include "ui/ui.hpp"
 
 
 
@@ -42,7 +41,7 @@ static int last_touch_x = -1;
 static int last_touch_y = -1;
 static bool holding_touch = false;
 
-static Dialog dialog;
+static OverlayDialogView *dialog_view = (new OverlayDialogView(0, 0, 320, 240));
 
 #define menu_icon_background_color             COLOR_GRAY(var_night_mode ? 0x3F : 0xC0)
 #define menu_icon_background_color_selected    COLOR_GRAY(var_night_mode ? 0x5F : 0xA0)
@@ -84,9 +83,10 @@ void draw_overlay_menu(int y) {
 			Draw(contents[i].string, string_x, y_base + i * CONTENT_HEIGHT + 5, 0.5, 0.5, menu_content_string_color);
 		}
 	}
-	if (menu_status == CONFIRMING_CLOSE) dialog.draw();
+	if (menu_status == CONFIRMING_CLOSE) dialog_view->draw();
 }
 void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene) {
+	static bool exit_confirmed = false;
 	static SceneType prev_scene = SceneType::SEARCH;
 	if (prev_scene != current_scene) {
 		var_need_reflesh = true;
@@ -102,16 +102,12 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 	
 	if (menu_status == CONFIRMING_CLOSE) {
 		holding_touch = false;
-		last_touch_x = last_touch_y = -1;
-		int result = dialog.update(*key);
-		if (result == 0) menu_status = OPEN;
-		else if (result == 1) {
-			intent->next_scene = SceneType::EXIT;
-			intent->arg = "";
-		}
+		var_need_reflesh = true;
+		
+		dialog_view->update(*key);
+		
 		key->touch_x = key->touch_y = -1;
 		key->p_touch = false;
-		var_need_reflesh = true;
 	} else {
 		if (holding_touch && key->touch_x == -1 && last_touch_x != -1) {
 			if (in_icon(last_touch_x, last_touch_y)) {
@@ -123,7 +119,22 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 					intent->next_scene = SceneType::SEARCH;
 					intent->arg = "";
 				} else if (contents[id].type == Content::Type::EXIT) {
-					dialog = Dialog(0, 320, 0, 240, LOCALIZED(EXIT_CONFIRM), {LOCALIZED(CANCEL), LOCALIZED(EXIT_APP)});
+					dialog_view->get_message_view()->set_text([] () { return LOCALIZED(EXIT_CONFIRM); })->update_y_range(0, 30);
+					dialog_view->set_buttons<std::function<std::string ()> >({
+						[] () { return LOCALIZED(CANCEL); },
+						[] () { return LOCALIZED(EXIT_APP); }
+					}, [] (OverlayDialogView &, int button_pressed) {
+						if (button_pressed == 0) menu_status = OPEN;
+						else if (button_pressed == 1) exit_confirmed = true;
+						return true; // close
+					});
+					dialog_view->set_is_visible(true);
+					dialog_view->set_on_cancel([] (OverlayView &view) {
+						menu_status = OPEN;
+						view.set_is_visible(false);
+						var_need_reflesh = true;
+					});
+					var_need_reflesh = true;
 					menu_status = CONFIRMING_CLOSE;
 				} else if (contents[id].type == Content::Type::ABOUT) {
 					intent->next_scene = SceneType::ABOUT;
@@ -144,19 +155,26 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 
 		if (holding_touch && last_touch_x != -1 && key->touch_x == -1) var_need_reflesh = true;
 		
-		last_touch_x = key->touch_x;
-		last_touch_y = key->touch_y;
 		
 		if (key->p_touch) {
 			if (in_icon(key->touch_x, key->touch_y)) holding_touch = true;
 			else if (menu_status != CLOSED && content_at(key->touch_x, key->touch_y) != -1) holding_touch = true;
 			else menu_status = CLOSED;
 		}
+		
+		last_touch_x = key->touch_x;
+		last_touch_y = key->touch_y;
+		
 		if (key->touch_x == -1) holding_touch = false;
 		if (holding_touch) {
 			key->touch_x = key->touch_y = -1;
 			key->p_touch = false;
 		}
+	}
+	if (exit_confirmed) {
+		exit_confirmed = false;
+		intent->next_scene = SceneType::EXIT;
+		intent->arg = "";
 	}
 }
 void close_overlay_menu() {

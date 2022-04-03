@@ -4,7 +4,6 @@
 
 #include "scenes/about.hpp"
 #include "scenes/video_player.hpp"
-#include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/ui.hpp"
 #include "network/thumbnail_loader.hpp"
@@ -41,9 +40,6 @@ namespace About {
 	int CONTENT_Y_HIGH = 240;
 	
 	ScrollView *main_view = NULL;
-	
-	
-	VerticalScroller scroller;
 };
 using namespace About;
 
@@ -71,7 +67,7 @@ void About_init(void) {
 		(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
 			->set_text("About")
 			->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL),
-		(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
+		(new RuleView(0, 0, 320, SMALL_MARGIN * 2)),
 		(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
 			->set_text("ThirdTube")
 			->set_x_alignment(TextView::XAlign::CENTER)
@@ -95,7 +91,7 @@ void About_init(void) {
 		(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
 			->set_text("Credits")
 			->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL),
-		(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
+		(new RuleView(0, 0, 320, SMALL_MARGIN * 2)),
 		credits_view,
 		(new EmptyView(0, 0, 320, SMALL_MARGIN * 2)),
 		
@@ -103,7 +99,7 @@ void About_init(void) {
 		(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
 			->set_text("License")
 			->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL),
-		(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
+		(new RuleView(0, 0, 320, SMALL_MARGIN * 2)),
 		(new TextView(SMALL_MARGIN, 0, 320, DEFAULT_FONT_INTERVAL * license_lines.size()))
 			->set_text_lines(license_lines),
 		(new EmptyView(0, 0, 320, SMALL_MARGIN * 2)),
@@ -112,7 +108,7 @@ void About_init(void) {
 		(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
 			->set_text("Third-party Licenses")
 			->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL),
-		(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2)),
+		(new RuleView(0, 0, 320, SMALL_MARGIN * 2)),
 		third_party_licenses_view,
 		(new EmptyView(0, 0, 320, SMALL_MARGIN * 2)),
 	});
@@ -133,8 +129,9 @@ void About_exit(void) {
 }
 void About_suspend(void) { thread_suspend = true; }
 void About_resume(std::string arg) {
-	scroller.on_resume();
 	overlay_menu_on_resume();
+	main_view->reset_holding_status();
+	
 	thread_suspend = false;
 	var_need_reflesh = true;
 }
@@ -151,7 +148,7 @@ Intent About_draw(void)
 	
 	bool video_playing_bar_show = video_is_playing();
 	CONTENT_Y_HIGH = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
-	scroller.change_area(0, 320, 0, CONTENT_Y_HIGH);
+	main_view->update_y_range(0, CONTENT_Y_HIGH);
 	
 	if(var_need_reflesh || !var_eco_mode)
 	{

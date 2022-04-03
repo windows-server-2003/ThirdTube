@@ -76,15 +76,15 @@ void Subscription_init(void) {
 					if (is_async_task_running(load_subscription_feed)) return LIGHT0_BACK_COLOR;
 					return View::STANDARD_BACKGROUND(view);
 				}),
-			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN))->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
+			(new RuleView(0, 0, 320, SMALL_MARGIN))->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
 			feed_videos_view
 		})
 		->set_draw_order({2, 1, 0});
 	main_tab_view = (new TabView(0, 0, 320, CONTENT_Y_HIGH - TOP_HEIGHT))
 		->set_views({channels_tab_view, feed_tab_view})
-		->set_tab_texts({
-			(std::function<std::string ()>) [] () { return LOCALIZED(SUBSCRIBED_CHANNELS); },
-			(std::function<std::string ()>) [] () { return LOCALIZED(NEW_VIDEOS); }
+		->set_tab_texts<std::function<std::string ()> >({
+			[] () { return LOCALIZED(SUBSCRIBED_CHANNELS); },
+			[] () { return LOCALIZED(NEW_VIDEOS); }
 		});
 	main_view = (new VerticalListView(0, 0, 320))
 		->set_views({
@@ -92,7 +92,7 @@ void Subscription_init(void) {
 				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SUBSCRIPTION); })
 				->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL)
 				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
-			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2))
+			(new RuleView(0, 0, 320, SMALL_MARGIN * 2))
 				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
 			main_tab_view
 		})

@@ -28,8 +28,8 @@ public :
 	};
 	YAlign y_align = YAlign::CENTER;
 	
-	TextView *set_text(UI::FlexibleString<TextView> text) {
-		this->text = { text };
+	template<class T> TextView *set_text(const T &text) {
+		this->text = { UI::FlexibleString<TextView>(text) };
 		return this;
 	}
 	template<class T> TextView *set_text_lines(std::vector<T> text) {

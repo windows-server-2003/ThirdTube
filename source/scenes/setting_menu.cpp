@@ -5,7 +5,6 @@
 #include "system/util/settings.hpp"
 #include "scenes/setting_menu.hpp"
 #include "scenes/video_player.hpp"
-#include "ui/scroller.hpp"
 #include "ui/overlay.hpp"
 #include "ui/ui.hpp"
 #include "youtube_parser/parser.hpp"
@@ -26,7 +25,7 @@ namespace Settings {
 	TextView *toast_view;
 	int toast_frames_left = 0;
 	
-	OverlayView *popup_view;
+	OverlayDialogView *popup_view;
 	VerticalListView *main_view;
 	TabView *main_tab_view;
 	
@@ -213,7 +212,7 @@ void Sem_init(void) {
 	load_settings();
 	load_string_resources(var_lang);
 	
-	popup_view = new OverlayView(0, 0, 320, 240);
+	popup_view = new OverlayDialogView(0, 0, 320, 240);
 	popup_view->set_is_visible(false);
 	toast_view = new TextView((320 - 150) / 2, 190, 150, DEFAULT_FONT_INTERVAL + SMALL_MARGIN);
 	toast_view->set_is_visible(false);
@@ -360,55 +359,30 @@ void Sem_init(void) {
 							return 0xFF000000 | other << 8 | other << 16 | red;
 						})
 						->set_on_view_released([] (View &view) {
-							popup_view->recursive_delete_subviews();
-							popup_view->set_subview((new VerticalListView(0, 0, DIALOG_WIDTH))
-								->set_views({
-									(new TextView(0, 0, DIALOG_WIDTH, 30))
-										->set_text_lines(split_string(LOCALIZED(REMOVE_ALL_HISTORY_CONFIRM), '\n'))
+							popup_view->get_message_view()->set_text_lines(split_string(LOCALIZED(REMOVE_ALL_HISTORY_CONFIRM), '\n'))->update_y_range(0, 30);
+							popup_view->set_buttons<std::function<std::string ()> >({
+								[] () { return LOCALIZED(CANCEL); },
+								[] () { return LOCALIZED(OK); }
+							},
+							[] (OverlayDialogView &, int button_pressed) {
+								if (button_pressed == 1) {
+									history_erase_all();
+									misc_tasks_request(TASK_SAVE_HISTORY);
+									
+									float tabbed_content_y_high = CONTENT_Y_HIGH - main_tab_view->tab_selector_height;
+									toast_view
+										->set_text((std::function<std::string ()>) [] () { return LOCALIZED(ALL_HISTORY_REMOVED); })
 										->set_x_alignment(TextView::XAlign::CENTER)
-										->set_text_offset(0, -1),
-									(new HorizontalRuleView(0, 0, DIALOG_WIDTH, 1)),
-									(new HorizontalListView(0, 0, 25))->set_views({
-										(new TextView(0, 0, DIALOG_WIDTH / 2, 25))
-											->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CANCEL); })
-											->set_text_offset(0, -1)
-											->set_x_alignment(TextView::XAlign::CENTER)
-											->set_get_background_color(View::STANDARD_BACKGROUND)
-											->set_on_view_released([] (View &view) {
-												popup_view->set_is_visible(false);
-												var_need_reflesh = true;
-											}),
-										(new TextView(0, 0, DIALOG_WIDTH / 2, 25))
-											->set_text((std::function<std::string ()>) [] () { return LOCALIZED(OK); })
-											->set_text_offset(0, -1)
-											->set_x_alignment(TextView::XAlign::CENTER)
-											->set_get_background_color(View::STANDARD_BACKGROUND)
-											->set_on_view_released([] (View &view) {
-												history_erase_all();
-												misc_tasks_request(TASK_SAVE_HISTORY);
-												popup_view->set_is_visible(false);
-												var_need_reflesh = true;
-												
-												float tabbed_content_y_high = CONTENT_Y_HIGH - main_tab_view->tab_selector_height;
-												toast_view
-													->set_text((std::function<std::string ()>) [] () { return LOCALIZED(ALL_HISTORY_REMOVED); })
-													->set_x_alignment(TextView::XAlign::CENTER)
-													->set_text_offset(0, -1)
-													->set_get_text_color([] () { return (u32) -1; })
-													->update_y_range(tabbed_content_y_high - 20, tabbed_content_y_high - 5)
-													->set_get_background_color([] (const View &) { return 0x50000000; })
-													->set_is_visible(true);
-												toast_frames_left = 120;
-											})
-									})
-								})
-								->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; })
-							);
-							popup_view->set_is_visible(true);
-							popup_view->set_on_cancel([] (OverlayView &view) {
-								view.set_is_visible(false);
-								var_need_reflesh = true;
+										->set_text_offset(0, -1)
+										->set_get_text_color([] () { return (u32) -1; })
+										->update_y_range(tabbed_content_y_high - 20, tabbed_content_y_high - 5)
+										->set_get_background_color([] (const View &) { return 0x50000000; })
+										->set_is_visible(true);
+									toast_frames_left = 120;
+								}
+								return true; // close the dialog
 							});
+							popup_view->set_is_visible(true);
 							var_need_reflesh = true;
 						}),
 					(new EmptyView(0, 0, 320, 10))
@@ -452,39 +426,15 @@ void Sem_init(void) {
 								if (is_3dsx) confirm_lines = truncate_str(std::regex_replace(LOCALIZED(OVERWRITE_3DSX_CONFIRM), std::regex("%0"), path_3dsx), DIALOG_WIDTH, 3, 0.5, 0.5);
 								else confirm_lines = {LOCALIZED(INSTALL_CIA_CONFIRM)};
 								
-								popup_view->recursive_delete_subviews();
-								popup_view->set_subview((new VerticalListView(0, 0, DIALOG_WIDTH))
-									->set_views({
-										(new TextView(0, 0, DIALOG_WIDTH, 45))
-											->set_text_lines(confirm_lines)
-											->set_x_alignment(TextView::XAlign::CENTER)
-											->set_text_offset(0, -1),
-										(new HorizontalRuleView(0, 0, DIALOG_WIDTH, 1)),
-										(new HorizontalListView(0, 0, 25))->set_views({
-											(new TextView(0, 0, DIALOG_WIDTH / 2, 25))
-												->set_text((std::function<std::string ()>) [] () { return LOCALIZED(CANCEL); })
-												->set_text_offset(0, -1)
-												->set_x_alignment(TextView::XAlign::CENTER)
-												->set_get_background_color(View::STANDARD_BACKGROUND)
-												->set_on_view_released([] (View &view) {
-													popup_view->set_is_visible(false);
-													var_need_reflesh = true;
-												}),
-											(new TextView(0, 0, DIALOG_WIDTH / 2, 25))
-												->set_text((std::function<std::string ()>) [] () { return LOCALIZED(OK); })
-												->set_text_offset(0, -1)
-												->set_x_alignment(TextView::XAlign::CENTER)
-												->set_get_background_color(View::STANDARD_BACKGROUND)
-												->set_on_view_released([] (View &view) {
-													popup_view->set_is_visible(false);
-													var_need_reflesh = true;
-													update_state = UpdateState::INSTALLING;
-												})
-										})
-									})
-									->set_draw_order({0, 2, 1})
-									->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; })
-								);
+								popup_view->get_message_view()->set_text_lines(confirm_lines)->update_y_range(0, 45);
+								popup_view->set_buttons<std::function<std::string ()> >({
+									[] () { return LOCALIZED(CANCEL); },
+									[] () { return LOCALIZED(OK); }
+								},
+								[] (OverlayDialogView &, int button_pressed) {
+									if (button_pressed == 1) update_state = UpdateState::INSTALLING;
+									return true; // close the dialog
+								});
 								popup_view->set_is_visible(true);
 								var_need_reflesh = true;
 							}
@@ -546,12 +496,12 @@ void Sem_init(void) {
 					(new EmptyView(0, 0, 320, 10))
 				})
 		}, 0)
-		->set_tab_texts({
-			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_DISPLAY_UI); },
-			(std::function<std::string ()>) [] () { return LOCALIZED(PLAYBACK); },
-			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_DATA); },
-			(std::function<std::string ()>) [] () { return LOCALIZED(UPDATE); },
-			(std::function<std::string ()>) [] () { return LOCALIZED(SETTINGS_ADVANCED); }
+		->set_tab_texts<std::function<std::string ()> >({
+			[] () { return LOCALIZED(SETTINGS_DISPLAY_UI); },
+			[] () { return LOCALIZED(PLAYBACK); },
+			[] () { return LOCALIZED(SETTINGS_DATA); },
+			[] () { return LOCALIZED(UPDATE); },
+			[] () { return LOCALIZED(SETTINGS_ADVANCED); }
 		});
 	main_view = (new VerticalListView(0, 0, 320))
 		->set_views({
@@ -561,7 +511,7 @@ void Sem_init(void) {
 				->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL)
 				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
 			// ---------------------
-			(new HorizontalRuleView(0, 0, 320, SMALL_MARGIN * 2))
+			(new RuleView(0, 0, 320, SMALL_MARGIN * 2))
 				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
 			main_tab_view
 		})
