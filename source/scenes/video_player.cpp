@@ -703,6 +703,7 @@ static void load_video_page(void *arg) {
 			->set_y_alignment(TextView::YAlign::UP);
 		for (int i = 0; i < 4; i++) main_view->views[i] = loading_view;
 		// tab #4(Playback) and #5(Playlist) remain displayed
+		var_need_reflesh = true;
 	}
 	small_resource_lock.unlock();
 	
