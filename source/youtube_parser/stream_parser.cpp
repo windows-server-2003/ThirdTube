@@ -194,42 +194,10 @@ static void extract_owner(RJson slimOwnerRenderer, YouTubeVideoDetail &res) {
 	// !!! res.author.url = slimOwnerRenderer["channelUrl"].string_value();
 	res.author.name = slimOwnerRenderer["channelName"].string_value();
 	res.author.subscribers = get_text_from_object(slimOwnerRenderer["expandedSubtitle"]);
-	
-	if (!slimOwnerRenderer["thumbnail"]["thumbnails"].array_items().size()) {
-		debug("extract_owner : thumbnail not found");
-		return;
-	}
-	auto thumbnail = slimOwnerRenderer["thumbnail"]["thumbnails"].array_items()[0];
-	
-	constexpr int height = 72;
-	
-	std::string icon_url = thumbnail["url"].string_value();
-	std::string icon_url_modified;
-	std::string replace_from = "s" + std::to_string(thumbnail["width"].int_value()) + "-";
-	std::string replace_to = "s" + std::to_string(height) + "-";
-	for (size_t i = 0; i < icon_url.size(); ) {
-		if (icon_url.substr(i, replace_from.size()) == replace_from) {
-			i += replace_from.size();
-			icon_url_modified += replace_to;
-		} else icon_url_modified.push_back(icon_url[i++]);
-	}
-	res.author.icon_url = icon_url_modified;
-	
-	if (res.author.icon_url.substr(0, 2) == "//") res.author.icon_url = "https:" + res.author.icon_url;
+	res.author.icon_url = get_thumbnail_url_exact(slimOwnerRenderer["thumbnail"]["thumbnails"], 72);
 }
 
 static void extract_item(RJson content, YouTubeVideoDetail &res) {
-	auto get_video_from_renderer = [&] (RJson video_renderer) {
-		YouTubeVideoSuccinct cur_video;
-		std::string video_id = video_renderer["videoId"].string_value();
-		cur_video.url = youtube_get_video_url_by_id(video_id);
-		cur_video.title = get_text_from_object(video_renderer["headline"]);
-		cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
-		cur_video.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
-		cur_video.author = get_text_from_object(video_renderer["shortBylineText"]);
-		cur_video.thumbnail_url = youtube_get_video_thumbnail_url_by_id(video_id);
-		return cur_video;
-	};
 	if (content.has_key("slimVideoMetadataRenderer")) {
 		RJson metadata_renderer = content["slimVideoMetadataRenderer"];
 		res.title = get_text_from_object(metadata_renderer["title"]);
@@ -240,9 +208,9 @@ static void extract_item(RJson content, YouTubeVideoDetail &res) {
 		extract_owner(metadata_renderer["owner"]["slimOwnerRenderer"], res);
 	} else if (content.has_key("compactAutoplayRenderer")) {
 		for (auto j : content["compactAutoplayRenderer"]["contents"].array_items()) if (j.has_key("videoWithContextRenderer"))
-			res.suggestions.push_back(get_video_from_renderer(j["videoWithContextRenderer"]));
+			res.suggestions.push_back(parse_succinct_video(j["videoWithContextRenderer"]));
 	} else if (content.has_key("videoWithContextRenderer"))
-		res.suggestions.push_back(get_video_from_renderer(content["videoWithContextRenderer"]));
+		res.suggestions.push_back(parse_succinct_video(content["videoWithContextRenderer"]));
 	else if (content.has_key("continuationItemRenderer"))
 		res.suggestions_continue_token = content["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 	else if (content.has_key("compactRadioRenderer") || content.has_key("compactPlaylistRenderer")) {
@@ -296,13 +264,9 @@ static void extract_metadata(RJson data, YouTubeVideoDetail &res) {
 		res.playlist.total_videos = playlist_object["totalVideos"].int_value();
 		for (auto playlist_item : playlist_object["contents"].array_items()) {
 			if (playlist_item.has_key("playlistPanelVideoRenderer")) {
-				YouTubeVideoSuccinct cur_video;
 				auto renderer = playlist_item["playlistPanelVideoRenderer"];
-				cur_video.url = youtube_get_video_url_by_id(renderer["videoId"].string_value()) + "&list=" + res.playlist.id;
-				cur_video.title = get_text_from_object(renderer["title"]);
-				cur_video.duration_text = get_text_from_object(renderer["lengthText"]);
-				cur_video.author = get_text_from_object(renderer["longBylineText"]);
-				cur_video.thumbnail_url = youtube_get_video_thumbnail_url_by_id(renderer["videoId"].string_value());
+				YouTubeVideoSuccinct cur_video = parse_succinct_video(renderer);
+				if (cur_video.url != "") cur_video.url += "&list=" + res.playlist.id;
 				if (renderer["selected"].bool_value()) res.playlist.selected_index = res.playlist.videos.size();
 				res.playlist.videos.push_back(cur_video);
 			}
@@ -496,20 +460,7 @@ YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(RJson comment_
 	cur_comment.author.name = get_text_from_object(comment_renderer["authorText"]);
 	cur_comment.publish_date = get_text_from_object(comment_renderer["publishedTimeText"]);
 	cur_comment.upvotes_str = get_text_from_object(comment_renderer["voteCount"]);
-	if (comment_renderer["authorThumbnail"]["thumbnails"].array_items().size()) {
-		auto thumbnail = comment_renderer["authorThumbnail"]["thumbnails"].array_items()[0];
-		std::string icon_url = thumbnail["url"].string_value();
-		std::string icon_url_modified;
-		std::string replace_from = "s" + std::to_string(thumbnail["width"].int_value()) + "-";
-		std::string replace_to = "s" + std::to_string(thumbnail_height) + "-";
-		for (size_t i = 0; i < icon_url.size(); ) {
-			if (icon_url.substr(i, replace_from.size()) == replace_from) {
-				i += replace_from.size();
-				icon_url_modified += replace_to;
-			} else icon_url_modified.push_back(icon_url[i++]);
-		}
-		cur_comment.author.icon_url = icon_url_modified;
-	}
+	cur_comment.author.icon_url = get_thumbnail_url_exact(comment_renderer["authorThumbnail"]["thumbnails"], thumbnail_height);
 	return cur_comment;
 	
 }

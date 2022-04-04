@@ -140,6 +140,52 @@ namespace youtube_parser {
 		}
 		return "";
 	}
+	YouTubeVideoSuccinct parse_succinct_video(RJson video_renderer) {
+		YouTubeVideoSuccinct res;
+		std::string video_id = video_renderer["videoId"].string_value();
+		if (video_id == "") debug("!!!!!!!!!!!!!!!!!!!!! video id empty !!!!!!!!!!!!!!!!!!!!!!!!!");
+		res.url = "https://m.youtube.com/watch?v=" + video_id;
+		res.title = get_text_from_object(video_renderer["title"]);
+		if (res.title == "") res.title = get_text_from_object(video_renderer["headline"]);
+		res.duration_text = get_text_from_object(video_renderer["lengthText"]);
+		res.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
+		res.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
+		// debug(get_text_from_object(video_renderer["shortViewCountText"]) + " vs " + get_text_from_object(video_renderer["viewCountText"]));
+		res.author = get_text_from_object(video_renderer["shortBylineText"]);
+		res.thumbnail_url = youtube_get_video_thumbnail_url_by_id(video_id);
+		
+		return res;
+	}
+	std::string get_thumbnail_url_closest(RJson thumbnails, int target_width) {
+		int min_distance = 100000;
+		std::string best_icon_url;
+		for (auto thumbnail : thumbnails.array_items()) {
+			int cur_width = thumbnail["width"].int_value();
+			if (min_distance > std::abs(target_width - cur_width)) {
+				min_distance = std::abs(target_width - cur_width);
+				best_icon_url = thumbnail["url"].string_value();
+			}
+		}
+		if (best_icon_url.substr(0, 2) == "//") best_icon_url = "https:" + best_icon_url;
+		return best_icon_url;
+	}
+	std::string get_thumbnail_url_exact(RJson thumbnails, int target_width) {
+		if (!thumbnails.array_items().size()) return "";
+		auto thumbnail = thumbnails.array_items()[0];
+		std::string icon_url = thumbnail["url"].string_value();
+		std::string icon_url_modified;
+		std::string replace_from = std::to_string(thumbnail["width"].int_value()) + "-";
+		std::string replace_to = std::to_string(target_width) + "-";
+		for (size_t i = 0; i < icon_url.size(); ) {
+			if ((icon_url[i] == 's' || icon_url[i] == 'w') && icon_url.substr(i + 1, replace_from.size()) == replace_from) {
+				icon_url_modified.push_back(icon_url[i]);
+				icon_url_modified += replace_to;
+				i += 1 + replace_from.size();
+			} else icon_url_modified.push_back(icon_url[i++]);
+		}
+		if (icon_url_modified.substr(0, 2) == "//") icon_url_modified = "https:" + icon_url_modified;
+		return icon_url_modified;
+	}
 
 	std::string remove_garbage(const std::string &str, size_t start) {
 		while (start < str.size() && str[start] == ' ') start++;

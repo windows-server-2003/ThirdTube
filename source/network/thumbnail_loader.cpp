@@ -275,11 +275,6 @@ void thumbnail_downloader_thread_func(void *arg) {
 					memmove(decoded_data, decoded_data + vertical_offset * w * 2, new_h * w * 2);
 					h = new_h;
 				}
-				// channel banner : crop to 1024 to fit in the maximum texture size
-				if (info.type == ThumbnailType::VIDEO_BANNER && w == 1060) {
-					for (int i = 0; i < h; i++) memmove(decoded_data + i * 1024 * 2, decoded_data + (i * 1060 + 18) * 2, 1024 * 2);
-					w = 1024;
-				}
 				// channel icon : round (definitely not the recommended way but we will fill the area outside the circle with white)
 				if (info.type == ThumbnailType::ICON) {
 					float radius = (float) h / 2;

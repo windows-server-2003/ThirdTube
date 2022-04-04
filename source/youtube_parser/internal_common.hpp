@@ -4,6 +4,7 @@
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
+#include "parser.hpp"
 
 #ifdef _WIN32
 #	include <iostream> // <------------
@@ -32,7 +33,6 @@
 #	include "definitions.hpp"
 #	define debug(s) Util_log_save("yt-parser", (s))
 #endif
-
 
 using namespace rapidjson;
 
@@ -116,6 +116,7 @@ namespace youtube_parser {
 	
 	inline std::string get_innertube_api_url(std::string api_name) { return "https://m.youtube.com/youtubei/v1/" + api_name + "?key=" + innertube_key + "&prettyPrint=false"; }
 	
+	// network operation related
 #	ifndef _WIN32
 	extern NetworkSessionList thread_network_session_list;
 	HttpRequest http_get_request(const std::string &url, std::map<std::string, std::string> headers = {});
@@ -124,15 +125,23 @@ namespace youtube_parser {
 	std::string http_get(const std::string &url, std::map<std::string, std::string> header = {});
 	std::string http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> header = {});
 	
+	// string util
 	bool starts_with(const std::string &str, const std::string &pattern, size_t offset = 0);
 	bool ends_with(const std::string &str, const std::string &pattern);
 	
+	// URL-related
 	std::string url_decode(std::string input);
 	
 	// parse something like 'abc=def&ghi=jkl&lmn=opq'
 	std::map<std::string, std::string> parse_parameters(std::string input);
 
+	
+	// youtube-specific
 	std::string get_text_from_object(RJson json);
+	YouTubeVideoSuccinct parse_succinct_video(RJson video_renderer);
+	std::string get_thumbnail_url_closest(RJson thumbnails, int target_width);
+	std::string get_thumbnail_url_exact(RJson thumbnails, int target_width); // modify the url to make its width match `target_width`
+	
 
 	// str[0] must be '(', '[', '{', or '\''
 	// returns the prefix of str until the corresponding parenthesis or quote of str[0]

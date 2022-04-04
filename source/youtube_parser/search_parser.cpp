@@ -4,30 +4,7 @@
 
 static bool parse_searched_item(RJson content, std::vector<YouTubeSuccinctItem> &res) {
 	if (content.has_key("compactVideoRenderer")) {
-		auto video_renderer = content["compactVideoRenderer"];
-		YouTubeVideoSuccinct cur_result;
-		std::string video_id = video_renderer["videoId"].string_value();
-		cur_result.url = "https://m.youtube.com/watch?v=" + video_id;
-		cur_result.title = get_text_from_object(video_renderer["title"]);
-		cur_result.duration_text = get_text_from_object(video_renderer["lengthText"]);
-		cur_result.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
-		cur_result.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
-		cur_result.author = get_text_from_object(video_renderer["shortBylineText"]);
-		cur_result.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
-		/*
-		{ // extract thumbnail url
-			int max_width = -1;
-			for (auto thumbnail : video_renderer["thumbnail"]["thumbnails"].array_items()) {
-				if (thumbnail["url"].string_value().find("webp") != std::string::npos) continue; // we want jpeg thumbnail
-				int cur_width = thumbnail["width"].int_value();
-				if (cur_width > 256) continue; // too large
-				if (max_width < cur_width) {
-					max_width = cur_width;
-					cur_result.thumbnail_url = thumbnail["url"].string_value();
-				}
-			}
-		}*/
-		res.push_back(YouTubeSuccinctItem(cur_result));
+		res.push_back(YouTubeSuccinctItem(parse_succinct_video(content["compactVideoRenderer"])));
 		return true;
 	} else if (content.has_key("compactChannelRenderer")) {
 		auto channel_renderer = content["compactChannelRenderer"];
@@ -37,24 +14,7 @@ static bool parse_searched_item(RJson content, std::vector<YouTubeSuccinctItem> 
 		cur_result.name = get_text_from_object(channel_renderer["displayName"]);
 		cur_result.subscribers = get_text_from_object(channel_renderer["subscriberCountText"]);
 		cur_result.video_num = get_text_from_object(channel_renderer["videoCountText"]);
-		
-		{
-			constexpr int target_height = 70;
-			int min_distance = 100000;
-			std::string best_icon;
-			for (auto icon : channel_renderer["thumbnail"]["thumbnails"].array_items()) {
-				int cur_height = icon["height"].int_value();
-				if (cur_height >= 256) continue; // too large
-				if (min_distance > std::abs(target_height - cur_height)) {
-					min_distance = std::abs(target_height - cur_height);
-					best_icon = icon["url"].string_value();
-				}
-			}
-			cur_result.icon_url = best_icon;
-			if (cur_result.icon_url.substr(0, 2) == "//") cur_result.icon_url = "https:" + cur_result.icon_url;
-			debug(cur_result.icon_url);
-		}
-		
+		cur_result.icon_url = get_thumbnail_url_closest(channel_renderer["thumbnail"]["thumbnails"], 70);
 		res.push_back(YouTubeSuccinctItem(cur_result));
 		return true;
 	} else if (content.has_key("compactRadioRenderer") || content.has_key("compactPlaylistRenderer")) {

@@ -28,17 +28,7 @@ static void parse_channel_data(RJson data, YouTubeChannelDetail &res) {
 		for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items()) {
 			for (auto content : i["itemSectionRenderer"]["contents"].array_items()) {
 				if (content.has_key("compactVideoRenderer")) {
-					auto video_renderer = content["compactVideoRenderer"];
-					YouTubeVideoSuccinct cur_video;
-					std::string video_id = video_renderer["videoId"].string_value();
-					cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
-					cur_video.title = get_text_from_object(video_renderer["title"]);
-					cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
-					cur_video.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
-					cur_video.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
-					cur_video.author = channel_name;
-					cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
-					res.videos.push_back(cur_video);
+					res.videos.push_back(parse_succinct_video(content["compactVideoRenderer"]));
 				} else if (content.has_key("continuationItemRenderer")) {
 					res.continue_token = content["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 				} else debug("unknown item found in channel videos");
@@ -50,32 +40,8 @@ static void parse_channel_data(RJson data, YouTubeChannelDetail &res) {
 			res.playlist_tab_params = tab["tabRenderer"]["endpoint"]["browseEndpoint"]["params"].string_value();
 		}
 	}
-	{ // top banner
-		for (auto banner : data["header"]["c4TabbedHeaderRenderer"]["banner"]["thumbnails"].array_items()) {
-			int cur_width = banner["width"].int_value();
-			if (cur_width == 1060) {
-				res.banner_url = banner["url"].string_value();
-			}
-			/*
-			if (cur_width > 1024) continue;
-			if (max_width < cur_width) {
-				max_width = cur_width;
-				res.banner_url = banner["url"].string_value();
-			}*/
-		}
-		if (res.banner_url.substr(0, 2) == "//") res.banner_url = "https:" + res.banner_url;
-	}
-	{ // icon
-		int min_width = 1000000000;
-		for (auto icon : data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"].array_items()) {
-			int cur_width = icon["width"].int_value();
-			if (min_width > cur_width) {
-				min_width = cur_width;
-				res.icon_url = icon["url"].string_value();
-			}
-		}
-		if (res.icon_url.substr(0, 2) == "//") res.icon_url = "https:" + res.icon_url;
-	}
+	res.banner_url = get_thumbnail_url_exact(data["header"]["c4TabbedHeaderRenderer"]["banner"]["thumbnails"], 320);
+	res.icon_url = get_thumbnail_url_closest(data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"], 100000); // maximum one
 }
 
 YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id) {
@@ -208,17 +174,7 @@ YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &p
 			for (auto i : yt_result["onResponseReceivedActions"].array_items()) {
 				for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
 					if (j.has_key("compactVideoRenderer")) {
-						auto video_renderer = j["compactVideoRenderer"];
-						YouTubeVideoSuccinct cur_video;
-						std::string video_id = video_renderer["videoId"].string_value();
-						cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
-						cur_video.title = get_text_from_object(video_renderer["title"]);
-						cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
-						cur_video.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
-						cur_video.views_str = get_text_from_object(video_renderer["shortViewCountText"]);
-						cur_video.author = new_result.name;
-						cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
-						new_result.videos.push_back(cur_video);
+						new_result.videos.push_back(parse_succinct_video(j["compactVideoRenderer"]));
 					} else if (j.has_key("continuationItemRenderer"))
 						new_result.continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 				}
@@ -321,40 +277,15 @@ static void load_community_items(RJson contents, YouTubeChannelDetail &res) {
 			YouTubeChannelDetail::CommunityPost cur_post;
 			cur_post.message = get_text_from_object(post_renderer["contentText"]);
 			cur_post.author_name = get_text_from_object(post_renderer["authorText"]);
-			{
-				constexpr int target_height = 70;
-				int min_distance = 100000;
-				std::string best_icon;
-				for (auto icon : post_renderer["authorThumbnail"]["thumbnails"].array_items()) {
-					int cur_height = icon["height"].int_value();
-					if (cur_height >= 256) continue; // too large
-					if (min_distance > std::abs(target_height - cur_height)) {
-						min_distance = std::abs(target_height - cur_height);
-						best_icon = icon["url"].string_value();
-					}
-				}
-				if (best_icon.substr(0, 2) == "//") best_icon = "https:" + best_icon;
-				cur_post.author_icon_url = best_icon;
-			}
+			cur_post.author_icon_url = get_thumbnail_url_closest(post_renderer["authorThumbnail"]["thumbnails"], 70);
 			cur_post.time = get_text_from_object(post_renderer["publishedTimeText"]);
 			cur_post.upvotes_str = get_text_from_object(post_renderer["voteCount"]);
 			if (post_renderer["backstageAttachment"]["backstageImageRenderer"].is_valid()) {
 				auto tmp = post_renderer["backstageAttachment"]["backstageImageRenderer"]["image"]["thumbnails"].array_items();
 				if (tmp.size()) cur_post.image_url = tmp[0]["url"].string_value();
 			}
-			if (post_renderer["backstageAttachment"]["videoRenderer"].is_valid()) {
-				auto video_renderer = post_renderer["backstageAttachment"]["videoRenderer"];
-				std::string video_id = video_renderer["videoId"].string_value();
-				YouTubeVideoSuccinct cur_video;
-				cur_video.url = "https://m.youtube.com/watch?v=" + video_id;
-				cur_video.title = get_text_from_object(video_renderer["title"]);
-				cur_video.views_str = get_text_from_object(video_renderer["viewCountText"]);
-				cur_video.author = get_text_from_object(video_renderer["ownerText"]);
-				cur_video.thumbnail_url = "https://i.ytimg.com/vi/" + video_id + "/default.jpg";
-				cur_video.publish_date = get_text_from_object(video_renderer["publishedTimeText"]);
-				cur_video.duration_text = get_text_from_object(video_renderer["lengthText"]);
-				cur_post.video = cur_video;
-			}
+			if (post_renderer["backstageAttachment"]["videoRenderer"].is_valid()) 
+				cur_post.video = parse_succinct_video(post_renderer["backstageAttachment"]["videoRenderer"]);
 			if (post_renderer["backstageAttachment"]["pollRenderer"].is_valid()) {
 				auto poll_renderer = post_renderer["backstageAttachment"]["pollRenderer"];
 				cur_post.poll_total_votes = get_text_from_object(poll_renderer["totalVotes"]);
