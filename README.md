@@ -80,8 +80,6 @@ The modified source code can be found in https://github.com/windows-server-2003/
 by Dropbox under MIT License  
 ### [rapidjson](https://github.com/Tencent/rapidjson)
 by Tencent and Milo Yip under MIT License  
-### [Duktape](https://duktape.org/)
-by Duktape authors under MIT License  
 ### [libctru](https://github.com/devkitPro/libctru)
 by devkitPro under zlib License  
 ### [libcurl](https://curl.se/)

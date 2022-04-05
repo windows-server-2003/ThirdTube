@@ -9,10 +9,6 @@ void youtube_change_content_language(std::string language_code) {
 namespace youtube_parser {
 	std::string language_code = "en";
 	std::string country_code = "US";
-	std::string innertube_key;
-	std::string base_js_url;
-	int sts; // base.js version?
-	bool quick_mode = true;
 	
 #ifdef _WIN32
 	std::string http_get(const std::string &url, std::map<std::string, std::string> headers) {
@@ -315,40 +311,6 @@ namespace youtube_parser {
 		return "https://" + url;
 	}
 	
-	void fetch_innertube_key_and_player() {
-		// very light without logging in
-		std::string html = http_get("https://m.youtube.com/feed/library", {});
-		
-		// innertube key
-		innertube_key = "";
-		const std::string prefix = "\"INNERTUBE_API_KEY\":\"";
-		auto pos = html.find(prefix);
-		if (pos != std::string::npos) {
-			pos += prefix.size();
-			while (pos < html.size() && html[pos] != '"') innertube_key.push_back(html[pos++]);
-		}
-		if (innertube_key == "") debug("Failed to fetch INNERTUBE_API_KEY");
-		
-		// base js url
-		pos = html.find("base.js\"");
-		if (pos != std::string::npos) {
-			size_t end = pos + std::string("base.js").size();
-			while (pos && html[pos] != '"') pos--;
-			if (html[pos] == '"') base_js_url = "https://m.youtube.com" + html.substr(pos + 1, end - (pos + 1));
-		}
-		if (base_js_url == "") debug("could not find base.js url");
-		
-		// base js version
-		pos = html.find("\"STS\":");
-		if (pos != std::string::npos) {
-			pos += 6;
-			sts = 0;
-			for (; pos < html.size() && isdigit(html[pos]); pos++) sts = sts * 10 + html[pos] - '0';
-		} else {
-			sts = -1;
-			debug("could not find STS");
-		}
-	}
 	RJson get_error_json(const std::string &error) {
 		Document data;
 		data.SetObject();

@@ -5,6 +5,7 @@
 #include "rapidjson/writer.h"
 #include "rapidjson/stringbuffer.h"
 #include "parser.hpp"
+#include "hardcode.hpp"
 
 #ifdef _WIN32
 #	include <iostream> // <------------
@@ -109,12 +110,8 @@ namespace youtube_parser {
 	// internal state
 	extern std::string language_code;
 	extern std::string country_code;
-	extern std::string innertube_key;
-	extern std::string base_js_url;
-	extern int sts;
-	extern bool quick_mode;
 	
-	inline std::string get_innertube_api_url(std::string api_name) { return "https://m.youtube.com/youtubei/v1/" + api_name + "?key=" + innertube_key + "&prettyPrint=false"; }
+	inline std::string get_innertube_api_url(std::string api_name) { return "https://m.youtube.com/youtubei/v1/" + api_name + "?key=" + INNERTUBE_KEY + "&prettyPrint=false"; }
 	
 	// network operation related
 #	ifndef _WIN32
@@ -175,10 +172,6 @@ namespace youtube_parser {
 	
 	std::string convert_url_to_mobile(std::string url);
 	std::string convert_url_to_desktop(std::string url);
-	
-	void fetch_innertube_key_and_player();
-	
-	
 }
 using namespace youtube_parser;
 

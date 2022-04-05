@@ -30,7 +30,6 @@ namespace About {
 		{"FFmpeg", {"by the FFmpeg developers under LGPLv2"} },
 		{"json11", {"by Dropbox under MIT License"} },
 		{"rapidjson", {"by Tencent and Milo Yip under MIT license"}},
-		{"Duktape", {"by Duktape authors under MIT License"} },
 		{"libctru", {"by devkitPro under zlib License"} },
 		{"libcurl", {"by Daniel Stenberg and many contributors", "under the curl license"} },
 		{"libbrotli", {"by the Brotli Authors under the MIT license"} },

@@ -79,12 +79,6 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id) {
 		Document json_root;
 		parse_channel_data(get_initial_data(json_root, html), res);
 	} else {
-		if (innertube_key == "") fetch_innertube_key_and_player();
-		if (innertube_key == "") {
-			res.error = "innertube key empty";
-			return res;
-		}
-		
 		std::string &id = url_or_id;
 		res.url_original = "https://m.youtube.com/channel/" + id;
 		
@@ -150,11 +144,6 @@ std::vector<YouTubeChannelDetail> youtube_parse_channel_page_multi(std::vector<s
 YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result) {
 	YouTubeChannelDetail new_result = prev_result;
 	
-	if (innertube_key == "") fetch_innertube_key_and_player();
-	if (innertube_key == "") {
-		new_result.error = "innertube key empty";
-		return new_result;
-	}
 	if (prev_result.continue_token == "") {
 		new_result.error = "continue token empty";
 		return new_result;
@@ -243,8 +232,6 @@ static void channel_load_playlists_(RJson yt_result, YouTubeChannelDetail &new_r
 YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &prev_result) {
 	YouTubeChannelDetail new_result = prev_result;
 	
-	if (innertube_key == "") fetch_innertube_key_and_player();
-	if (innertube_key == "") new_result.error = "innertube key empty";
 	if (prev_result.playlist_tab_browse_id == "") new_result.error = "playlist browse id empty";
 	if (prev_result.playlist_tab_params == "") new_result.error = "playlist params empty";
 	
@@ -325,11 +312,6 @@ YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &
 				contents = i["itemSectionRenderer"]["contents"];
 		load_community_items(contents, new_result);
 	} else {
-		if (innertube_key == "") fetch_innertube_key_and_player();
-		if (innertube_key == "") {
-			new_result.error = "innertube key empty";
-			return new_result;
-		}
 		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "WEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}}, "continuation": "%2"})";
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);

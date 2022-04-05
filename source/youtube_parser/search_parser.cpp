@@ -101,11 +101,6 @@ YouTubeSearchResult youtube_parse_search(std::string url) {
 YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result) {
 	YouTubeSearchResult new_result = prev_result;
 	
-	if (innertube_key == "") fetch_innertube_key_and_player();
-	if (innertube_key == "") {
-		new_result.error = "innertube key empty";
-		return new_result;
-	}
 	if (prev_result.continue_token == "") {
 		new_result.error = "continue token empty";
 		return new_result;

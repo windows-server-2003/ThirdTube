@@ -1,36 +1,9 @@
 #include <regex>
 #include "internal_common.hpp"
 #include "parser.hpp"
-#include "cipher.hpp"
-#include "n_param.hpp"
-#include "cache.hpp"
 
-static RJson get_initial_data(Document &json_root, const std::string &html) {
-	RJson res;
-	if (fast_extract_initial(json_root, html, "ytInitialData", res)) return res;
-	res = get_succeeding_json_regexes(json_root, html, {
-		"window\\[['\\\"]ytInitialData['\\\"]]\\s*=\\s*['\\{]",
-		"ytInitialData\\s*=\\s*['\\{]"
-	});
-	if (!res.is_valid()) return get_error_json("did not match any of the ytInitialData regexes");
-	return res;
-}
-static RJson initial_player_response(Document &json_root, const std::string &html) {
-	RJson res;
-	if (fast_extract_initial(json_root, html, "ytInitialPlayerResponse", res)) return res;
-	res = get_succeeding_json_regexes(json_root, html, {
-		"window\\[['\\\"]ytInitialPlayerResponse['\\\"]]\\s*=\\s*['\\{]",
-		"ytInitialPlayerResponse\\s*=\\s*['\\{]"
-	});
-	if (!res.is_valid()) return get_error_json("did not match any of the ytInitialData regexes");
-	return res;
-}
-
-
-static std::map<std::string, yt_cipher_transform_procedure> cipher_transform_proc_cache;
-static std::map<std::string, std::string> nparam_transform_function_cache;
-static std::map<std::pair<std::string, std::string>, std::string> nparam_transform_results_cache;
-static bool extract_player_data(Document &json_root, RJson player_response, YouTubeVideoDetail &res, bool use_js_player) {
+static std::map<std::string, std::string> nparam_transform_results_cache;
+static bool extract_player_data(Document &json_root, RJson player_response, YouTubeVideoDetail &res) {
 	res.playability_status = player_response["playabilityStatus"]["status"].string_value();
 	res.playability_reason = player_response["playabilityStatus"]["reason"].string_value();
 	res.is_upcoming = player_response["videoDetails"]["isUpcoming"].bool_value();
@@ -42,70 +15,33 @@ static bool extract_player_data(Document &json_root, RJson player_response, YouT
 	for (auto i : player_response["streamingData"]["formats"].array_items()) formats.push_back(i);
 	for (auto i : player_response["streamingData"]["adaptiveFormats"].array_items()) formats.push_back(i);
 	
-	if (use_js_player) {
-		// for obfuscated signatures & n parameter modification
-		if (!cipher_transform_proc_cache.count(base_js_url) || !nparam_transform_function_cache.count(base_js_url)) {
-			std::string js_id;
-			std::regex pattern = std::regex(std::string("(/s/player/[\\w]+/[\\w-\\.]+/base\\.js)"));
-			std::smatch match_res;
-			if (std::regex_search(base_js_url, match_res, std::regex("/s/player/([\\w]+)/"))) js_id = match_res[1].str();
-			if (js_id == "") {
-				debug("failed to extract js id");
-				return false;
-			}
-			bool cache_used = false;
-#			ifndef _WIN32
-			char *buf = (char *) malloc(0x4000);
-			u32 read_size;
-			if (buf && Util_file_load_from_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) buf, 0x4000 - 1, &read_size).code == 0) {
-				debug("cache found (" + js_id + ") size:" + std::to_string(read_size) + " found, using...");
-				buf[read_size] = '\0';
-				if (yt_procs_from_string(buf, cipher_transform_proc_cache[base_js_url], nparam_transform_function_cache[base_js_url])) cache_used = true;
-				else debug("failed to load cache");
-			}
-			free(buf);
-#			endif
-			if (!cache_used) {
-				std::string js_content = http_get(base_js_url);
-				if (!js_content.size()) {
-					debug("base js download failed");
-					return false;
-				}
-				cipher_transform_proc_cache[base_js_url] = yt_cipher_get_transform_plan(js_content);
-				nparam_transform_function_cache[base_js_url] = yt_nparam_get_function_content(js_content);
-#			ifndef _WIN32
-				auto cache_str = yt_procs_to_string(cipher_transform_proc_cache[base_js_url], nparam_transform_function_cache[base_js_url]);
-				Result_with_string result = Util_file_save_to_file(js_id, DEF_MAIN_DIR + "js_cache/", (u8 *) cache_str.c_str(), cache_str.size(), true);
-				if (result.code != 0) debug("cache write failed : " + result.error_description);
-#			endif
-			}
-		}
+	// for obfuscated signatures & n parameter modification
+	for (auto &i : formats) { // handle decipher
+		if (i.has_key("url")) continue;
 		
-		for (auto &i : formats) { // handle decipher
-			if (i.has_key("url")) continue;
-			
-			auto transform_procedure = cipher_transform_proc_cache[base_js_url];
-			auto cipher_params = parse_parameters(i.has_key("cipher") ? i["cipher"].string_value() : i["signatureCipher"].string_value());
-			i.set_str(json_root, "url",
-				(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + yt_deobfuscate_signature(cipher_params["s"], transform_procedure)).c_str());
-		}
-		static auto nparam_regex = std::regex(std::string("[\?&]n=([^&]+)"));
-		for (auto &i : formats) { // modify the `n` parameter
-			std::string url = i["url"].string_value();
-			std::smatch match_result;
-			if (std::regex_search(url, match_result, nparam_regex)) {
-				auto cur_n = match_result[1].str();
-				std::string next_n;
-				if (!nparam_transform_results_cache.count({base_js_url, cur_n})) {
-					next_n = yt_modify_nparam(match_result[1].str(), nparam_transform_function_cache[base_js_url]);
-					nparam_transform_results_cache[{base_js_url, cur_n}] = next_n;
-				} else next_n = nparam_transform_results_cache[{base_js_url, cur_n}];
-				url = std::string(url.cbegin(), match_result[1].first) + next_n + std::string(match_result[1].second, url.cend());
-			} else debug("failed to detect `n` parameter");
-			if (url.find("ratebypass") == std::string::npos) url += "&ratebypass=yes";
-			
-			i.set_str(json_root, "url", url.c_str());
-		}
+		auto cipher_params = parse_parameters(i.has_key("cipher") ? i["cipher"].string_value() : i["signatureCipher"].string_value());
+		i.set_str(json_root, "url",
+			(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + cipher_transform(cipher_params["s"])).c_str());
+	}
+	for (auto &i : formats) { // modify the `n` parameter
+		std::string url = i["url"].string_value();
+		auto pos = url.find("&n=");
+		if (pos == std::string::npos) pos = url.find("?n=");
+		if (pos == std::string::npos) continue; // no `n` parameter
+		
+		auto n_start = pos + 3;
+		auto n_end = n_start;
+		while (n_end < url.size() && url[n_end] != '&') n_end++;
+		
+		std::string cur_n = url.substr(n_start, n_end - n_start);
+		std::string next_n;
+		if (!nparam_transform_results_cache.count(cur_n)) nparam_transform_results_cache[cur_n] = next_n = nparam_transform(cur_n);
+		else next_n = nparam_transform_results_cache[cur_n];
+		
+		url = url.substr(0, n_start) + next_n + url.substr(n_end, url.size() - n_end);
+		if (url.find("ratebypass") == std::string::npos) url += "&ratebypass=yes";
+		
+		i.set_str(json_root, "url", url.c_str());
 	}
 	for (auto &i : formats) i.set_str(json_root, "url", url_decode(i["url"].string_value()).c_str()); // something like %2C still appears in the url, so decode them back
 	
@@ -301,88 +237,67 @@ static void extract_metadata(RJson data, YouTubeVideoDetail &res) {
 YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	YouTubeVideoDetail res;
 	
-	bool cur_quick_mode = quick_mode;
-	if (cur_quick_mode) cur_quick_mode = (youtube_get_video_id_by_url(url) != "");
-	
-	if (innertube_key == "" || base_js_url == "") fetch_innertube_key_and_player();
-	if (innertube_key == "" || base_js_url == "") {
-		res.error = "innertube key or base.js url empty";
+	res.id = youtube_get_video_id_by_url(url);
+	if (res.id == "") {
+		res.error = "Not a video url : " + url;
 		return res;
 	}
-	if (cur_quick_mode) {
-		res.id = youtube_get_video_id_by_url(url);
-		std::string playlist_id = youtube_get_playlist_id_by_url(url);
-		
-		const std::string innertube_key = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"; // hardcoded
-		
-		std::string post_content = R"({"videoId": "%0", %1"context": {"client": {"hl": "%2","gl": "%3","clientName": "MWEB","clientVersion": "2.20220308.01.00"}}, "playbackContext": {"contentPlaybackContext": {"signatureTimestamp": %4}}})";
-		post_content = std::regex_replace(post_content, std::regex("%0"), res.id);
-		post_content = std::regex_replace(post_content, std::regex("%1"), playlist_id == "" ? "" : "\"playlistId\": \"" + playlist_id + "\", ");
-		post_content = std::regex_replace(post_content, std::regex("%2"), language_code);
-		post_content = std::regex_replace(post_content, std::regex("%3"), country_code);
-		post_content = std::regex_replace(post_content, std::regex("%4"), std::to_string(sts));
-		std::string urls[2] = {
-			get_innertube_api_url("next"),
-			get_innertube_api_url("player")
-		};
-#		ifdef _WIN32
-		std::string json_str[2]; // {/next, /player}
-		for (int i = 0; i < 2; i++) json_str[i] = http_post_json(urls[i], post_content);
-		for (int i = 0; i < 2; i++) {
-			parse_json_destructive(&json_str[i][0],
-				[&] (Document &json_root, RJson data) {
-					if (i == 0) extract_metadata(data, res);
-					else extract_player_data(json_root, data, res, true);
-				},
-				[&] (const std::string &error) {
-					res.error = "[v-#" + std::to_string(i) + "] " + error;
-					debug(res.error);
-				}
-			);
-		}
-#		else
-		debug("accessing(multi)...");
-		std::vector<NetworkResult> results;
-		{
-			std::vector<HttpRequest> requests;
-			for (int i = 0; i < 2; i++) requests.push_back(http_post_json_request(urls[i], post_content));
-			results = thread_network_session_list.perform(requests);
-			bool fail = false;
-			for (int i = 0; i < 2; i++) if (results[i].fail) {
-				fail = true;
-				debug("#" + std::to_string(i) + " fail");
+	
+	std::string playlist_id = youtube_get_playlist_id_by_url(url);
+	
+	std::string post_content = R"({"videoId": "%0", %1"context": {"client": {"hl": "%2","gl": "%3","clientName": "MWEB","clientVersion": "2.20220308.01.00"}}, "playbackContext": {"contentPlaybackContext": {"signatureTimestamp": %4}}})";
+	post_content = std::regex_replace(post_content, std::regex("%0"), res.id);
+	post_content = std::regex_replace(post_content, std::regex("%1"), playlist_id == "" ? "" : "\"playlistId\": \"" + playlist_id + "\", ");
+	post_content = std::regex_replace(post_content, std::regex("%2"), language_code);
+	post_content = std::regex_replace(post_content, std::regex("%3"), country_code);
+	post_content = std::regex_replace(post_content, std::regex("%4"), std::to_string(YOUTUBE_STS));
+	std::string urls[2] = {
+		get_innertube_api_url("next"),
+		get_innertube_api_url("player")
+	};
+#	ifdef _WIN32
+	std::string json_str[2]; // {/next, /player}
+	for (int i = 0; i < 2; i++) json_str[i] = http_post_json(urls[i], post_content);
+	for (int i = 0; i < 2; i++) {
+		parse_json_destructive(&json_str[i][0],
+			[&] (Document &json_root, RJson data) {
+				if (i == 0) extract_metadata(data, res);
+				else extract_player_data(json_root, data, res);
+			},
+			[&] (const std::string &error) {
+				res.error = "[v-#" + std::to_string(i) + "] " + error;
+				debug(res.error);
 			}
-			if (!fail) debug("ok");
-		}
-		for (int i = 0; i < 2; i++) {
-			results[i].data.push_back('\0');
-			parse_json_destructive((char *) &results[i].data[0],
-				[&] (Document &json_root, RJson data) {
-					if (i == 0) extract_metadata(data, res);
-					else extract_player_data(json_root, data, res, true);
-				},
-				[&] (const std::string &error) {
-					res.error = "[v-#" + std::to_string(i) + "] " + error;
-					debug(res.error);
-				}
-			);
-		}
-#		endif
-	} else {
-		std::string html = http_get(url);
-		if (!html.size()) {
-			res.error = "failed to download video page";
-			return res;
-		}
-		Document json_root[2];
-		RJson json[2];
-		json[0] = get_initial_data(json_root[0], html);
-		json[1] = initial_player_response(json_root[1], html);
-		extract_metadata(json[0], res);
-		extract_player_data(json_root[1], json[1], res, true);
-		
-		if (res.id.size() != 11) res.id = youtube_get_video_id_by_url(url);
+		);
 	}
+#	else
+	debug("accessing(multi)...");
+	std::vector<NetworkResult> results;
+	{
+		std::vector<HttpRequest> requests;
+		for (int i = 0; i < 2; i++) requests.push_back(http_post_json_request(urls[i], post_content));
+		results = thread_network_session_list.perform(requests);
+		bool fail = false;
+		for (int i = 0; i < 2; i++) if (results[i].fail) {
+			fail = true;
+			debug("#" + std::to_string(i) + " fail");
+		}
+		if (!fail) debug("ok");
+	}
+	for (int i = 0; i < 2; i++) {
+		results[i].data.push_back('\0');
+		parse_json_destructive((char *) &results[i].data[0],
+			[&] (Document &json_root, RJson data) {
+				if (i == 0) extract_metadata(data, res);
+				else extract_player_data(json_root, data, res);
+			},
+			[&] (const std::string &error) {
+				res.error = "[v-#" + std::to_string(i) + "] " + error;
+				debug(res.error);
+			}
+		);
+	}
+#	endif
 
 #	ifdef _WIN32
 	// for debug purpose, to check whether the extracted stream url is working
@@ -416,11 +331,6 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDetail &prev_result) {
 	YouTubeVideoDetail new_result = prev_result;
 	
-	if (innertube_key == "") fetch_innertube_key_and_player();
-	if (innertube_key == "") {
-		new_result.error = "innertube key empty";
-		return new_result;
-	}
 	if (prev_result.suggestions_continue_token == "") {
 		new_result.error = "suggestion continue token empty";
 		return new_result;
@@ -467,11 +377,6 @@ YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(RJson comment_
 YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetail &prev_result) {
 	YouTubeVideoDetail new_result = prev_result;
 	
-	if (innertube_key == "") fetch_innertube_key_and_player();
-	if (innertube_key == "") {
-		new_result.error = "innertube key empty";
-		return new_result;
-	}
 	if (prev_result.comment_continue_type == -1) {
 		new_result.error = "No more comments available";
 		return new_result;
@@ -548,8 +453,6 @@ YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVi
 		debug("load_more_replies on a comment that has no replies to load");
 		return comment;
 	}
-	if (innertube_key == "") fetch_innertube_key_and_player();
-	if (innertube_key == "") return comment;
 	
 	std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
 		+ comment.replies_continue_token + "\"}";
