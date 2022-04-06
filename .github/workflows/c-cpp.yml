@@ -1,0 +1,25 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: make
+      run: make
+    - name: Upload binary
+      uses: actions/upload-artifact@v3
+      with:
+        name: Build
+        path: |
+          ThirdTube.3dsx
+          ThirdTube.cia
