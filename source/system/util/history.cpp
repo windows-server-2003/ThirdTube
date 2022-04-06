@@ -2,9 +2,9 @@
 #include "system/util/history.hpp"
 #include "system/util/util.hpp"
 #include "ui/ui.hpp"
-#include "json11/json11.hpp"
+#include "rapidjson_wrapper.hpp"
 
-using namespace json11;
+using namespace rapidjson;
 
 static std::vector<HistoryVideo> watch_history;
 static Mutex resource_lock;
@@ -27,9 +27,12 @@ void load_watch_history() {
 	if (result.code == 0) {
 		buf[read_size] = '\0';
 		
+		Document json_root;
 		std::string error;
-		Json data = Json::parse(buf, error);
-		int version = data["version"] == Json() ? -1 : data["version"].int_value();
+		RJson data = RJson::parse(json_root, buf, error);
+		
+		int version = data.has_key("version") ? data["version"].int_value() : -1;
+		
 		if (version >= 0) {
 			std::vector<HistoryVideo> loaded_watch_history;
 			for (auto video : data["history"].array_items()) {
@@ -57,9 +60,8 @@ void load_watch_history() {
 			watch_history = loaded_watch_history;
 			resource_lock.unlock();
 			Util_log_save("history/load" , "loaded history(" + std::to_string(loaded_watch_history.size()) + " items)");
-		} else {
-			Util_log_save("history/load" , "failed to load history, json err:" + error);
-		}
+		} else Util_log_save("history/load" , "failed to load history, json err:" + error);
+		
 	}
 	free(buf);
 }
@@ -68,30 +70,25 @@ void save_watch_history() {
 	auto backup = watch_history;
 	resource_lock.unlock();
 	
-	std::string data = 
-		std::string() +
-		"{\n" + 
-			"\t\"version\": " + std::to_string(HISTORY_VERSION) + ",\n" +
-			"\t\"history\": [\n";
+	Document json_root;
+	auto &allocator = json_root.GetAllocator();
 	
-	bool first = true;
+	json_root.SetObject();
+	json_root.AddMember("version", std::to_string(HISTORY_VERSION), allocator);
+	
+	Value history(kArrayType);
 	for (auto video : backup) {
-		if (first) first = false;
-		else data += ",";
-		data += 
-			std::string() +
-			"\t\t{\n" +
-				"\t\t\t\"id\": \"" + video.id + "\",\n" +
-				"\t\t\t\"title\": \"" + video.title + "\",\n" +
-				"\t\t\t\"author_name\": \"" + video.author_name + "\",\n" +
-				"\t\t\t\"length\": \"" + video.length_text + "\",\n" +
-				"\t\t\t\"my_view_count\": " + std::to_string(video.my_view_count) + ",\n" +
-				"\t\t\t\"last_watch_time\": \"" + std::to_string(video.last_watch_time) + "\"\n" + // string value because we have to deal with u32 value which json11 doesn't support loading
-			"\t\t}";
+		Value cur_json(kObjectType);
+		cur_json.AddMember("id", video.id, allocator);
+		cur_json.AddMember("title", video.title, allocator);
+		cur_json.AddMember("author_name", video.author_name, allocator);
+		cur_json.AddMember("my_view_count", Value(video.my_view_count), allocator);
+		cur_json.AddMember("last_watch_time", std::to_string(video.last_watch_time), allocator); // string value because we have to deal with u32 value, not int
+		history.PushBack(cur_json, allocator);
 	}
-	data += "\n";
-	data += "\t]\n";
-	data += "}\n";
+	json_root.AddMember("history", history, allocator);
+	
+	std::string data = RJson(json_root).dump();
 	
 	Result_with_string result = Util_file_save_to_file("watch_history.json", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
 	Util_log_save("history/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);

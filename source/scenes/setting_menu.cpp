@@ -12,7 +12,7 @@
 #include "system/util/misc_tasks.hpp"
 #include "network/thumbnail_loader.hpp"
 #include "network/network_io.hpp"
-#include "json11/json11.hpp"
+#include "rapidjson_wrapper.hpp"
 
 namespace Settings {
 	bool thread_suspend = false;
@@ -63,8 +63,6 @@ namespace Settings {
 using namespace Settings;
 
 
-
-using namespace json11;
 
 std::string install_update(NetworkSessionList &session_list) {
 	std::string new_error_message = "";
@@ -142,9 +140,11 @@ static void update_worker_thread_func(void *) {
 			auto result = session_list.perform(HttpRequest::GET("https://api.github.com/repos/windows-server-2003/ThirdTube/releases/latest", {}));
 			if (result.fail) new_error_message = "Failed accessing(deep fail) : " + result.fail;
 			else if (result.status_code == 200) {
+				result.data.push_back('\0');
+				rapidjson::Document json_root;
 				std::string error;
-				Json result_json = Json::parse(std::string(result.data.begin(), result.data.end()), error);
-				if (error != "" || result_json == Json()) {
+				RJson result_json = RJson::parse(json_root, (char *) result.data.data(), error);
+				if (error != "") {
 					Util_log_save("updater", "failed to parse json : " + error);
 					new_error_message = "failed to parse json : " + error;
 				} else {

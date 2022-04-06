@@ -381,14 +381,8 @@ Intent Search_draw(void)
 	{
 		var_need_reflesh = false;
 		Draw_frame_ready();
-		Draw_screen_ready(0, DEFAULT_BACK_COLOR);
+		video_draw_top_screen();
 
-		if(Util_log_query_log_show_flag())
-			Util_log_draw();
-
-		Draw_top_ui();
-		if (var_debug_mode) Draw_debug_info();
-		
 		Draw_screen_ready(1, DEFAULT_BACK_COLOR);
 		
 		// (!) : I don't know how to draw textures truncated, so I will just fill the margin with white again

@@ -2,9 +2,9 @@
 #include "system/util/subscription_util.hpp"
 #include "system/util/util.hpp"
 #include "ui/ui.hpp"
-#include "json11/json11.hpp"
+#include "rapidjson_wrapper.hpp"
 
-using namespace json11;
+using namespace rapidjson;
 
 static std::vector<SubscriptionChannel> subscribed_channels;
 static Mutex resource_lock;
@@ -27,9 +27,12 @@ void load_subscription() {
 	if (result.code == 0) {
 		buf[read_size] = '\0';
 		
+		Document json_root;
 		std::string error;
-		Json data = Json::parse(buf, error);
-		int version = data["version"] == Json() ? -1 : data["version"].int_value();
+		RJson data = RJson::parse(json_root, buf, error);
+		
+		int version = data.has_key("version") ? data["version"].int_value() : -1;
+		
 		if (version >= 0) {
 			std::vector<SubscriptionChannel> loaded_channels;
 			for (auto video : data["channels"].array_items()) {
@@ -49,9 +52,7 @@ void load_subscription() {
 			subscribed_channels = loaded_channels;
 			resource_lock.unlock();
 			Util_log_save("subsc/load" , "loaded subsc(" + std::to_string(subscribed_channels.size()) + " items)");
-		} else {
-			Util_log_save("subsc/load" , "failed to load subsc, json err:" + error);
-		}
+		} else Util_log_save("subsc/load" , "json err: " + error);
 	}
 	free(buf);
 }
@@ -60,29 +61,25 @@ void save_subscription() {
 	auto channels_backup = subscribed_channels;
 	resource_lock.unlock();
 	
-	std::string data = 
-		std::string() +
-		"{\n" + 
-			"\t\"version\": " + std::to_string(SUBSCRIPTION_VERSION) + ",\n" +
-			"\t\"channels\": [\n";
+	Document json_root;
+	auto &allocator = json_root.GetAllocator();
 	
-	bool first = true;
+	json_root.SetObject();
+	json_root.AddMember("version", std::to_string(SUBSCRIPTION_VERSION), allocator);
+	
+	Value channels(kArrayType);
 	for (auto channel : channels_backup) {
-		if (first) first = false;
-		else data += ",";
-		data += 
-			std::string() +
-			"\t\t{\n" +
-				"\t\t\t\"id\": \"" + channel.id + "\",\n" +
-				"\t\t\t\"url\": \"" + channel.url + "\",\n" +
-				"\t\t\t\"icon_url\": \"" + channel.icon_url + "\",\n" +
-				"\t\t\t\"name\": \"" + channel.name + "\",\n" +
-				"\t\t\t\"subscriber_count_str\": \"" + channel.subscriber_count_str + "\"\n" +
-			"\t\t}";
+		Value cur_json(kObjectType);
+		cur_json.AddMember("id", channel.id, allocator);
+		cur_json.AddMember("url", channel.url, allocator);
+		cur_json.AddMember("icon_url", channel.icon_url, allocator);
+		cur_json.AddMember("name", channel.name, allocator);
+		cur_json.AddMember("subscriber_count_str", channel.subscriber_count_str, allocator);
+		channels.PushBack(cur_json, allocator);
 	}
-	data += "\n";
-	data += "\t]\n";
-	data += "}\n";
+	json_root.AddMember("channels", channels, allocator);
+	
+	std::string data = RJson(json_root).dump();
 	
 	Result_with_string result = Util_file_save_to_file("subscription.json", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
 	Util_log_save("subsc/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);

@@ -76,8 +76,6 @@ You can use the code under the terms of the GNU General Public License GPL v3 or
 ### [FFmpeg](https://ffmpeg.org/)
 by the FFmpeg developers under GNU Lesser General Public License (LGPL) version 2.1  
 The modified source code can be found in https://github.com/windows-server-2003/FFmpeg/tree/3ds.  
-### [json11](https://github.com/dropbox/json11)
-by Dropbox under MIT License  
 ### [rapidjson](https://github.com/Tencent/rapidjson)
 by Tencent and Milo Yip under MIT License  
 ### [libctru](https://github.com/devkitPro/libctru)

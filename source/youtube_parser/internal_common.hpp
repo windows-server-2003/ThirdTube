@@ -1,11 +1,9 @@
 #include <string>
 #include <map>
 #include <vector>
-#include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
 #include "parser.hpp"
 #include "hardcode.hpp"
+#include "rapidjson_wrapper.hpp"
 
 #ifdef _WIN32
 #	include <iostream> // <------------
@@ -38,73 +36,6 @@
 using namespace rapidjson;
 
 namespace youtube_parser {
-	using rapidjson_value_t = GenericValue<UTF8<> >;
-	// rapidjson wrapper
-	class RJson {
-	private :
-		rapidjson_value_t * json = NULL;
-	public :
-		RJson () {}
-		RJson (const RJson &rhs) = default;
-		RJson (rapidjson_value_t &json) : json(&json) {}
-		RJson & operator = (const RJson &rhs) = default;
-		
-		static RJson parse(Document &data, const char *s, std::string &error) {
-			if (data.Parse(s).HasParseError()) {
-				error = "Parsing error " + std::to_string(data.GetParseError()) + " at " + std::to_string(data.GetErrorOffset());
-				return RJson();
-			} else {
-				error = "";
-				return RJson(data);
-			}
-		}
-		static RJson parse_inplace(Document &data, char *s, std::string &error) {
-			if (data.ParseInsitu(s).HasParseError()) {
-				error = "Parsing error " + std::to_string(data.GetParseError()) + " at " + std::to_string(data.GetErrorOffset());
-				return RJson();
-			} else {
-				error = "";
-				return RJson(data);
-			}
-		}
-		
-		bool is_valid() const { return json != NULL; }
-		bool has_key(const std::string &str) const { return (*this)[str].is_valid(); }
-		
-		const char *cstring_value() const { return json && json->IsString() ? json->GetString() : ""; }
-		std::string string_value() const { return cstring_value(); }
-		int int_value() const { return json && json->IsInt() ? json->GetInt() : 0; }
-		bool bool_value() const { return json && json->IsBool() ? json->GetBool() : false; }
-		std::vector<RJson> array_items() const {
-			if (!json || !json->IsArray()) return {};
-			const auto &array = json->GetArray();
-			return std::vector<RJson>(array.Begin(), array.End());
-		}
-		
-		void set_str(Document &json_root, const char *key, const char *value) {
-			if (!json || !json->IsObject()) return;
-			if (has_key(key)) (*this)[key].json->SetString(value, json_root.GetAllocator());
-			else {
-				Value value_object;
-				value_object.SetString(value, json_root.GetAllocator());
-				Value key_object;
-				key_object.SetString(key, json_root.GetAllocator());
-				json->AddMember(key_object, value_object, json_root.GetAllocator());
-			}
-		}
-		
-		RJson operator [] (const char *key) const { return json && json->IsObject() && json->HasMember(key) ? (*json)[key] : RJson(); }
-		RJson operator [] (const std::string &str) const { return (*this)[str.c_str()]; }
-		RJson operator [] (size_t index) const { return json && json->IsArray() ? (*json)[index] : RJson(); }
-		
-		std::string dump() const {
-			if (!json) return "(null)";
-			StringBuffer buffer;
-			Writer<StringBuffer> writer(buffer);
-			json->Accept(writer);
-			return buffer.GetString();
-		}
-	};
 	RJson get_error_json(const std::string &error);
 	
 	// internal state
