@@ -41,7 +41,7 @@ static void parse_channel_data(RJson data, YouTubeChannelDetail &res) {
 		}
 	}
 	res.banner_url = get_thumbnail_url_exact(data["header"]["c4TabbedHeaderRenderer"]["banner"]["thumbnails"], 320);
-	res.icon_url = get_thumbnail_url_closest(data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"], 100000); // maximum one
+	res.icon_url = get_thumbnail_url_closest(data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"], 88);
 }
 
 YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id) {

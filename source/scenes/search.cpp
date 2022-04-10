@@ -114,7 +114,7 @@ void Search_init(void) {
 			top_bar_view,
 			result_view
 		})
-		->set_draw_order({2, 0, 1});
+		->set_draw_order({1, 0});
 	
 	
 	Search_resume("");
