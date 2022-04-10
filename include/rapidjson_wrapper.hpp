@@ -47,16 +47,6 @@ public :
 		return std::vector<RJson>(array.Begin(), array.End());
 	}
 	
-	template<typename T> void set(rapidjson::Document &json_root, const char *key, const T &value) {
-		if (!json || !json->IsObject()) return;
-		if (has_key(key)) (*this)[key].json->SetString(value, json_root.GetAllocator());
-		else {
-			rapidjson::Value value_object(value);
-			rapidjson::Value key_object;
-			key_object.SetString(key, json_root.GetAllocator());
-			json->AddMember(key_object, value_object, json_root.GetAllocator());
-		}
-	}
 	void set_str(rapidjson::Document &json_root, const char *key, const char *value) {
 		if (!json || !json->IsObject()) return;
 		if (has_key(key)) (*this)[key].json->SetString(value, json_root.GetAllocator());

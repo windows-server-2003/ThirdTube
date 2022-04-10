@@ -1455,7 +1455,7 @@ namespace Bar {
 			C2D_DrawCircleSolid(bar_x_l + (bar_x_r - bar_x_l) * vid_progress, y_center, 0, bar_grabbed ? 6 : 4, 0xFF3333D0);
 		}
 	}
-	void video_update_playing_bar(Hid_info key, Intent *intent) {
+	void video_update_playing_bar(Hid_info key) {
 		float y_l = 240 - VIDEO_PLAYING_BAR_HEIGHT;
 		float y_center = 240 - (float) VIDEO_PLAYING_BAR_HEIGHT / 2;
 		
@@ -1473,8 +1473,8 @@ namespace Bar {
 			var_need_reflesh = true;
 		}
 		if (key.p_touch && key.touch_x >= 320 - MAXIMIZE_ICON_WIDTH && key.touch_y >= 240 - VIDEO_PLAYING_BAR_HEIGHT) {
-			intent->next_scene = SceneType::VIDEO_PLAYER;
-			intent->arg = cur_playing_url;
+			global_intent.next_scene = SceneType::VIDEO_PLAYER;
+			global_intent.arg = cur_playing_url;
 		}
 		small_resource_lock.lock();
 		if (!vid_pausing_seek && bar_grabbed && !vid_pausing) Util_speaker_pause(0);
@@ -1503,7 +1503,7 @@ namespace Bar {
 		last_touch_y = key.touch_y;
 	}
 }
-void video_update_playing_bar(Hid_info key, Intent *intent) { Bar::video_update_playing_bar(key, intent); }
+void video_update_playing_bar(Hid_info key) { Bar::video_update_playing_bar(key); }
 void video_draw_playing_bar() { Bar::video_draw_playing_bar(); }
 
 
@@ -1938,11 +1938,8 @@ void video_set_show_debug_info(bool show) {
 	}
 }
 
-Intent VideoPlayer_draw(void)
+void VideoPlayer_draw(void)
 {
-	Intent intent;
-	intent.next_scene = SceneType::NO_CHANGE;
-	
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	
@@ -2042,25 +2039,25 @@ Intent VideoPlayer_draw(void)
 			thumbnail_set_priorities(priority_list);
 		}
 		
-		update_overlay_menu(&key, &intent, SceneType::VIDEO_PLAYER);
+		update_overlay_menu(&key);
 		
 		main_view->update(key);
 		
 		if (channel_id_pressed != "") {
-			intent.next_scene = SceneType::CHANNEL;
-			intent.arg = channel_id_pressed;
+			global_intent.next_scene = SceneType::CHANNEL;
+			global_intent.arg = channel_id_pressed;
 			channel_id_pressed = "";
 		}
 		if (suggestion_clicked_url != "") {
-			intent.next_scene = SceneType::VIDEO_PLAYER;
-			intent.arg = suggestion_clicked_url;
+			global_intent.next_scene = SceneType::VIDEO_PLAYER;
+			global_intent.arg = suggestion_clicked_url;
 			suggestion_clicked_url = "";
 		}
 		
 		small_resource_lock.unlock();
 		/* ****************************** LOCK END ******************************  */
 		
-		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		if (video_playing_bar_show) video_update_playing_bar(key);
 		if (key.p_a) {
 			if(vid_play_request) {
 				if (vid_pausing) {
@@ -2075,7 +2072,7 @@ Intent VideoPlayer_draw(void)
 		} else if ((key.h_x && key.p_b) || (key.h_b && key.p_x)) {
 			vid_play_request = false;
 		} else if (key.p_b) {
-			intent.next_scene = SceneType::BACK;
+			global_intent.next_scene = SceneType::BACK;
 		} else if (key.p_d_right || key.p_d_left) {
 			if (network_decoder.ready) {
 				double pos = vid_current_pos;
@@ -2086,6 +2083,4 @@ Intent VideoPlayer_draw(void)
 			}
 		}
 	}
-	
-	return intent;
 }

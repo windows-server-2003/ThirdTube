@@ -7,15 +7,15 @@ enum class SceneType {
 	CHANNEL,
 	ABOUT,
 	HISTORY,
-	SUBSCRIPTION,
+	HOME,
 	// used for intent
 	NO_CHANGE,
 	BACK,
 	EXIT
 };
 struct Intent {
-	SceneType next_scene;
-	std::string arg;
+	SceneType next_scene = SceneType::NO_CHANGE;
+	std::string arg = "";
 	
 	bool operator == (const Intent &rhs) {
 		return next_scene == rhs.next_scene && arg == rhs.arg;
@@ -23,6 +23,8 @@ struct Intent {
 	bool operator != (const Intent &rhs) { return !(*this == rhs); }
 };
 
+extern SceneType global_current_scene;
+extern Intent global_intent;
 
 void Menu_init(void);
 

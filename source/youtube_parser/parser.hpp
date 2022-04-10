@@ -212,6 +212,18 @@ YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &p
 YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &prev_result);
 YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &prev_result);
 
+
+struct YouTubeHomeResult {
+	std::string error;
+	std::vector<YouTubeVideoSuccinct> videos;
+	std::string continue_token;
+	std::string visitor_data;
+	bool has_continue() const { return continue_token != "" && visitor_data != ""; }
+};
+YouTubeHomeResult youtube_parse_home_page();
+YouTubeHomeResult youtube_continue_home_page(const YouTubeHomeResult &prev_result);
+
+
 void youtube_change_content_language(std::string language_code);
 
 // util function

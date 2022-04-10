@@ -8,4 +8,4 @@ void Sem_suspend(void);
 
 void Sem_resume(std::string arg);
 
-Intent Sem_draw(void);
+void Sem_draw(void);

@@ -34,30 +34,30 @@ namespace Search {
 	
 	std::string last_url_input = "https://m.youtube.com/watch?v=";
 	
-	bool search_request = false;
-	bool url_input_request = false;
 	bool clicked_is_channel;
 	std::string clicked_url;
 	
-	YouTubePageType url_jump_request_type = YouTubePageType::INVALID;
-	std::string url_jump_request;
-	TextView *toast_view;
+	TextView * toast_view = (new TextView((320 - 150) / 2, 190, 150, DEFAULT_FONT_INTERVAL + SMALL_MARGIN));
 	int toast_view_visible_frames_left = 0;
 	
 	const int RESULT_Y_LOW = 25;
 	int RESULT_Y_HIGH = 240; // changes according to whether the video playing bar is drawn or not
 	
-	HorizontalListView *top_bar_view;
-	TextView *search_box_view;
-	TextView *url_button_view;
-	
-	VerticalListView *result_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
-		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::SEARCH);
-	View *result_bottom_view = new EmptyView(0, 0, 320, 0);
-	ScrollView *result_view;
+	VerticalListView *main_view;
+		VerticalListView *top_bar_view = new VerticalListView(0, 0, 320);
+			// annonymous HorizontalListView
+				TextView *search_box_view;
+				TextView *url_button_view;
+			// annonymous RuleView : height 1
+		ScrollView *result_view;
+			VerticalListView *result_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
+			->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::SEARCH);
+			View *result_bottom_view = new EmptyView(0, 0, 320, 0);
 };
 using namespace Search;
 
+TextView *Search_get_toast_view() { return toast_view; }
+View *Search_get_search_bar_view() { return top_bar_view; }
 
 static void load_search_results(void *);
 static void load_more_search_results(void *);
@@ -66,38 +66,55 @@ void Search_init(void) {
 	Util_log_save("search/init", "Initializing...");
 	Result_with_string result;
 	
-	search_box_view = (new TextView(0, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 3 - URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2));
+	search_box_view = (new TextView(0, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 3 - URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2 - 1));
 	search_box_view->set_text_offset(0, -1);
 	search_box_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SEARCH_HINT); });
-	search_box_view->set_background_color(LIGHT0_BACK_COLOR);
+	search_box_view->set_get_background_color([] (const View &) { return LIGHT0_BACK_COLOR; });
 	search_box_view->set_get_text_color([] () { return LIGHT1_TEXT_COLOR; });
-	search_box_view->set_on_view_released([] (View &) { search_request = true; });
+	search_box_view->set_on_view_released([] (View &) {
+		if (Search_show_search_keyboard()) global_intent.next_scene = SceneType::SEARCH;
+	});
 	
-	url_button_view = (new TextView(0, SEARCH_BOX_MARGIN, URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2));
+	url_button_view = (new TextView(0, SEARCH_BOX_MARGIN, URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2 - 1));
 	url_button_view->set_text_offset(0, -1);
 	url_button_view->set_x_alignment(TextView::XAlign::CENTER);
 	url_button_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(URL); });
-	url_button_view->set_background_color(LIGHT1_BACK_COLOR);
-	url_button_view->set_on_view_released([] (View &) { url_input_request = true; });
+	url_button_view->set_get_background_color([] (const View &) { return LIGHT1_BACK_COLOR; });
+	url_button_view->set_on_view_released([] (View &) {
+		if (Search_show_url_input_keyboard()) global_intent.next_scene = SceneType::SEARCH;
+	});
 	
-	toast_view = (new TextView((320 - 150) / 2, 190, 150, DEFAULT_FONT_INTERVAL + SMALL_MARGIN));
 	toast_view->set_is_visible(false);
 	toast_view->set_x_alignment(TextView::XAlign::CENTER);
 	toast_view->set_text_offset(0, -1);
 	toast_view->set_get_background_color([] (const View &) { return 0x50000000; });
 	toast_view->set_get_text_color([] () { return (u32) -1; });
 	
-	top_bar_view = (new HorizontalListView(0, 0, RESULT_Y_LOW))
+	top_bar_view
 		->set_views({
-			new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW),
-			search_box_view,
-			new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW),
-			url_button_view
+			(new HorizontalListView(0, 0, RESULT_Y_LOW - 1))
+				->set_views({
+					new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW - 1),
+					search_box_view,
+					new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW - 1),
+					url_button_view,
+					new EmptyView(0, 0, SEARCH_BOX_MARGIN, RESULT_Y_LOW - 1)
+				})
+				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
+			(new RuleView(0, 0, 320, 1))
+				->set_get_color([] () { return 0xFF000000; }) // always black
+				->set_margin(0)
 		});
+		
 	
 	result_view = (new ScrollView(0, 0, 320, RESULT_Y_HIGH - RESULT_Y_LOW))
 		->set_views({result_list_view, result_bottom_view});
-	
+	main_view = (new VerticalListView(0, 0, 320))
+		->set_views({
+			top_bar_view,
+			result_view
+		})
+		->set_draw_order({2, 0, 1});
 	
 	
 	Search_resume("");
@@ -111,20 +128,19 @@ void Search_exit(void) {
 	
 	resource_lock.lock();
 	
-	top_bar_view->recursive_delete_subviews();
-	delete top_bar_view;
-	top_bar_view = NULL;
-	result_view->recursive_delete_subviews();
-	delete result_view;
+	main_view->recursive_delete_subviews();
+	delete main_view;
+	main_view = NULL;
 	result_view = NULL;
+	result_list_view = NULL;
+	result_bottom_view = NULL;
+	top_bar_view = NULL;
+	search_box_view = NULL;
+	url_button_view = NULL;
+	
 	toast_view->recursive_delete_subviews();
 	delete toast_view;
 	toast_view = NULL;
-	
-	search_box_view = NULL;
-	url_button_view = NULL;
-	result_list_view = NULL;
-	result_bottom_view = NULL;
 	
 	resource_lock.unlock();
 	
@@ -139,6 +155,7 @@ void Search_suspend(void) {
 void Search_resume(std::string arg) {
 	(void) arg;
 	overlay_menu_on_resume();
+	
 	thread_suspend = false;
 	var_need_reflesh = true;
 }
@@ -296,8 +313,10 @@ static void access_input_url(void *) {
 		return;
 	}
 	if (page_type != YouTubePageType::INVALID) {
-		url_jump_request_type = page_type;
-		url_jump_request = url;
+		if (page_type == YouTubePageType::VIDEO) global_intent.next_scene = SceneType::VIDEO_PLAYER;
+		else if (page_type == YouTubePageType::CHANNEL) global_intent.next_scene = SceneType::CHANNEL;
+		else if (page_type == YouTubePageType::SEARCH) global_intent.next_scene = SceneType::SEARCH;
+		global_intent.arg = url;
 	} else {
 		toast_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(NOT_A_YOUTUBE_URL); });
 		toast_view->set_is_visible(true);
@@ -308,8 +327,9 @@ static void access_input_url(void *) {
 
 
 
-static void search() {
+bool Search_show_search_keyboard() {
 	if (!is_async_task_running(load_search_results)) {
+		if (global_current_scene != SceneType::SEARCH) resource_lock.lock();
 		SwkbdState keyboard;
 		swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 32);
 		swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY | SWKBD_PREDICTIVE_INPUT);
@@ -333,10 +353,13 @@ static void search() {
 			remove_all_async_tasks_with_type(load_more_search_results);
 			queue_async_task(load_search_results, NULL);
 		}
-	}
+		if (global_current_scene != SceneType::SEARCH) resource_lock.unlock();
+		return button_pressed == SWKBD_BUTTON_RIGHT;
+	} else return false;
 }
-static void url_input() {
+bool Search_show_url_input_keyboard() {
 	if (!is_async_task_running(access_input_url)) {
+		if (global_current_scene != SceneType::SEARCH) resource_lock.lock();
 		SwkbdState keyboard;
 		swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 255);
 		swkbdSetFeatures(&keyboard, SWKBD_DEFAULT_QWERTY | SWKBD_PREDICTIVE_INPUT);
@@ -357,13 +380,13 @@ static void url_input() {
 			remove_all_async_tasks_with_type(access_input_url);
 			queue_async_task(access_input_url, NULL);
 		}
-	}
+		if (global_current_scene != SceneType::SEARCH) resource_lock.unlock();
+		return button_pressed == SWKBD_BUTTON_RIGHT;
+	} else return false;
 }
 
-Intent Search_draw(void)
+void Search_draw(void)
 {
-	Intent intent;
-	intent.next_scene = SceneType::NO_CHANGE;
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	
@@ -387,14 +410,9 @@ Intent Search_draw(void)
 		
 		// (!) : I don't know how to draw textures truncated, so I will just fill the margin with white again
 		resource_lock.lock();
-		result_view->draw(0, RESULT_Y_LOW);
-		Draw_texture(var_square_image[0], DEFAULT_BACK_COLOR, 0, 0, 320, RESULT_Y_LOW);
-		top_bar_view->draw();
+		main_view->draw();
 		if (toast_view_visible_frames_left > 0) toast_view->draw();
 		resource_lock.unlock();
-		
-		// In night mode, the line between the search box and search results looks weird, so don't draw it
-		if (!var_night_mode) Draw_texture(var_square_image[0], DEFAULT_TEXT_COLOR, 0, RESULT_Y_LOW - 1, 320, 1);
 		
 		if (video_playing_bar_show) video_draw_playing_bar();
 		draw_overlay_menu(video_playing_bar_show ? 240 - OVERLAY_MENU_ICON_SIZE - VIDEO_PLAYING_BAR_HEIGHT : 240 - OVERLAY_MENU_ICON_SIZE);
@@ -418,40 +436,21 @@ Intent Search_draw(void)
 	} else if(Util_expl_query_show_flag()) {
 		Util_expl_main(key);
 	} else {
-		update_overlay_menu(&key, &intent, SceneType::SEARCH);
+		update_overlay_menu(&key);
 		
 		resource_lock.lock();
-		top_bar_view->update(key);
-		result_view->update(key, 0, RESULT_Y_LOW);
+		main_view->update(key);
 		if (clicked_url != "") {
-			intent.next_scene = clicked_is_channel ? SceneType::CHANNEL : SceneType::VIDEO_PLAYER;
-			intent.arg = clicked_url;
+			global_intent.next_scene = clicked_is_channel ? SceneType::CHANNEL : SceneType::VIDEO_PLAYER;
+			global_intent.arg = clicked_url;
 			clicked_url = "";
 		}
-		if (search_request) {
-			search();
-			search_request = false;
-		}
-		if (url_input_request) {
-			url_input();
-			url_input_request = false;
-		}
-		if (url_jump_request_type != YouTubePageType::INVALID) {
-			if (url_jump_request_type == YouTubePageType::VIDEO) intent.next_scene = SceneType::VIDEO_PLAYER;
-			else if (url_jump_request_type == YouTubePageType::CHANNEL) intent.next_scene = SceneType::CHANNEL;
-			else if (url_jump_request_type == YouTubePageType::SEARCH) intent.next_scene = SceneType::SEARCH;
-			intent.arg = url_jump_request;
-			url_jump_request_type = YouTubePageType::INVALID;
-		}
-		
 		resource_lock.unlock();
 		
-		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		if (video_playing_bar_show) video_update_playing_bar(key);
 		
-		if (key.p_a) search();
+		if (key.p_a) Search_show_search_keyboard();
 		
-		if (key.p_b) intent.next_scene = SceneType::BACK;
+		if (key.p_b) global_intent.next_scene = SceneType::BACK;
 	}
-	
-	return intent;
 }

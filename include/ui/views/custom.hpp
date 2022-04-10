@@ -9,13 +9,13 @@ public :
 	virtual ~CustomView () {}
 	
 	std::function<void (const CustomView &)> draw_func;
-	std::function<void (CustomView &)> update_func;
+	std::function<void (CustomView &, Hid_info key)> update_func;
 	
 	CustomView *set_draw(const std::function<void (const CustomView &)> &draw_func) {
 		this->draw_func = draw_func;
 		return this;
 	}
-	CustomView *set_update(const std::function<void (CustomView &)> &update_func) {
+	CustomView *set_update(const std::function<void (CustomView &, Hid_info key)> &update_func) {
 		this->update_func = update_func;
 		return this;
 	}
@@ -24,6 +24,6 @@ public :
 		draw_func(*this);
 	}
 	void update_(Hid_info key) override {
-		if (update_func) update_func(*this);
+		if (update_func) update_func(*this, key);
 	}
 };

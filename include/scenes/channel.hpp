@@ -8,4 +8,4 @@ void Channel_suspend(void);
 
 void Channel_resume(std::string arg);
 
-Intent Channel_draw(void);
+void Channel_draw(void);

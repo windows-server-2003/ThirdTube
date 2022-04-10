@@ -17,7 +17,7 @@ struct Content {
 	enum class Type {
 		SEARCH,
 		HISTORY,
-		SUBSCRIPTION,
+		HOME,
 		EXIT,
 		SETTINGS,
 		ABOUT,
@@ -85,20 +85,20 @@ void draw_overlay_menu(int y) {
 	}
 	if (menu_status == CONFIRMING_CLOSE) dialog_view->draw();
 }
-void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene) {
+void update_overlay_menu(Hid_info *key) {
 	static bool exit_confirmed = false;
 	static SceneType prev_scene = SceneType::SEARCH;
-	if (prev_scene != current_scene) {
+	if (prev_scene != global_current_scene) {
 		var_need_reflesh = true;
-		prev_scene = current_scene;
+		prev_scene = global_current_scene;
 	}
 	contents.clear();
-	if (current_scene != SceneType::SEARCH) contents.push_back({LOCALIZED(GOTO_SEARCH), Content::Type::SEARCH});
-	if (current_scene != SceneType::HISTORY) contents.push_back({LOCALIZED(WATCH_HISTORY), Content::Type::HISTORY});
-	if (current_scene != SceneType::SUBSCRIPTION) contents.push_back({LOCALIZED(SUBSCRIPTION), Content::Type::SUBSCRIPTION});
+	if (global_current_scene != SceneType::HOME) contents.push_back({LOCALIZED(HOME), Content::Type::HOME});
+	if (global_current_scene != SceneType::SEARCH) contents.push_back({LOCALIZED(GOTO_SEARCH), Content::Type::SEARCH});
+	if (global_current_scene != SceneType::HISTORY) contents.push_back({LOCALIZED(WATCH_HISTORY), Content::Type::HISTORY});
 	contents.push_back({LOCALIZED(EXIT_APP), Content::Type::EXIT});
-	if (current_scene != SceneType::SETTINGS) contents.push_back({LOCALIZED(SETTINGS), Content::Type::SETTINGS});
-	if (current_scene != SceneType::ABOUT) contents.push_back({LOCALIZED(ABOUT), Content::Type::ABOUT});
+	if (global_current_scene != SceneType::SETTINGS) contents.push_back({LOCALIZED(SETTINGS), Content::Type::SETTINGS});
+	if (global_current_scene != SceneType::ABOUT) contents.push_back({LOCALIZED(ABOUT), Content::Type::ABOUT});
 	
 	if (menu_status == CONFIRMING_CLOSE) {
 		holding_touch = false;
@@ -116,8 +116,8 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 			} else if (menu_status != CLOSED && content_at(last_touch_x, last_touch_y) != -1) {
 				int id = content_at(last_touch_x, last_touch_y);
 				if (contents[id].type == Content::Type::SEARCH) {
-					intent->next_scene = SceneType::SEARCH;
-					intent->arg = "";
+					global_intent.next_scene = SceneType::SEARCH;
+					global_intent.arg = "";
 				} else if (contents[id].type == Content::Type::EXIT) {
 					dialog_view->get_message_view()->set_text([] () { return LOCALIZED(EXIT_CONFIRM); })->update_y_range(0, 30);
 					dialog_view->set_buttons<std::function<std::string ()> >({
@@ -137,17 +137,17 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 					var_need_reflesh = true;
 					menu_status = CONFIRMING_CLOSE;
 				} else if (contents[id].type == Content::Type::ABOUT) {
-					intent->next_scene = SceneType::ABOUT;
-					intent->arg = "";
+					global_intent.next_scene = SceneType::ABOUT;
+					global_intent.arg = "";
 				} else if (contents[id].type == Content::Type::SETTINGS) {
-					intent->next_scene = SceneType::SETTINGS;
-					intent->arg = "";
+					global_intent.next_scene = SceneType::SETTINGS;
+					global_intent.arg = "";
 				} else if (contents[id].type == Content::Type::HISTORY) {
-					intent->next_scene = SceneType::HISTORY;
-					intent->arg = "";
-				} else if (contents[id].type == Content::Type::SUBSCRIPTION) {
-					intent->next_scene = SceneType::SUBSCRIPTION;
-					intent->arg = "";
+					global_intent.next_scene = SceneType::HISTORY;
+					global_intent.arg = "";
+				} else if (contents[id].type == Content::Type::HOME) {
+					global_intent.next_scene = SceneType::HOME;
+					global_intent.arg = "";
 				}
 			} else menu_status = CLOSED;
 			var_need_reflesh = true;
@@ -173,8 +173,8 @@ void update_overlay_menu(Hid_info *key, Intent *intent, SceneType current_scene)
 	}
 	if (exit_confirmed) {
 		exit_confirmed = false;
-		intent->next_scene = SceneType::EXIT;
-		intent->arg = "";
+		global_intent.next_scene = SceneType::EXIT;
+		global_intent.arg = "";
 	}
 }
 void close_overlay_menu() {

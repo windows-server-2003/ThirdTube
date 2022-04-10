@@ -6,7 +6,7 @@
 #include "scenes/about.hpp"
 #include "scenes/setting_menu.hpp"
 #include "scenes/watch_history.hpp"
-#include "scenes/subscription.hpp"
+#include "scenes/home.hpp"
 #include "network/network_io.hpp"
 #include "network/thumbnail_loader.hpp"
 #include "system/util/async_task.hpp"
@@ -15,12 +15,13 @@
 // add here
 
 
+SceneType global_current_scene;
+Intent global_intent;
+
 namespace SceneSwitcher {
 	static bool menu_thread_run = false;
 	static bool menu_check_exit_request = false;
 	static Thread menu_worker_thread, thumbnail_downloader_thread, async_task_thread, misc_tasks_thread;
-
-	static SceneType current_scene;
 
 	static void empty_thread(void* arg) { threadExit(0); }
 
@@ -110,11 +111,11 @@ void Menu_init(void)
 	About_suspend();
 	History_init();
 	History_suspend();
-	Subscription_init();
-	Subscription_suspend();
+	Search_init();
+	Search_suspend();
 	// add here
-	Search_init(); // first running
-	current_scene = SceneType::SEARCH;
+	Home_init(); // first running
+	global_current_scene = SceneType::HOME;
 	
 	thumbnail_downloader_thread = threadCreate(thumbnail_downloader_thread_func, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 	async_task_thread = threadCreate(async_task_thread_func, NULL, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
@@ -139,7 +140,7 @@ void Menu_exit(void)
 	Sem_exit();
 	About_exit();
 	History_exit();
-	Subscription_exit();
+	Home_exit();
 	// add here
 
 	Util_expl_exit();
@@ -181,7 +182,7 @@ void Menu_exit(void)
 	Util_log_save(DEF_MENU_EXIT_STR, "Exited.");
 }
 
-static std::vector<Intent> scene_stack = {{SceneType::SEARCH, ""}};
+static std::vector<Intent> scene_stack = {{SceneType::HOME, ""}};
 
 bool Menu_main(void)
 {
@@ -223,30 +224,26 @@ bool Menu_main(void)
 	if(var_debug_mode)
 		var_need_reflesh = true;
 	
-	Intent intent;
-	if (current_scene == SceneType::VIDEO_PLAYER) {
-		intent = VideoPlayer_draw();
-		if (intent.next_scene != SceneType::NO_CHANGE) VideoPlayer_suspend();
-	} else if (current_scene == SceneType::SEARCH) {
-		intent = Search_draw();
-		if (intent.next_scene != SceneType::NO_CHANGE) Search_suspend();
-	} else if (current_scene == SceneType::CHANNEL) {
-		intent = Channel_draw();
-		if (intent.next_scene != SceneType::NO_CHANGE) Channel_suspend();
-	} else if (current_scene == SceneType::SETTINGS) {
-		intent = Sem_draw();
-		if (intent.next_scene != SceneType::NO_CHANGE) Sem_suspend();
-	} else if (current_scene == SceneType::ABOUT) {
-		intent = About_draw();
-		if (intent.next_scene != SceneType::NO_CHANGE) About_suspend();
-	} else if (current_scene == SceneType::HISTORY) {
-		intent = History_draw();
-		if (intent.next_scene != SceneType::NO_CHANGE) History_suspend();
-	} else if (current_scene == SceneType::SUBSCRIPTION) {
-		intent = Subscription_draw();
-		if (intent.next_scene != SceneType::NO_CHANGE) Subscription_suspend();
-	}
+	global_intent = Intent();
+	if (global_current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_draw();
+	else if (global_current_scene == SceneType::SEARCH) Search_draw();
+	else if (global_current_scene == SceneType::CHANNEL) Channel_draw();
+	else if (global_current_scene == SceneType::SETTINGS) Sem_draw();
+	else if (global_current_scene == SceneType::ABOUT) About_draw();
+	else if (global_current_scene == SceneType::HISTORY) History_draw();
+	else if (global_current_scene == SceneType::HOME) Home_draw();
 	// add here
+	
+	if (global_intent.next_scene != SceneType::NO_CHANGE) {
+		if (global_current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_suspend();
+		else if (global_current_scene == SceneType::SEARCH) Search_suspend();
+		else if (global_current_scene == SceneType::CHANNEL) Channel_suspend();
+		else if (global_current_scene == SceneType::SETTINGS) Sem_suspend();
+		else if (global_current_scene == SceneType::ABOUT) About_suspend();
+		else if (global_current_scene == SceneType::HISTORY) History_suspend();
+		else if (global_current_scene == SceneType::HOME) Home_suspend();
+		// add here
+	}
 	
 	// common updates
 	if ((key.h_x && key.p_y) || (key.h_y && key.p_x)) var_debug_mode = !var_debug_mode;
@@ -255,23 +252,23 @@ bool Menu_main(void)
 	if (Util_log_query_log_show_flag()) Util_log_main(key);
 	if (key.h_touch || key.p_touch) var_need_reflesh = true;
 	
-	if (intent.next_scene == SceneType::EXIT) return false;
-	else if (intent.next_scene != SceneType::NO_CHANGE && intent != scene_stack.back()) {
-		if (scene_stack.size() >= 2 && intent == scene_stack[scene_stack.size() - 2]) intent.next_scene = SceneType::BACK;
-		if (intent.next_scene == SceneType::BACK) {
+	if (global_intent.next_scene == SceneType::EXIT) return false;
+	else if (global_intent.next_scene != SceneType::NO_CHANGE && global_intent != scene_stack.back()) {
+		if (scene_stack.size() >= 2 && global_intent == scene_stack[scene_stack.size() - 2]) global_intent.next_scene = SceneType::BACK;
+		if (global_intent.next_scene == SceneType::BACK) {
 			if (scene_stack.size() >= 2) scene_stack.pop_back();
-		} else scene_stack.push_back(intent);
+		} else scene_stack.push_back(global_intent);
 		
-		current_scene = scene_stack.back().next_scene;
+		global_current_scene = scene_stack.back().next_scene;
 		std::string arg = scene_stack.back().arg;
 		
-		if (current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_resume(arg);
-		else if (current_scene == SceneType::SEARCH) Search_resume(arg);
-		else if (current_scene == SceneType::CHANNEL) Channel_resume(arg);
-		else if (current_scene == SceneType::SETTINGS) Sem_resume(arg);
-		else if (current_scene == SceneType::ABOUT) About_resume(arg);
-		else if (current_scene == SceneType::HISTORY) History_resume(arg);
-		else if (current_scene == SceneType::SUBSCRIPTION) Subscription_resume(arg);
+		if (global_current_scene == SceneType::VIDEO_PLAYER) VideoPlayer_resume(arg);
+		else if (global_current_scene == SceneType::SEARCH) Search_resume(arg);
+		else if (global_current_scene == SceneType::CHANNEL) Channel_resume(arg);
+		else if (global_current_scene == SceneType::SETTINGS) Sem_resume(arg);
+		else if (global_current_scene == SceneType::ABOUT) About_resume(arg);
+		else if (global_current_scene == SceneType::HISTORY) History_resume(arg);
+		else if (global_current_scene == SceneType::HOME) Home_resume(arg);
 		// add here
 	}
 	

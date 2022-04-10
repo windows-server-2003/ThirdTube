@@ -5,7 +5,8 @@
 #include <map>
 #include <numeric>
 
-#include "scenes/subscription.hpp"
+#include "scenes/home.hpp"
+#include "scenes/search.hpp"
 #include "system/util/subscription_util.hpp"
 #include "scenes/video_player.hpp"
 #include "youtube_parser/parser.hpp"
@@ -18,16 +19,17 @@
 #define MAX_THUMBNAIL_LOAD_REQUEST 12
 
 #define FEED_RELOAD_BUTTON_HEIGHT 18
-#define TOP_HEIGHT (MIDDLE_FONT_INTERVAL + SMALL_MARGIN * 2)
+#define TOP_HEIGHT 25
 #define VIDEO_TITLE_MAX_WIDTH (320 - SMALL_MARGIN * 2 - VIDEO_LIST_THUMBNAIL_WIDTH)
 
-namespace Subscription {
+namespace Home {
 	bool thread_suspend = false;
 	bool already_init = false;
 	bool exiting = false;
 	
 	Mutex resource_lock;
 	
+	YouTubeHomeResult home_info;
 	std::vector<SubscriptionChannel> subscribed_channels;
 	bool clicked_is_video;
 	std::string clicked_url;
@@ -39,25 +41,33 @@ namespace Subscription {
 	
 	VerticalListView *main_view = NULL;
 	TabView *main_tab_view = NULL;
-	ScrollView *channels_tab_view = NULL;
-	VerticalListView *channels_tab_list_view = NULL;
-	VerticalListView *feed_tab_view = NULL;
-	ScrollView *feed_videos_view = NULL;
-	VerticalListView *feed_videos_list_view = NULL;
+		ScrollView *home_tab_view = NULL;
+			VerticalListView *home_videos_list_view = NULL;
+			View *home_videos_bottom_view = new EmptyView(0, 0, 320, 0);
+		ScrollView *channels_tab_view = NULL;
+			VerticalListView *channels_tab_list_view = NULL;
+		VerticalListView *feed_tab_view = NULL;
+			ScrollView *feed_videos_view = NULL;
+			VerticalListView *feed_videos_list_view = NULL;
 };
-using namespace Subscription;
+using namespace Home;
 
+static void load_home_page(void *);
+static void load_home_page_more(void *);
 static void load_subscription_feed(void *);
 static void update_subscribed_channels(const std::vector<SubscriptionChannel> &new_subscribed_channels);
 
-void Subscription_init(void) {
+void Home_init(void) {
 	Util_log_save("subsc/init", "Initializing...");
 	
+	home_videos_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::HOME);
+	home_tab_view = (new ScrollView(0, 0, 320, 0))->set_views({home_videos_list_view, home_videos_bottom_view});
 	channels_tab_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
-		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::SUBSCRIPTION);
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::HOME);
 	channels_tab_view = (new ScrollView(0, 0, 320, 0))->set_views({channels_tab_list_view}); // height : dummy(set properly by set_stretch_subview(true) on main_tab_view)
 	feed_videos_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
-		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::SUBSCRIPTION);
+		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::HOME);
 	feed_videos_view = (new ScrollView(0, 0, 320, 0))->set_views({feed_videos_list_view});
 	feed_tab_view = (new VerticalListView(0, 0, 320))
 		->set_views({
@@ -76,32 +86,37 @@ void Subscription_init(void) {
 					if (is_async_task_running(load_subscription_feed)) return LIGHT0_BACK_COLOR;
 					return View::STANDARD_BACKGROUND(view);
 				}),
-			(new RuleView(0, 0, 320, SMALL_MARGIN))->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
+			(new RuleView(0, 0, 320, SMALL_MARGIN))->set_margin(0)->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
 			feed_videos_view
 		})
 		->set_draw_order({2, 1, 0});
 	main_tab_view = (new TabView(0, 0, 320, CONTENT_Y_HIGH - TOP_HEIGHT))
-		->set_views({channels_tab_view, feed_tab_view})
+		->set_views({home_tab_view, channels_tab_view, feed_tab_view})
 		->set_tab_texts<std::function<std::string ()> >({
+			[] () { return LOCALIZED(HOME); },
 			[] () { return LOCALIZED(SUBSCRIBED_CHANNELS); },
 			[] () { return LOCALIZED(NEW_VIDEOS); }
 		});
 	main_view = (new VerticalListView(0, 0, 320))
 		->set_views({
-			(new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))
-				->set_text((std::function<std::string ()>) [] () { return LOCALIZED(SUBSCRIPTION); })
-				->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL)
-				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
-			(new RuleView(0, 0, 320, SMALL_MARGIN * 2))
-				->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
+			(new CustomView(0, 0, 320, 25))
+				->set_draw([] (const CustomView&) {
+					return Search_get_search_bar_view()->draw();
+				})
+				->set_update([] (const CustomView&, Hid_info key) {
+					return Search_get_search_bar_view()->update(key);
+				}),
 			main_tab_view
 		})
-		->set_draw_order({2, 1, 0});
+		->set_draw_order({1, 0});
 	
-	Subscription_resume("");
+	queue_async_task(load_home_page, NULL);
+	load_subscription();
+	
+	Home_resume("");
 	already_init = true;
 }
-void Subscription_exit(void) {
+void Home_exit(void) {
 	already_init = false;
 	thread_suspend = false;
 	exiting = true;
@@ -122,10 +137,10 @@ void Subscription_exit(void) {
 	
 	Util_log_save("subsc/exit", "Exited.");
 }
-void Subscription_suspend(void) {
+void Home_suspend(void) {
 	thread_suspend = true;
 }
-void Subscription_resume(std::string arg) {
+void Home_resume(std::string arg) {
 	(void) arg;
 	
 	// main_tab_view->on_resume();
@@ -138,6 +153,82 @@ void Subscription_resume(std::string arg) {
 
 
 // async functions
+static SuccinctVideoView *convert_video_to_view(const YouTubeVideoSuccinct &video) {
+	SuccinctVideoView *res = new SuccinctVideoView(0, 0, 320, VIDEO_LIST_THUMBNAIL_HEIGHT);
+	res->set_title_lines(truncate_str(video.title, 320 - (VIDEO_LIST_THUMBNAIL_WIDTH + 3), 2, 0.5, 0.5));
+	res->set_auxiliary_lines({video.views_str, video.publish_date});
+	res->set_bottom_right_overlay(video.duration_text);
+	res->set_thumbnail_url(video.thumbnail_url);
+	res->set_get_background_color(View::STANDARD_BACKGROUND);
+	res->set_on_view_released([video] (View &view) {
+		clicked_url = video.url;
+		clicked_is_video = true;
+	});
+	return res;
+}
+static void update_home_bottom_view(bool force_show_loading) {
+	delete home_videos_bottom_view;
+	if (home_info.has_continue() || force_show_loading) {
+		home_videos_bottom_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 2))
+			->set_text([] () {
+				if (home_info.error != "") return home_info.error;
+				else return LOCALIZED(LOADING);
+			})
+			->set_x_alignment(TextView::XAlign::CENTER)
+			->set_on_drawn([] (View &) {
+				if (!is_async_task_running(load_home_page) && !is_async_task_running(load_home_page_more) && home_info.error == "")
+					queue_async_task(load_home_page_more, NULL);
+			});
+	} else home_videos_bottom_view = new EmptyView(0, 0, 320, 0);
+	home_tab_view->set_views({home_videos_list_view, home_videos_bottom_view});
+}
+static void load_home_page(void *) {
+	resource_lock.lock();
+	update_home_bottom_view(true);
+	var_need_reflesh = true;
+	resource_lock.unlock();
+	
+	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
+	auto results = youtube_parse_home_page();
+	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
+	
+	Util_log_save("home", "truncate/view creation start");
+	std::vector<View *> new_videos_view;
+	for (auto video : results.videos) new_videos_view.push_back(convert_video_to_view(video));
+	Util_log_save("home", "truncate/view creation end");
+	
+	resource_lock.lock();
+	if (results.error == "") {
+		home_info = results;
+		home_videos_list_view->recursive_delete_subviews();
+		home_videos_list_view->set_views(new_videos_view);
+		update_home_bottom_view(false);
+	} else home_info.error = results.error;
+	var_need_reflesh = true;
+	resource_lock.unlock();
+}
+static void load_home_page_more(void *) {
+	resource_lock.lock();
+	auto prev_result = home_info;
+	resource_lock.unlock();
+	
+	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
+	auto results = youtube_continue_home_page(prev_result);
+	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
+	
+	Util_log_save("home-c", "truncate/view creation start");
+	std::vector<View *> new_videos_view;
+	for (size_t i = home_info.videos.size(); i < results.videos.size(); i++) new_videos_view.push_back(convert_video_to_view(results.videos[i]));
+	Util_log_save("home-c", "truncate/view creation end");
+	
+	resource_lock.lock();
+	if (results.error == "") {
+		home_info = results;
+		home_videos_list_view->views.insert(home_videos_list_view->views.end(), new_videos_view.begin(), new_videos_view.end());
+		update_home_bottom_view(false);
+	} else home_info.error = results.error;
+	resource_lock.unlock();
+}
 static void load_subscription_feed(void *) {
 	resource_lock.lock();
 	auto channels = subscribed_channels;
@@ -267,13 +358,11 @@ static void update_subscribed_channels(const std::vector<SubscriptionChannel> &n
 
 
 
-Intent Subscription_draw(void) {
-	Intent intent;
-	intent.next_scene = SceneType::NO_CHANGE;
+void Home_draw(void) {
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	
-	thumbnail_set_active_scene(SceneType::SUBSCRIPTION);
+	thumbnail_set_active_scene(SceneType::HOME);
 	
 	bool video_playing_bar_show = video_is_playing();
 	CONTENT_Y_HIGH = video_playing_bar_show ? 240 - VIDEO_PLAYING_BAR_HEIGHT : 240;
@@ -316,21 +405,20 @@ Intent Subscription_draw(void) {
 	} else if(Util_expl_query_show_flag()) {
 		Util_expl_main(key);
 	} else {
-		update_overlay_menu(&key, &intent, SceneType::SUBSCRIPTION);
+		update_overlay_menu(&key);
 		
+		home_tab_view->update_y_range(0, CONTENT_Y_HIGH - TOP_HEIGHT - main_tab_view->tab_selector_height);
 		channels_tab_view->update_y_range(0, CONTENT_Y_HIGH - TOP_HEIGHT - main_tab_view->tab_selector_height);
 		feed_videos_view->update_y_range(0, CONTENT_Y_HIGH - TOP_HEIGHT - main_tab_view->tab_selector_height - FEED_RELOAD_BUTTON_HEIGHT - SMALL_MARGIN);
 		main_view->update(key);
 		if (clicked_url != "") {
-			intent.next_scene = clicked_is_video ? SceneType::VIDEO_PLAYER : SceneType::CHANNEL;
-			intent.arg = clicked_url;
+			global_intent.next_scene = clicked_is_video ? SceneType::VIDEO_PLAYER : SceneType::CHANNEL;
+			global_intent.arg = clicked_url;
 			clicked_url = "";
 		}
-		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		if (video_playing_bar_show) video_update_playing_bar(key);
 		
-		if (key.p_b) intent.next_scene = SceneType::BACK;
+		if (key.p_b) global_intent.next_scene = SceneType::BACK;
 	}
 	resource_lock.unlock();
-	
-	return intent;
 }

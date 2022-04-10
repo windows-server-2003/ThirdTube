@@ -14,8 +14,6 @@ void misc_tasks_request(int type) { request[type] = true; }
 void misc_tasks_thread_func(void *arg) {
 	(void) arg;
 	
-	load_watch_history();
-	load_subscription();
 	while (should_be_running) {
 		if (request[TASK_SAVE_SETTINGS]) {
 			request[TASK_SAVE_SETTINGS] = false;

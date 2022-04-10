@@ -562,11 +562,8 @@ void Sem_resume(std::string arg) {
 }
 
 
-Intent Sem_draw(void)
+void Sem_draw(void)
 {
-	Intent intent;
-	intent.next_scene = SceneType::NO_CHANGE;
-	
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	
@@ -614,7 +611,7 @@ Intent Sem_draw(void)
 	} else if(Util_expl_query_show_flag()) {
 		Util_expl_main(key);
 	} else {
-		update_overlay_menu(&key, &intent, SceneType::SETTINGS);
+		update_overlay_menu(&key);
 		
 		// toast_view is never 'updated'
 		resource_lock.lock();
@@ -622,10 +619,8 @@ Intent Sem_draw(void)
 		else main_view->update(key);
 		resource_lock.unlock();
 		
-		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		if (video_playing_bar_show) video_update_playing_bar(key);
 		
-		if (key.p_b) intent.next_scene = SceneType::BACK;
+		if (key.p_b) global_intent.next_scene = SceneType::BACK;
 	}
-	
-	return intent;
 }

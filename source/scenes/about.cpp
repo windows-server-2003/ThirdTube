@@ -134,11 +134,8 @@ void About_resume(std::string arg) {
 	var_need_reflesh = true;
 }
 
-Intent About_draw(void)
+void About_draw(void)
 {
-	Intent intent;
-	intent.next_scene = SceneType::NO_CHANGE;
-	
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	
@@ -180,14 +177,12 @@ Intent About_draw(void)
 	} else if(Util_expl_query_show_flag()) {
 		Util_expl_main(key);
 	} else {
-		update_overlay_menu(&key, &intent, SceneType::ABOUT);
+		update_overlay_menu(&key);
 		
 		main_view->update(key);
 		
-		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		if (video_playing_bar_show) video_update_playing_bar(key);
 		
-		if (key.p_b) intent.next_scene = SceneType::BACK;
+		if (key.p_b) global_intent.next_scene = SceneType::BACK;
 	}
-	
-	return intent;
 }

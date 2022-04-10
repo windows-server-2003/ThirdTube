@@ -517,10 +517,8 @@ static bool send_load_request(std::string url) {
 	} else return false;
 }
 
-Intent Channel_draw(void)
+void Channel_draw(void)
 {
-	Intent intent;
-	intent.next_scene = SceneType::NO_CHANGE;
 	Hid_info key;
 	Util_hid_query_key_state(&key);
 	
@@ -564,11 +562,11 @@ Intent Channel_draw(void)
 	} else if(Util_expl_query_show_flag()) {
 		Util_expl_main(key);
 	} else {
-		update_overlay_menu(&key, &intent, SceneType::CHANNEL);
+		update_overlay_menu(&key);
 		
 		resource_lock.lock();
 		
-		if (video_playing_bar_show) video_update_playing_bar(key, &intent);
+		if (video_playing_bar_show) video_update_playing_bar(key);
 		main_view->update(key);
 		
 		// community post thumbnail requests update
@@ -632,13 +630,11 @@ Intent Channel_draw(void)
 		resource_lock.unlock();
 		
 		if (clicked_url != "") {
-			intent.next_scene = SceneType::VIDEO_PLAYER;
-			intent.arg = clicked_url;
+			global_intent.next_scene = SceneType::VIDEO_PLAYER;
+			global_intent.arg = clicked_url;
 			clicked_url = "";
 		}
 		
-		if (key.p_b) intent.next_scene = SceneType::BACK;
+		if (key.p_b) global_intent.next_scene = SceneType::BACK;
 	}
-	
-	return intent;
 }

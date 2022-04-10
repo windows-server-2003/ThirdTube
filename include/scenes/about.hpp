@@ -8,4 +8,4 @@ void About_suspend(void);
 
 void About_resume(std::string arg);
 
-Intent About_draw(void);
+void About_draw(void);

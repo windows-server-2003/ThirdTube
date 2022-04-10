@@ -8,4 +8,4 @@ void History_suspend(void);
 
 void History_resume(std::string arg);
 
-Intent History_draw(void);
+void History_draw(void);

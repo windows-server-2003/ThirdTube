@@ -9,7 +9,7 @@ void VideoPlayer_resume(std::string arg);
 #define VIDEO_PLAYING_BAR_HEIGHT 20
 bool video_is_playing(void);
 void video_draw_playing_bar();
-void video_update_playing_bar(Hid_info key, Intent *intent);
+void video_update_playing_bar(Hid_info key);
 
 void video_draw_top_screen();
 
@@ -21,4 +21,4 @@ void video_set_skip_drawing(bool skip);
 
 bool VideoPlayer_query_running_flag(void);
 
-Intent VideoPlayer_draw(void);
+void VideoPlayer_draw(void);
