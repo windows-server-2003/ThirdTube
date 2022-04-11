@@ -148,7 +148,9 @@ void Home_resume(std::string arg) {
 	thread_suspend = false;
 	var_need_reflesh = true;
 	
+	resource_lock.lock();
 	update_subscribed_channels(get_subscribed_channels());
+	resource_lock.unlock();
 }
 
 
@@ -338,9 +340,8 @@ static void load_subscription_feed(void *) {
 static void update_subscribed_channels(const std::vector<SubscriptionChannel> &new_subscribed_channels) {
 	subscribed_channels = new_subscribed_channels;
 	
-	channels_tab_list_view->recursive_delete_subviews();
-	
 	// prepare new views
+	std::vector<View *> new_views;
 	for (auto channel : new_subscribed_channels) {
 		SuccinctChannelView *cur_view = (new SuccinctChannelView(0, 0, 320, CHANNEL_ICON_HEIGHT));
 		cur_view->set_name(channel.name);
@@ -351,8 +352,9 @@ static void update_subscribed_channels(const std::vector<SubscriptionChannel> &n
 			clicked_url = channel.url;
 			clicked_is_video = false;
 		});
-		channels_tab_list_view->views.push_back(cur_view);
+		new_views.push_back(cur_view);
 	}
+	channels_tab_list_view->swap_views(new_views); // avoid unnecessary thumbnail reloading
 }
 
 

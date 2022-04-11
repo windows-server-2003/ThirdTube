@@ -4,6 +4,7 @@
 #include "ui/views/specialized/succinct_channel.hpp"
 #include <vector>
 #include <set>
+#include <map>
 #include <utility>
 
 void VerticalListView::recursive_delete_subviews() {
@@ -24,6 +25,48 @@ void VerticalListView::recursive_delete_subviews() {
 		delete view;
 	}
 	views.clear();
+}
+
+void VerticalListView::swap_views(const std::vector<View *> &new_views) {
+	std::map<std::string, std::vector<int> > handles;
+	for (auto view : views) {
+		auto *cur_view = dynamic_cast<SuccinctVideoView *>(view);
+		if (cur_view && cur_view->thumbnail_handle != -1) handles[cur_view->thumbnail_url].push_back(cur_view->thumbnail_handle);
+		else {
+			auto *cur_view = dynamic_cast<SuccinctChannelView *>(view);
+			if (cur_view && cur_view->thumbnail_handle != -1) handles[cur_view->thumbnail_url].push_back(cur_view->thumbnail_handle);
+		}
+	}
+	for (auto view : views) {
+		view->recursive_delete_subviews();
+		delete view;
+	}
+	views = new_views;
+	// try to keep current thumbnail_loaded_l and thumbnail_loaded_r
+	thumbnail_loaded_r = std::min<int>(thumbnail_loaded_r, new_views.size());
+	thumbnail_loaded_l = std::min(thumbnail_loaded_l, thumbnail_loaded_r);
+	for (int i = thumbnail_loaded_l; i < thumbnail_loaded_r; i++) {
+		auto *cur_view = dynamic_cast<SuccinctVideoView *>(views[i]);
+		if (cur_view) {
+			if (handles.count(cur_view->thumbnail_url)) {
+				auto &available_handles = handles[cur_view->thumbnail_url];
+				cur_view->thumbnail_handle = available_handles.back();
+				available_handles.pop_back();
+				if (!available_handles.size()) handles.erase(cur_view->thumbnail_url);
+			} else cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, thumbnail_scene, 0, ThumbnailType::VIDEO_THUMBNAIL);
+		} else {
+			auto *cur_view = dynamic_cast<SuccinctChannelView *>(views[i]);
+			if (cur_view) {
+				if (handles.count(cur_view->thumbnail_url)) {
+					auto &available_handles = handles[cur_view->thumbnail_url];
+					cur_view->thumbnail_handle = available_handles.back();
+					available_handles.pop_back();
+					if (!available_handles.size()) handles.erase(cur_view->thumbnail_url);
+				} else cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, thumbnail_scene, 0, ThumbnailType::ICON);
+			}
+		}
+	}
+	for (auto &i : handles) for (auto handle : i.second) thumbnail_cancel_request(handle);
 }
 void VerticalListView::draw_() const {
 	if (!draw_order.size()) {
@@ -85,10 +128,11 @@ void VerticalListView::update_(Hid_info key) {
 		}
 		for (auto i : new_indexes) {
 			auto *cur_view = dynamic_cast<SuccinctVideoView *>(views[i]);
-			if (cur_view) cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, thumbnail_scene, 0, ThumbnailType::VIDEO_THUMBNAIL);
-			else {
+			if (cur_view) {
+				if (cur_view->thumbnail_handle == -1) cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, thumbnail_scene, 0, ThumbnailType::VIDEO_THUMBNAIL);
+			} else {
 				auto *cur_view = dynamic_cast<SuccinctChannelView *>(views[i]);
-				if (cur_view) cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, thumbnail_scene, 0, ThumbnailType::ICON);
+				if (cur_view && cur_view->thumbnail_handle == -1) cur_view->thumbnail_handle = thumbnail_request(cur_view->thumbnail_url, thumbnail_scene, 0, ThumbnailType::ICON);
 			}
 		}
 		

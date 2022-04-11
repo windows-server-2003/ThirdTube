@@ -22,6 +22,7 @@ public :
 		for (auto view : views) view->reset_holding_status();
 	}
 	virtual void recursive_delete_subviews() override;
+	void swap_views(const std::vector<View *> &new_views); // replaces `views` with `new_views` while trying to avoid thumbnail reloading as much as possible
 	
 	// direct access to `views` is also allowed
 	// this is just for method chaining mainly used immediately after the construction of the view
