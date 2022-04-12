@@ -62,7 +62,7 @@ namespace Channel {
 	
 	Mutex resource_lock;
 	std::string cur_channel_url;
-	YouTubeChannelDetail channel_info;
+	YouTubeChannelDetail channel_info; // only modified from async thread
 	std::map<std::string, YouTubeChannelDetail> channel_info_cache;
 };
 using namespace Channel;
@@ -84,11 +84,11 @@ void Channel_init(void)
 	video_load_more_view = (new TextView(0, 0, 320, 0));
 	video_load_more_view
 		->set_text((std::function<std::string ()>) [] () { return
-			channel_info.error != "" ? channel_info.error : channel_info.has_continue() ? LOCALIZED(LOADING) : "";
+			channel_info.error != "" ? channel_info.error : channel_info.has_more_videos() ? LOCALIZED(LOADING) : "";
 		})
 		->set_x_alignment(TextView::XAlign::CENTER)
 		->set_on_drawn([] (const View &) {
-			if (channel_info.has_continue() && channel_info.error == "") {
+			if (channel_info.has_more_videos() && channel_info.error == "") {
 				if (!is_async_task_running(load_channel) &&
 					!is_async_task_running(load_channel_more)) queue_async_task(load_channel_more, NULL);
 			}
@@ -266,7 +266,7 @@ static void load_channel(void *) {
 	
 	if (need_loading) {
 		add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-		result = youtube_parse_channel_page(url);
+		result = youtube_load_channel_page(url);
 		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	}
 	
@@ -288,7 +288,7 @@ static void load_channel(void *) {
 		}
 	}
 	View *new_playlist_view = NULL;
-	if (!result.has_playlist_to_load()) new_playlist_view = get_playlist_categories_tab_view(result.playlists);
+	if (!result.has_playlists_to_load()) new_playlist_view = get_playlist_categories_tab_view(result.playlists);
 	std::vector<View *> new_community_posts_view;
 	for (auto post : result.community_posts)
 		new_community_posts_view.push_back(community_post_2_view(post));
@@ -349,7 +349,7 @@ static void load_channel(void *) {
 	// video list
 	video_list_view->recursive_delete_subviews();
 	video_list_view->set_views(video_views);
-	if (result.error != "" || result.has_continue()) {
+	if (result.error != "" || result.has_more_videos()) {
 		video_load_more_view->update_y_range(0, DEFAULT_FONT_INTERVAL * 2);
 		video_load_more_view->set_is_visible(true);
 	} else {
@@ -359,12 +359,12 @@ static void load_channel(void *) {
 	// playlist list
 	tab_view->views[1]->recursive_delete_subviews();
 	delete tab_view->views[1];
-	if (result.has_playlist_to_load()) {
+	if (result.has_playlists_to_load()) {
 		tab_view->views[1] = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))
 			->set_text((std::function<std::string ()>) [] () { return channel_info.error != "" ? channel_info.error : LOCALIZED(LOADING); })
 			->set_x_alignment(TextView::XAlign::CENTER)
 			->set_on_drawn([] (const View &) {
-				if (channel_info.error == "" && channel_info.has_playlist_to_load()) {
+				if (channel_info.error == "" && channel_info.has_playlists_to_load()) {
 					if (!is_async_task_running(load_channel) &&
 						!is_async_task_running(load_channel_playlists)) queue_async_task(load_channel_playlists, NULL);
 				}
@@ -402,15 +402,12 @@ static void load_channel(void *) {
 	resource_lock.unlock();
 }
 static void load_channel_more(void *) {
-	resource_lock.lock();
-	auto prev_result = channel_info;
-	resource_lock.unlock();
-	
-	auto new_result = youtube_channel_page_continue(prev_result);
+	auto new_result = channel_info;
+	new_result.load_more_videos();
 	
 	Util_log_save("channel-c", "truncate start");
 	std::vector<View *> new_video_views;
-	for (size_t i = prev_result.videos.size(); i < new_result.videos.size(); i++)
+	for (size_t i = channel_info.videos.size(); i < new_result.videos.size(); i++)
 		new_video_views.push_back(video2view(new_result.videos[i]));
 	Util_log_save("channel-c", "truncate end");
 	
@@ -420,13 +417,11 @@ static void load_channel_more(void *) {
 		resource_lock.unlock();
 		return;
 	}
-	if (new_result.error != "") channel_info.error = new_result.error;
-	else {
-		channel_info = new_result;
-		channel_info_cache[channel_info.url_original] = channel_info;
-	}
+	channel_info = new_result;
+	if (new_result.error == "") channel_info_cache[channel_info.url_original] = channel_info;
+	
 	video_list_view->views.insert(video_list_view->views.end(), new_video_views.begin(), new_video_views.end());
-	if (channel_info.error != "" || channel_info.has_continue()) {
+	if (channel_info.error != "" || channel_info.has_more_videos()) {
 		video_load_more_view->update_y_range(0, DEFAULT_FONT_INTERVAL);
 		video_load_more_view->set_is_visible(true);
 	} else {
@@ -437,11 +432,8 @@ static void load_channel_more(void *) {
 	resource_lock.unlock();
 }
 static void load_channel_playlists(void *) {
-	resource_lock.lock();
-	auto prev_result = channel_info;
-	resource_lock.unlock();
-	
-	auto new_result = youtube_channel_load_playlists(prev_result);
+	auto new_result = channel_info;
+	new_result.load_playlists();
 	
 	Util_log_save("channel-p", "truncate start");
 	auto *playlist_tab_view = get_playlist_categories_tab_view(new_result.playlists);
@@ -453,11 +445,9 @@ static void load_channel_playlists(void *) {
 		resource_lock.unlock();
 		return;
 	}
-	if (new_result.error != "") channel_info.error = new_result.error;
-	else {
-		channel_info = new_result;
-		channel_info_cache[channel_info.url_original] = channel_info;
-	}
+	channel_info = new_result;
+	if (new_result.error == "") channel_info_cache[channel_info.url_original] = channel_info;
+	
 	tab_view->views[1]->recursive_delete_subviews();
 	delete tab_view->views[1];
 	tab_view->views[1] = playlist_tab_view;
@@ -466,15 +456,12 @@ static void load_channel_playlists(void *) {
 	resource_lock.unlock();
 }
 static void load_channel_community_posts(void *) {
-	resource_lock.lock();
-	auto prev_result = channel_info;
-	resource_lock.unlock();
-	
-	auto new_result = youtube_channel_load_community(prev_result);
+	auto new_result = channel_info;
+	new_result.load_more_community_posts();
 	
 	Util_log_save("channel-com", "truncate start");
 	std::vector<View *> new_post_views;
-	for (size_t i = prev_result.community_posts.size(); i < new_result.community_posts.size(); i++)
+	for (size_t i = channel_info.community_posts.size(); i < new_result.community_posts.size(); i++)
 		new_post_views.push_back(community_post_2_view(new_result.community_posts[i]));
 	Util_log_save("channel-com", "truncate end");
 	
@@ -484,11 +471,9 @@ static void load_channel_community_posts(void *) {
 		resource_lock.unlock();
 		return;
 	}
-	if (new_result.error != "") channel_info.error = new_result.error;
-	else {
-		channel_info = new_result;
-		channel_info_cache[channel_info.url_original] = channel_info;
-	}
+	channel_info = new_result;
+	if (new_result.error == "") channel_info_cache[channel_info.url_original] = channel_info;
+	
 	community_post_list_view->views.insert(community_post_list_view->views.end(), new_post_views.begin(), new_post_views.end());
 	if (new_result.has_community_posts_to_load()) {
 		community_post_load_more_view

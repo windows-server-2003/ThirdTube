@@ -9,6 +9,15 @@ endif
 TOPDIR ?= $(CURDIR)
 include $(DEVKITARM)/3ds_rules
 
+rwildcard = $(foreach d, $(wildcard $1*), \
+            $(filter $(subst *, %, $2), $d) \
+            $(call rwildcard, $d/, $2))
+
+define unique =
+  $(eval seen :=)
+  $(foreach _,$1,$(if $(filter $_,${seen}),,$(eval seen += $_)))
+  ${seen}
+endef
 #---------------------------------------------------------------------------------
 # TARGET is the name of the output
 # BUILD is the directory where object files & intermediate files will be placed
@@ -33,7 +42,7 @@ include $(DEVKITARM)/3ds_rules
 #---------------------------------------------------------------------------------
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
-SOURCES		:=	source source/system source/system/util source/system/draw source/youtube_parser library/json11 source/scenes source/ui source/ui/views source/ui/views/specialized source/network
+SOURCE		:=	source
 DATA		:=	data
 INCLUDES	:=	include
 GRAPHICS	:=	gfx
@@ -89,19 +98,19 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
 export TOPDIR	:=	$(CURDIR)
 
-export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
-			$(foreach dir,$(GRAPHICS),$(CURDIR)/$(dir)) \
-			$(foreach dir,$(DATA),$(CURDIR)/$(dir))
+export VPATH	:= $(CURDIR)/$(SOURCE)
 
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
-CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
-CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
-SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
-PICAFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.v.pica)))
-SHLISTFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.shlist)))
-GFXFILES	:=	$(foreach dir,$(GRAPHICS),$(notdir $(wildcard $(dir)/*.t3s)))
-BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
+CFILES		:=	$(patsubst $(SOURCE)/%, %, $(call rwildcard, $(SOURCE), *.c))
+CPPFILES	:=	$(patsubst $(SOURCE)/%, %, $(call rwildcard, $(SOURCE), *.cpp))
+SFILES		:=	$(patsubst $(SOURCE)/%, %, $(call rwildcard, $(SOURCE), *.s))
+PICAFILES	:=	$(patsubst $(SOURCE)/%, %, $(call rwildcard, $(SOURCE), *.v.pica))
+SHLISTFILES	:=	$(patsubst $(SOURCE)/%, %, $(call rwildcard, $(SOURCE), *.shlist))
+GFXFILES	:=	$(call rwildcard, $(GRAPHICS), *.t3s)
+BINFILES	:=	$(call rwildcard, $(DATA), *.*)
+
+
 
 #---------------------------------------------------------------------------------
 # use CXX for linking C++ projects, CC for standard C
@@ -131,6 +140,7 @@ endif
 #---------------------------------------------------------------------------------
 
 export OFILES_SOURCES 	:=	$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
+export OBJDIRS			:=	$(call unique, $(patsubst %, $(BUILD)/%, $(dir $(OFILES_SOURCES))))
 
 export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES)) \
 			$(PICAFILES:.v.pica=.shbin.o) $(SHLISTFILES:.shlist=.shbin.o) \
@@ -205,7 +215,7 @@ endif
 
 #---------------------------------------------------------------------------------
 
-all: $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
+all: $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES) $(OBJDIRS)
 	@echo Building 3dsx...
 	@$(MAKE) -j -s --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 	@echo
@@ -214,7 +224,7 @@ all: $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
 	@$(BANNERTOOL) makesmdh -s "$(APP_TITLE)" -l "$(APP_DESCRIPTION)" -p $(APP_AUTHOR) -i $(APP_ICON) -o $(BUILD)/icon.icn
 	@$(MAKEROM) -f cia -o $(OUTPUT).cia -target t -exefslogo $(MAKEROM_ARGS) -ver $(APP_VER)
 
-all_win: $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
+all_win: $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES) $(OBJDIRS)
 	@echo Building 3dsx...
 	@$(MAKE) -j -s --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 	@echo
@@ -236,6 +246,9 @@ $(DEPSDIR):
 	@mkdir -p $@
 endif
 
+$(OBJDIRS)	:
+	@mkdir -p $@
+
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
@@ -255,9 +268,8 @@ else
 #---------------------------------------------------------------------------------
 $(OUTPUT).3dsx	:	$(OUTPUT).elf $(_3DSXDEPS)
 
-$(OFILES_SOURCES) : $(HFILES)
-
 $(OUTPUT).elf	:	$(OFILES)
+
 
 #---------------------------------------------------------------------------------
 # you need a rule like this for each extension you use as binary data
@@ -307,7 +319,7 @@ endef
 	@echo $(notdir $<)
 	@tex3ds -i $< -H $*.h -d $*.d -o $*.t3x
 
--include $(DEPSDIR)/*.d
+-include $(call rwildcard, $(DEPSDIR), *.d)
 
 #---------------------------------------------------------------------------------------
 endif

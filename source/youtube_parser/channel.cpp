@@ -44,7 +44,7 @@ static void parse_channel_data(RJson data, YouTubeChannelDetail &res) {
 	res.icon_url = get_thumbnail_url_closest(data["header"]["c4TabbedHeaderRenderer"]["avatar"]["thumbnails"], 88);
 }
 
-YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id) {
+YouTubeChannelDetail youtube_load_channel_page(std::string url_or_id) {
 	YouTubeChannelDetail res;
 	
 	if (starts_with(url_or_id, "http://") || starts_with(url_or_id, "https://")) {
@@ -98,13 +98,13 @@ YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id) {
 	}
 	return res;
 }
-std::vector<YouTubeChannelDetail> youtube_parse_channel_page_multi(std::vector<std::string> ids, std::function<void (int, int)> progress) {
+std::vector<YouTubeChannelDetail> youtube_load_channel_page_multi(std::vector<std::string> ids, std::function<void (int, int)> progress) {
 	std::vector<YouTubeChannelDetail> res;
 	if (progress) progress(0, ids.size());
 #ifdef _WIN32
 	int finished = 0;
 	for (auto id : ids) {
-		res.push_back(youtube_parse_channel_page(id));
+		res.push_back(youtube_load_channel_page(id));
 		if (progress) progress(++finished, ids.size());
 	}
 #else
@@ -141,42 +141,34 @@ std::vector<YouTubeChannelDetail> youtube_parse_channel_page_multi(std::vector<s
 }
 
 
-YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result) {
-	YouTubeChannelDetail new_result = prev_result;
-	
-	if (prev_result.continue_token == "") {
-		new_result.error = "continue token empty";
-		return new_result;
+void YouTubeChannelDetail::load_more_videos() {
+	if (continue_token == "") {
+		error = "continue token empty";
+		return;
 	}
 	
-	
 	std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
-		+ prev_result.continue_token + "\"}";
+		+ continue_token + "\"}";
 	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
 	access_and_parse_json(
 		[&] () { return http_post_json(get_innertube_api_url("browse"), post_content); },
 		[&] (Document &, RJson yt_result) {
-			new_result.continue_token = "";
+			continue_token = "";
 			
 			for (auto i : yt_result["onResponseReceivedActions"].array_items()) {
 				for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
 					if (j.has_key("compactVideoRenderer")) {
-						new_result.videos.push_back(parse_succinct_video(j["compactVideoRenderer"]));
+						videos.push_back(parse_succinct_video(j["compactVideoRenderer"]));
 					} else if (j.has_key("continuationItemRenderer"))
-						new_result.continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
+						continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 				}
 			}
-			if (new_result.continue_token == "") debug("failed to get next continue token");
+			if (continue_token == "") debug("failed to get next continue token");
 		},
-		[&] (const std::string &error) {
-			new_result.error = "[ch+] " + error;
-			debug(new_result.error);
-		}
+		[&] (const std::string &error) { debug((this->error = "[ch+] " + error)); }
 	);
-	
-	return new_result;
 }
 
 
@@ -229,31 +221,23 @@ static void channel_load_playlists_(RJson yt_result, YouTubeChannelDetail &new_r
 	new_result.playlist_tab_browse_id = "";
 	new_result.playlist_tab_params = "";
 }
-YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &prev_result) {
-	YouTubeChannelDetail new_result = prev_result;
+void YouTubeChannelDetail::load_playlists() {
+	if (playlist_tab_browse_id == "") error = "playlist browse id empty";
+	if (playlist_tab_params == "") error = "playlist params empty";
 	
-	if (prev_result.playlist_tab_browse_id == "") new_result.error = "playlist browse id empty";
-	if (prev_result.playlist_tab_params == "") new_result.error = "playlist params empty";
-	
-	if (new_result.error != "") return new_result;
-	
+	if (error != "") return;
 	
 	std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}}, "browseId": "%2", "params": "%3"})";
 	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
-	post_content = std::regex_replace(post_content, std::regex("%2"), prev_result.playlist_tab_browse_id);
-	post_content = std::regex_replace(post_content, std::regex("%3"), prev_result.playlist_tab_params);
+	post_content = std::regex_replace(post_content, std::regex("%2"), playlist_tab_browse_id);
+	post_content = std::regex_replace(post_content, std::regex("%3"), playlist_tab_params);
 	
 	access_and_parse_json(
 		[&] () { return http_post_json(get_innertube_api_url("browse"), post_content); },
-		[&] (Document &, RJson json) { channel_load_playlists_(json, new_result); },
-		[&] (const std::string &error) {
-			new_result.error = "[ch/pl] " + error;
-			debug(new_result.error);
-		}
+		[&] (Document &, RJson json) { channel_load_playlists_(json, *this); },
+		[&] (const std::string &error) { debug((this->error = "[ch/pl] " + error)); }
 	);
-	
-	return new_result;
 }
 
 static void load_community_items(RJson contents, YouTubeChannelDetail &res) {
@@ -286,22 +270,20 @@ static void load_community_items(RJson contents, YouTubeChannelDetail &res) {
 	}
 }
 
-YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &prev_result) {
-	auto new_result = prev_result;
-	new_result.community_loaded = true;
-	
-	if (!prev_result.has_community_posts_to_load()) {
-		new_result.error = "No community post to load";
-		return new_result;
+void YouTubeChannelDetail::load_more_community_posts() {
+	if (!has_community_posts_to_load()) {
+		error = "No community post to load";
+		return;
 	}
 	
-	if (!prev_result.community_loaded) {
+	if (!community_loaded) {
+		community_loaded = true;
 		// community post seems to be only available in the desktop version
-		std::string url = convert_url_to_desktop(prev_result.url + "/community");
+		std::string url = convert_url_to_desktop(this->url + "/community");
 		std::string html = http_get(url, {{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0"}});
 		if (!html.size()) {
-			new_result.error = "failed to download community page";
-			return new_result;
+			error = "failed to download community page";
+			return;
 		}
 		Document json_root;
 		RJson initial_data = get_initial_data(json_root, html);
@@ -310,12 +292,12 @@ YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &
 		for (auto tab : initial_data["contents"]["twoColumnBrowseResultsRenderer"]["tabs"].array_items())
 			for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items())
 				contents = i["itemSectionRenderer"]["contents"];
-		load_community_items(contents, new_result);
+		load_community_items(contents, *this);
 	} else {
 		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "WEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}}, "continuation": "%2"})";
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
-		post_content = std::regex_replace(post_content, std::regex("%2"), prev_result.community_continuation_token);
+		post_content = std::regex_replace(post_content, std::regex("%2"), community_continuation_token);
 		
 		access_and_parse_json(
 			[&] () { return http_post_json(get_innertube_api_url("browse"), post_content); },
@@ -323,14 +305,9 @@ YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &
 				RJson contents;
 				for (auto i : yt_result["onResponseReceivedEndpoints"].array_items()) if (i.has_key("appendContinuationItemsAction"))
 					contents = i["appendContinuationItemsAction"]["continuationItems"];
-				load_community_items(contents, new_result);
+				load_community_items(contents, *this);
 			},
-			[&] (const std::string &error) {
-				new_result.error = "[ch/c+] " + error;
-				debug(new_result.error);
-			}
+			[&] (const std::string &error) { debug((this->error = "[ch/c+] " + error)); }
 		);
 	}
-	
-	return new_result;
 }

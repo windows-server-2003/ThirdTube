@@ -710,7 +710,7 @@ static void load_video_page(void *arg) {
 	if (need_loading) {
 		Util_log_save("player/load-v", "request : " + url);
 		add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-		tmp_video_info = youtube_parse_video_page(url);
+		tmp_video_info = youtube_load_video_page(url);
 		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	}
 	
@@ -1125,7 +1125,8 @@ static void load_more_suggestions(void *arg_) {
 	YouTubeVideoDetail *arg = (YouTubeVideoDetail *) arg_;
 	
 	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-	auto new_result = youtube_video_page_load_more_suggestions(*arg);
+	auto new_result = *arg;
+	new_result.load_more_suggestions();
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	// wrap suggestion titles
@@ -1154,7 +1155,8 @@ static void load_more_comments(void *arg_) {
 	YouTubeVideoDetail *arg = (YouTubeVideoDetail *) arg_;
 	
 	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-	auto new_result = youtube_video_page_load_more_comments(*arg);
+	auto new_result = *arg;
+	new_result.load_more_comments();
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	std::vector<View *> new_comment_views;
@@ -1182,7 +1184,8 @@ static void load_more_replies(void *arg_) {
 	YouTubeVideoDetail::Comment &comment = cur_video_info.comments[comment_index];
 	
 	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-	auto new_comment = youtube_video_page_load_more_replies(comment);
+	auto new_comment = comment;
+	new_comment.load_more_replies();
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	std::vector<PostView *> new_reply_views;
@@ -1234,7 +1237,8 @@ static void load_caption(void *arg_) {
 	auto &translation_lang_id = *arg->second;
 	
 	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-	auto new_video_info = youtube_video_page_load_caption(cur_video_info, base_lang_id, translation_lang_id);
+	auto new_result = cur_video_info;
+	new_result.load_caption(base_lang_id, translation_lang_id);
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	std::vector<View *> caption_main_views;
@@ -1259,13 +1263,13 @@ static void load_caption(void *arg_) {
 				->set_background_color(COLOR_GRAY(0x80))
 		})
 	);
-	if (!new_video_info.caption_data[{base_lang_id, translation_lang_id}].size()) {
+	if (!new_result.caption_data[{base_lang_id, translation_lang_id}].size()) {
 		caption_main_views.push_back((new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
 			->set_text((std::function<std::string ()>) [] () { return LOCALIZED(NO_CAPTION); })
 			->set_x_alignment(TextView::XAlign::CENTER)
 		);
 	}
-	for (const auto &caption_piece : new_video_info.caption_data[{base_lang_id, translation_lang_id}]) {
+	for (const auto &caption_piece : new_result.caption_data[{base_lang_id, translation_lang_id}]) {
 		const auto &cur_content = caption_piece.content;
 		
 		if (!cur_content.size() || cur_content == "\n") continue;
@@ -1305,7 +1309,7 @@ static void load_caption(void *arg_) {
 	
 	// caption overlay
 	CaptionOverlayView *new_caption_overlay_view = (new CaptionOverlayView(0, 0, 400, 240))
-		->set_caption_data(new_video_info.caption_data[{base_lang_id, translation_lang_id}]);
+		->set_caption_data(new_result.caption_data[{base_lang_id, translation_lang_id}]);
 	
 	
 	small_resource_lock.lock();

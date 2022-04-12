@@ -234,7 +234,7 @@ static void extract_metadata(RJson data, YouTubeVideoDetail &res) {
 	}
 }
 
-YouTubeVideoDetail youtube_parse_video_page(std::string url) {
+YouTubeVideoDetail youtube_load_video_page(std::string url) {
 	YouTubeVideoDetail res;
 	
 	res.id = youtube_get_video_id_by_url(url);
@@ -328,35 +328,28 @@ YouTubeVideoDetail youtube_parse_video_page(std::string url) {
 	return res;
 }
 
-YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDetail &prev_result) {
-	YouTubeVideoDetail new_result = prev_result;
-	
-	if (prev_result.suggestions_continue_token == "") {
-		new_result.error = "suggestion continue token empty";
-		return new_result;
+void YouTubeVideoDetail::load_more_suggestions() {
+	if (suggestions_continue_token == "") {
+		error = "suggestion continue token empty";
+		return;
 	}
 	
 	// POST to get more results
 	std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
-		+ prev_result.suggestions_continue_token + "\"}";
+		+ suggestions_continue_token + "\"}";
 	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
 	access_and_parse_json(
 		[&] () { return http_post_json(get_innertube_api_url("next"), post_content); },
 		[&] (Document &, RJson yt_result) {
-			new_result.suggestions_continue_token = "";
+			suggestions_continue_token = "";
 			for (auto i : yt_result["onResponseReceivedEndpoints"].array_items())
 				for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items())
-					extract_item(j, new_result);
+					extract_item(j, *this);
 		},
-		[&] (const std::string &error) {
-			new_result.error = "[v-sug+] " + error;
-			debug(new_result.error);
-		}
+		[&] (const std::string &error) { debug((this->error = "[v-sug+] " + error)); }
 	);
-	
-	return new_result;
 }
 
 YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(RJson comment_renderer, int thumbnail_height) {
@@ -374,12 +367,10 @@ YouTubeVideoDetail::Comment extract_comment_from_comment_renderer(RJson comment_
 	return cur_comment;
 	
 }
-YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetail &prev_result) {
-	YouTubeVideoDetail new_result = prev_result;
-	
-	if (prev_result.comment_continue_type == -1) {
-		new_result.error = "No more comments available";
-		return new_result;
+void YouTubeVideoDetail::load_more_comments() {
+	if (comment_continue_type == -1) {
+		error = "No more comments available";
+		return;
 	}
 	
 	auto parse_comment_thread_renderer = [&] (RJson comment_thread_renderer) {
@@ -390,118 +381,105 @@ YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetai
 		return cur_comment;
 	};
 	
-	if (prev_result.comment_continue_type == 0) {
+	if (comment_continue_type == 0) {
 		access_and_parse_json(
-			[&] () { return http_get("https://m.youtube.com/watch_comment?action_get_comments=1&pbj=1&ctoken=" + prev_result.comment_continue_token, 
+			[&] () { return http_get("https://m.youtube.com/watch_comment?action_get_comments=1&pbj=1&ctoken=" + comment_continue_token, 
 				{{"X-YouTube-Client-Version", "2.20210714.00.00"}, {"X-YouTube-Client-Name", "2"}});
 			},
 			[&] (Document &, RJson yt_result) {
-				new_result.comment_continue_type = -1;
-				new_result.comment_continue_token = "";
+				comment_continue_type = -1;
+				comment_continue_token = "";
 				for (auto i : yt_result.array_items()) {
 					for (auto comment : i["response"]["continuationContents"]["commentSectionContinuation"]["items"].array_items()) if (comment.has_key("commentThreadRenderer"))
-						new_result.comments.push_back(parse_comment_thread_renderer(comment));
+						comments.push_back(parse_comment_thread_renderer(comment));
 					for (auto j : i["response"]["continuationContents"]["commentSectionContinuation"]["continuations"].array_items()) if (j.has_key("nextContinuationData")) {
-						new_result.comment_continue_token = j["nextContinuationData"]["continuation"].string_value();
-						new_result.comment_continue_type = 0;
+						comment_continue_token = j["nextContinuationData"]["continuation"].string_value();
+						comment_continue_type = 0;
 					}
 				}
 			},
-			[&] (const std::string &error) {
-				new_result.error = "[v-com+0] " + error;
-				debug(new_result.error);
-			}
+			[&] (const std::string &error) { debug((this->error = "[v-com+0] " + error)); }
 		);
 	} else {
 		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
-			+ prev_result.comment_continue_token + "\"}";
+			+ comment_continue_token + "\"}";
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		
 		access_and_parse_json(
 			[&] () { return http_post_json(get_innertube_api_url("next"), post_content); },
 			[&] (Document &, RJson yt_result) {
-				new_result.comment_continue_type = -1;
-				new_result.comment_continue_token = "";
+				comment_continue_type = -1;
+				comment_continue_token = "";
 				for (auto i : yt_result["onResponseReceivedEndpoints"].array_items()) {
 					RJson continuation_items = i.has_key("reloadContinuationItemsCommand") ? i["reloadContinuationItemsCommand"]["continuationItems"]
 						: i["appendContinuationItemsAction"]["continuationItems"];
 					
 					for (auto comment : continuation_items.array_items()) {
-						if (comment.has_key("commentThreadRenderer")) new_result.comments.push_back(parse_comment_thread_renderer(comment));
+						if (comment.has_key("commentThreadRenderer")) comments.push_back(parse_comment_thread_renderer(comment));
 						if (comment.has_key("continuationItemRenderer")) {
-							new_result.comment_continue_token = comment["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
-							new_result.comment_continue_type = 1;
+							comment_continue_token = comment["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
+							comment_continue_type = 1;
 						}
 					}
 				}
 			},
-			[&] (const std::string &error) {
-				new_result.error = "[v-com+1] " + error;
-				debug(new_result.error);
-			}
+			[&] (const std::string &error) { debug((this->error = "[v-com+1] " + error)); }
 		);
 	}
-	return new_result;
 }
 
-YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVideoDetail::Comment &comment) {
-	YouTubeVideoDetail::Comment res = comment;
-	res.replies_continue_token = "";
-	
-	if (!comment.has_more_replies()) {
+void YouTubeVideoDetail::Comment::load_more_replies() {
+	if (!this->has_more_replies()) {
 		debug("load_more_replies on a comment that has no replies to load");
-		return comment;
+		return;
 	}
 	
 	std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
-		+ comment.replies_continue_token + "\"}";
+		+ replies_continue_token + "\"}";
 	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
 	access_and_parse_json(
 		[&] () { return http_post_json(get_innertube_api_url("next"), post_content); },
 		[&] (Document &, RJson yt_result) {
+			replies_continue_token = "";
 			for (auto i : yt_result["onResponseReceivedEndpoints"].array_items()) {
 				for (auto item : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
-					if (item.has_key("commentRenderer")) res.replies.push_back(extract_comment_from_comment_renderer(item["commentRenderer"], 32));
+					if (item.has_key("commentRenderer")) replies.push_back(extract_comment_from_comment_renderer(item["commentRenderer"], 32));
 					if (item.has_key("continuationItemRenderer"))
-						res.replies_continue_token = item["continuationItemRenderer"]["button"]["buttonRenderer"]["command"]["continuationCommand"]["token"].string_value();
+						replies_continue_token = item["continuationItemRenderer"]["button"]["buttonRenderer"]["command"]["continuationCommand"]["token"].string_value();
 				}
 			}
 		},
-		[&] (const std::string &error) { debug("[v-rep+] " + error); }
+		[&] (const std::string &error) { debug((this->error = "[v-rep+] " + error)); }
 	);
-	
-	return res;
 }
 
-YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &prev_result, const std::string &base_lang_id, const std::string &translation_lang_id) {
-	YouTubeVideoDetail new_result = prev_result;
-	
+void YouTubeVideoDetail::load_caption(const std::string &base_lang_id, const std::string &translation_lang_id) {
 	int base_lang_index = -1;
-	for (size_t i = 0; i < prev_result.caption_base_languages.size(); i++) if (prev_result.caption_base_languages[i].id == base_lang_id) {
+	for (size_t i = 0; i < caption_base_languages.size(); i++) if (caption_base_languages[i].id == base_lang_id) {
 		base_lang_index = i;
 		break;
 	}
 	if (base_lang_index == -1) {
 		debug("[caption] unknown base language");
-		return new_result;
+		return;
 	}
 		
 	int translation_lang_index = -1;
 	if (translation_lang_id != "") {
-		for (size_t i = 0; i < prev_result.caption_translation_languages.size(); i++) if (prev_result.caption_translation_languages[i].id == translation_lang_id) {
+		for (size_t i = 0; i < caption_translation_languages.size(); i++) if (caption_translation_languages[i].id == translation_lang_id) {
 			translation_lang_index = i;
 			break;
 		}
 		if (translation_lang_index == -1) {
 			debug("[caption] unknown translation language");
-			return new_result;
+			return;
 		}
 	}
 	
-	std::string url = "https://m.youtube.com" + prev_result.caption_base_languages[base_lang_index].base_url;
+	std::string url = "https://m.youtube.com" + caption_base_languages[base_lang_index].base_url;
 	if (translation_lang_id != "") url += "&tlang=" + translation_lang_id;
 	url += "&fmt=json3&xorb=2&xobt=3&xovt=3"; // the meanings of xorb, xobt, xovt are unknwon, and these three parameters seem to be unnecessary
 	
@@ -518,79 +496,9 @@ YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &pre
 				
 				cur_caption.push_back(cur_caption_piece);
 			}
-			new_result.caption_data[{base_lang_id, translation_lang_id}] = cur_caption;
+			caption_data[{base_lang_id, translation_lang_id}] = cur_caption;
 		},
-		[&] (const std::string &error) {
-			new_result.error = "[v-cap+] " + error;
-			debug(new_result.error);
-		}
+		[&] (const std::string &error) { debug((this->error = "[v-cap+] " + error)); }
 	);
-	
-	return new_result;
 }
 
-
-std::string youtube_get_video_id_by_url(const std::string &url) {
-	auto pos = url.find("?v=");
-	if (pos == std::string::npos) pos = url.find("&v=");
-	if (pos != std::string::npos) {
-		std::string res = url.substr(pos + 3, 11);
-		return youtube_is_valid_video_id(res) ? res : "";
-	}
-	return "";
-}
-std::string youtube_get_playlist_id_by_url(const std::string &url) {
-	auto pos = url.find("?list=");
-	if (pos == std::string::npos) pos = url.find("&list=");
-	if (pos != std::string::npos) {
-		pos += 6;
-		std::string res;
-		for (size_t i = pos; i < url.size() && url[i] != '&'; i++) res.push_back(url[i]);
-		return res;
-	}
-	return "";
-}
-std::string youtube_get_video_thumbnail_url_by_id(const std::string &id) {
-	return "https://i.ytimg.com/vi/" + id + "/default.jpg";
-}
-std::string youtube_get_video_url_by_id(const std::string &id) {
-	return "https://m.youtube.com/watch?v=" + id;
-}
-std::string get_video_id_from_thumbnail_url(const std::string &url) {
-	auto pos = url.find("i.ytimg.com/vi/");
-	if (pos == std::string::npos) return "";
-	pos += std::string("i.ytimg.com/vi/").size();
-	std::string res;
-	while (pos < url.size() && url[pos] != '/') res.push_back(url[pos++]);
-	return res;
-}
-bool youtube_is_valid_video_id(const std::string &id) {
-	for (auto c : id) if (!isalnum(c) && c != '-' && c != '_') return false;
-	if (id.size() != 11) return false;
-	return true;
-}
-bool is_youtube_url(const std::string &url) {
-	std::vector<std::string> patterns = {
-		"https://m.youtube.com/",
-		"https://www.youtube.com/"
-	};
-	for (auto pattern : patterns) if (starts_with(url, pattern, 0)) return true;
-	return false;
-}
-bool is_youtube_thumbnail_url(const std::string &url) {
-	std::vector<std::string> patterns = {
-		"https://i.ytimg.com/vi/",
-		"https://yt3.ggpht.com/"
-	};
-	for (auto pattern : patterns) if (starts_with(url, pattern, 0)) return true;
-	return false;
-}
-YouTubePageType youtube_get_page_type(std::string url) {
-	url = convert_url_to_mobile(url);
-	if (starts_with(url, "https://m.youtube.com/watch?", 0)) return YouTubePageType::VIDEO;
-	if (starts_with(url, "https://m.youtube.com/user/", 0)) return YouTubePageType::CHANNEL;
-	if (starts_with(url, "https://m.youtube.com/channel/", 0)) return YouTubePageType::CHANNEL;
-	if (starts_with(url, "https://m.youtube.com/c/", 0)) return YouTubePageType::CHANNEL;
-	if (starts_with(url, "https://m.youtube.com/results?", 0)) return YouTubePageType::SEARCH;
-	return YouTubePageType::INVALID;
-}

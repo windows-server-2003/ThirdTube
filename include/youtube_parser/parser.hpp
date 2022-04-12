@@ -57,11 +57,10 @@ struct YouTubeSearchResult {
 	
 	std::string continue_token;
 	
-	bool has_continue() const { return continue_token != ""; }
+	bool has_more_results() const { return continue_token != ""; }
+	void load_more_results();
 };
-YouTubeSearchResult youtube_parse_search(std::string url);
-// takes the previous result, returns the new result with both old items and new items
-YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result);
+YouTubeSearchResult youtube_load_search(std::string url);
 
 
 struct YouTubeVideoDetail {
@@ -125,6 +124,7 @@ struct YouTubeVideoDetail {
 	Playlist playlist;
 	
 	struct Comment {
+		std::string error;
 		YouTubeChannelSuccinct author;
 		std::string content;
 		std::string id;
@@ -135,6 +135,7 @@ struct YouTubeVideoDetail {
 		std::vector<Comment> replies;
 		std::string replies_continue_token;
 		bool has_more_replies() const { return replies_continue_token != ""; }
+		void load_more_replies();
 	};
 	std::vector<Comment> comments;
 	
@@ -158,13 +159,13 @@ struct YouTubeVideoDetail {
 	bool has_more_comments() const { return comment_continue_type != -1; }
 	bool needs_timestamp_adjusting() const { return is_livestream && livestream_type == LivestreamType::PREMIERE; }
 	bool is_playable() const { return playability_status == "OK" && (both_stream_url != "" || (audio_stream_url != "" && video_stream_urls.size())); }
+	
+	void load_more_suggestions();
+	void load_more_comments();
+	void load_caption(const std::string &base_lang_id, const std::string &translation_lang_id);
 };
 // this function does not load comments; call youtube_video_page_load_more_comments() if necessary
-YouTubeVideoDetail youtube_parse_video_page(std::string url);
-YouTubeVideoDetail youtube_video_page_load_more_suggestions(const YouTubeVideoDetail &prev_result);
-YouTubeVideoDetail youtube_video_page_load_more_comments(const YouTubeVideoDetail &prev_result);
-YouTubeVideoDetail::Comment youtube_video_page_load_more_replies(const YouTubeVideoDetail::Comment &comment);
-YouTubeVideoDetail youtube_video_page_load_caption(const YouTubeVideoDetail &prev_result, const std::string &base_lang_id, const std::string &translation_lang_id);
+YouTubeVideoDetail youtube_load_video_page(std::string url);
 
 
 
@@ -201,16 +202,16 @@ struct YouTubeChannelDetail {
 	bool community_loaded = false;
 	std::string community_continuation_token;
 	
-	bool has_continue() const { return continue_token != ""; }
-	bool has_playlist_to_load() const { return playlist_tab_browse_id != "" && playlist_tab_params != ""; }
+	bool has_more_videos() const { return continue_token != ""; }
+	bool has_playlists_to_load() const { return playlist_tab_browse_id != "" && playlist_tab_params != ""; }
 	bool has_community_posts_to_load() const { return !community_loaded || community_continuation_token != ""; }
+	
+	void load_more_videos();
+	void load_playlists();
+	void load_more_community_posts();
 };
-YouTubeChannelDetail youtube_parse_channel_page(std::string url_or_id);
-std::vector<YouTubeChannelDetail> youtube_parse_channel_page_multi(std::vector<std::string> ids, std::function<void (int, int)> progress);
-// takes the previous result, returns the new result with both old items and new items
-YouTubeChannelDetail youtube_channel_page_continue(const YouTubeChannelDetail &prev_result);
-YouTubeChannelDetail youtube_channel_load_playlists(const YouTubeChannelDetail &prev_result);
-YouTubeChannelDetail youtube_channel_load_community(const YouTubeChannelDetail &prev_result);
+YouTubeChannelDetail youtube_load_channel_page(std::string url_or_id);
+std::vector<YouTubeChannelDetail> youtube_load_channel_page_multi(std::vector<std::string> ids, std::function<void (int, int)> progress);
 
 
 struct YouTubeHomeResult {
@@ -218,15 +219,15 @@ struct YouTubeHomeResult {
 	std::vector<YouTubeVideoSuccinct> videos;
 	std::string continue_token;
 	std::string visitor_data;
-	bool has_continue() const { return continue_token != "" && visitor_data != ""; }
+	bool has_more_results() const { return continue_token != "" && visitor_data != ""; }
+	void load_more_results();
 };
-YouTubeHomeResult youtube_parse_home_page();
-YouTubeHomeResult youtube_continue_home_page(const YouTubeHomeResult &prev_result);
+YouTubeHomeResult youtube_load_home_page();
 
 
 void youtube_change_content_language(std::string language_code);
 
-// util function
+/* -------------------------------- utils.cpp -------------------------------- */
 std::string youtube_get_video_id_by_url(const std::string &url);
 std::string youtube_get_playlist_id_by_url(const std::string &url);
 std::string youtube_get_video_thumbnail_url_by_id(const std::string &id);

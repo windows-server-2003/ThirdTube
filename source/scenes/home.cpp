@@ -170,7 +170,7 @@ static SuccinctVideoView *convert_video_to_view(const YouTubeVideoSuccinct &vide
 }
 static void update_home_bottom_view(bool force_show_loading) {
 	delete home_videos_bottom_view;
-	if (home_info.has_continue() || force_show_loading) {
+	if (home_info.has_more_results() || force_show_loading) {
 		home_videos_bottom_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 2))
 			->set_text([] () {
 				if (home_info.error != "") return home_info.error;
@@ -191,7 +191,7 @@ static void load_home_page(void *) {
 	resource_lock.unlock();
 	
 	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-	auto results = youtube_parse_home_page();
+	auto results = youtube_load_home_page();
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	Util_log_save("home", "truncate/view creation start");
@@ -210,25 +210,20 @@ static void load_home_page(void *) {
 	resource_lock.unlock();
 }
 static void load_home_page_more(void *) {
-	resource_lock.lock();
-	auto prev_result = home_info;
-	resource_lock.unlock();
-	
-	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-	auto results = youtube_continue_home_page(prev_result);
-	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
+	auto new_result = home_info;
+	new_result.load_more_results();
 	
 	Util_log_save("home-c", "truncate/view creation start");
 	std::vector<View *> new_videos_view;
-	for (size_t i = home_info.videos.size(); i < results.videos.size(); i++) new_videos_view.push_back(convert_video_to_view(results.videos[i]));
+	for (size_t i = home_info.videos.size(); i < new_result.videos.size(); i++) new_videos_view.push_back(convert_video_to_view(new_result.videos[i]));
 	Util_log_save("home-c", "truncate/view creation end");
 	
 	resource_lock.lock();
-	if (results.error == "") {
-		home_info = results;
+	home_info = new_result;
+	if (new_result.error == "") {
 		home_videos_list_view->views.insert(home_videos_list_view->views.end(), new_videos_view.begin(), new_videos_view.end());
 		update_home_bottom_view(false);
-	} else home_info.error = results.error;
+	}
 	resource_lock.unlock();
 }
 static void load_subscription_feed(void *) {
@@ -239,7 +234,7 @@ static void load_subscription_feed(void *) {
 	std::vector<std::string> ids;
 	for (auto channel : channels) ids.push_back(channel.id);
 	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-	auto results = youtube_parse_channel_page_multi(ids, [] (int cur, int total) {
+	auto results = youtube_load_channel_page_multi(ids, [] (int cur, int total) {
 		feed_loading_progress = cur;
 		feed_loading_total = total;
 		var_need_reflesh = true;

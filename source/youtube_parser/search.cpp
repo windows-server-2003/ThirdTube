@@ -45,7 +45,7 @@ static bool parse_searched_item(RJson content, std::vector<YouTubeSuccinctItem> 
 	return false;
 }
 
-YouTubeSearchResult youtube_parse_search(std::string url) {
+YouTubeSearchResult youtube_load_search(std::string url) {
 	YouTubeSearchResult res;
 	
 	std::string query_word;
@@ -90,48 +90,38 @@ YouTubeSearchResult youtube_parse_search(std::string url) {
 			}
 			if (res.continue_token == "") debug("failed to get next continue token");
 		},
-		[&] (const std::string &error) {
-			res.error = "[se] " + error;
-			debug(res.error);
-		}
+		[&] (const std::string &error) { debug((res.error = "[se] " + error)); }
 	);
 	
 	return res;
 }
-YouTubeSearchResult youtube_continue_search(const YouTubeSearchResult &prev_result) {
-	YouTubeSearchResult new_result = prev_result;
-	
-	if (prev_result.continue_token == "") {
-		new_result.error = "continue token empty";
-		return new_result;
+void YouTubeSearchResult::load_more_results() {
+	if (continue_token == "") {
+		error = "continue token empty";
+		return;
 	}
 	
 	// POST to get more results
 	std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
-		+ prev_result.continue_token + "\"}";
+		+ continue_token + "\"}";
 	post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 	
 	access_and_parse_json(
 		[&] () { return http_post_json(get_innertube_api_url("search"), post_content); },
 		[&] (Document &, RJson yt_result) {
-			new_result.estimated_result_num = std::stoll(yt_result["estimatedResults"].string_value());
-			new_result.continue_token = "";
+			estimated_result_num = std::stoll(yt_result["estimatedResults"].string_value());
+			continue_token = "";
 			for (auto i : yt_result["onResponseReceivedCommands"].array_items()) {
 				for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
 					if (j.has_key("itemSectionRenderer")) {
-						for (auto item : j["itemSectionRenderer"]["contents"].array_items()) parse_searched_item(item, new_result.results);
+						for (auto item : j["itemSectionRenderer"]["contents"].array_items()) parse_searched_item(item, results);
 					} else if (j.has_key("continuationItemRenderer"))
-						new_result.continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
+						continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 				}
 			}
-			if (new_result.continue_token == "") debug("failed to get next continue token");
+			if (continue_token == "") debug("failed to get next continue token");
 		},
-		[&] (const std::string &error) {
-			new_result.error = "[se+] " + error;
-			debug(new_result.error);
-		}
+		[&] (const std::string &error) { debug((this->error = "[se+] " + error)); }
 	);
-	
-	return new_result;
 }

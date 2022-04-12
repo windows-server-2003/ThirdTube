@@ -171,7 +171,7 @@ static void set_loading_bottom_view() {
 }
 static void update_result_bottom_view() {
 	delete result_bottom_view;
-	if (search_result.error != "" || search_result.has_continue()) {
+	if (search_result.error != "" || search_result.has_more_results()) {
 		TextView *cur_view = (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL * 2))->set_x_alignment(TextView::XAlign::CENTER);
 		if (search_result.error != "") cur_view->set_text(search_result.error);
 		else cur_view->set_text((std::function<std::string ()>) [] () { return LOCALIZED(LOADING); });
@@ -179,7 +179,7 @@ static void update_result_bottom_view() {
 	} else result_bottom_view = new EmptyView(0, 0, 320, 0);
 	result_view->views[1] = result_bottom_view;
 	result_view->set_on_child_drawn(1, [] (const ScrollView &, int) {
-		if (search_result.has_continue() && search_result.error == "") {
+		if (search_result.has_more_results() && search_result.error == "") {
 			if (!is_async_task_running(load_search_results) &&
 				!is_async_task_running(load_more_search_results)) queue_async_task(load_more_search_results, NULL);
 		}
@@ -241,7 +241,7 @@ static void load_search_results(void *) {
 		search_url.push_back("0123456789ABCDEF"[(u8) c % 16]);
 	}
 	add_cpu_limit(ADDITIONAL_CPU_LIMIT);
-	YouTubeSearchResult new_result = youtube_parse_search(search_url);
+	YouTubeSearchResult new_result = youtube_load_search(search_url);
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	// wrap and truncate here
@@ -264,16 +264,12 @@ static void load_search_results(void *) {
 	resource_lock.unlock();
 }
 static void load_more_search_results(void *) {
-	resource_lock.lock();
-	auto prev_result = search_result;
-	var_need_reflesh = true;
-	resource_lock.unlock();
-	
-	auto new_result = youtube_continue_search(prev_result);
+	auto new_result = search_result;
+	new_result.load_more_results();
 	
 	Util_log_save("search-c", "truncate/view creation start");
 	std::vector<View *> new_result_views;
-	for (size_t i = prev_result.results.size(); i < new_result.results.size(); i++) new_result_views.push_back(result_item_to_view(new_result.results[i]));
+	for (size_t i = search_result.results.size(); i < new_result.results.size(); i++) new_result_views.push_back(result_item_to_view(new_result.results[i]));
 	Util_log_save("search-c", "truncate/view creation end");
 	
 	
@@ -282,11 +278,8 @@ static void load_more_search_results(void *) {
 		resource_lock.unlock();
 		return;
 	}
-	if (new_result.error != "") search_result.error = new_result.error;
-	else {
-		search_result = new_result;
-		result_list_view->views.insert(result_list_view->views.end(), new_result_views.begin(), new_result_views.end());
-	}
+	search_result = new_result;
+	if (new_result.error == "") result_list_view->views.insert(result_list_view->views.end(), new_result_views.begin(), new_result_views.end());
 	update_result_bottom_view();
 	var_need_reflesh = true;
 	resource_lock.unlock();

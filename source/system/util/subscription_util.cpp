@@ -10,10 +10,11 @@ static std::vector<SubscriptionChannel> subscribed_channels;
 static Mutex resource_lock;
 
 #define SUBSCRIPTION_VERSION 0
+#define SUBSCRIPTION_FILE_NAME "subscription.json"
 
 void load_subscription() {
 	u64 file_size;
-	Result_with_string result = Util_file_check_file_size("subscription.json", DEF_MAIN_DIR, &file_size);
+	Result_with_string result = Util_file_check_file_size(SUBSCRIPTION_FILE_NAME, DEF_MAIN_DIR, &file_size);
 	if (result.code != 0) {
 		Util_log_save("subsc/load" , "Util_file_check_file_size()..." + result.string + result.error_description, result.code);
 		return;
@@ -22,7 +23,7 @@ void load_subscription() {
 	char *buf = (char *) malloc(file_size + 1);
 	
 	u32 read_size;
-	result = Util_file_load_from_file("subscription.json", DEF_MAIN_DIR, (u8 *) buf, file_size, &read_size);
+	result = Util_file_load_from_file(SUBSCRIPTION_FILE_NAME, DEF_MAIN_DIR, (u8 *) buf, file_size, &read_size);
 	Util_log_save("subsc/load" , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
 	if (result.code == 0) {
 		buf[read_size] = '\0';
@@ -81,7 +82,7 @@ void save_subscription() {
 	
 	std::string data = RJson(json_root).dump();
 	
-	Result_with_string result = Util_file_save_to_file("subscription.json", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
+	Result_with_string result = Util_file_save_to_file(SUBSCRIPTION_FILE_NAME, DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
 	Util_log_save("subsc/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
 }
 
