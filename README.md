@@ -36,8 +36,16 @@ The name is derived from the fact that it is the third YouTube client on 3DS, fo
 
  - B button : go back to the previous scene  
  - D-pad up/down : scroll
+ - L/R : switch between tabs
  - In video player
     - Arrow left/right : 10 s seek
+
+Below are for debug purposes
+
+ - Select + X : toggle debug log
+ - Select + Y : toggle memory usage monitor
+ - Select + R + A : toggle FPS monitor
+
 
 
 ## Requirments

@@ -17,6 +17,7 @@ public :
 	double tab_selector_selected_line_height = 3;
 	int selected_tab = 0;
 	int tab_holding = -1;
+	bool lr_tab_switch_enabled = true;
 	
 	int get_tab_num() const { return std::min(tab_texts.size(), views.size()); }
 	float tab_width() const { return (x1 - x0) / get_tab_num(); }
@@ -29,6 +30,10 @@ public :
 	Tab2View *set_views(const std::vector<View *> &views, int selected_tab = 0) {
 		this->views = views;
 		this->selected_tab = selected_tab;
+		return this;
+	}
+	Tab2View *set_lr_tab_switch_enabled(bool lr_tab_switch_enabled) {
+		this->lr_tab_switch_enabled = lr_tab_switch_enabled;
 		return this;
 	}
 	void on_scroll() override {
@@ -68,6 +73,18 @@ public :
 		}
 	}
 	void update_(Hid_info key) override {
+		if (lr_tab_switch_enabled) {
+			if (key.p_r) {
+				selected_tab++;
+				if (selected_tab >= (int) views.size()) selected_tab -= views.size();
+				var_need_reflesh = true;
+			}
+			if (key.p_l) {
+				selected_tab--;
+				if (selected_tab < 0) selected_tab += views.size();
+				var_need_reflesh = true;
+			}
+		}
 		int tab_holded = -1;
 		if (key.touch_y >= y0 && key.touch_y < y0 + tab_selector_height)
 			tab_holded = std::max(0, std::min<int>(get_tab_num() - 1, (key.touch_x - x0) * get_tab_num() / (x1 - x0)));

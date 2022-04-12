@@ -16,6 +16,7 @@ public :
 	int selected_tab = 0;
 	int tab_holding = -1;
 	bool stretch_subview = false;
+	bool lr_tab_switch_enabled = true;
 	double tab_font_size = 0.5;
 	
 	int get_tab_num() const { return std::min(tab_texts.size(), views.size()); }
@@ -37,6 +38,10 @@ public :
 	}
 	TabView *set_tab_font_size(double tab_font_size) {
 		this->tab_font_size = tab_font_size;
+		return this;
+	}
+	TabView *set_lr_tab_switch_enabled(bool lr_tab_switch_enabled) {
+		this->lr_tab_switch_enabled = lr_tab_switch_enabled;
 		return this;
 	}
 	void on_scroll() override {
@@ -75,6 +80,18 @@ public :
 		}
 	}
 	void update_(Hid_info key) override {
+		if (lr_tab_switch_enabled) {
+			if (key.p_r) {
+				selected_tab++;
+				if (selected_tab >= (int) views.size()) selected_tab -= views.size();
+				var_need_reflesh = true;
+			}
+			if (key.p_l) {
+				selected_tab--;
+				if (selected_tab < 0) selected_tab += views.size();
+				var_need_reflesh = true;
+			}
+		}
 		int tab_holded = -1;
 		if (key.touch_y >= y1 - tab_selector_height && key.touch_y < y1)
 			tab_holded = std::max(0, std::min<int>(get_tab_num() - 1, (key.touch_x - x0) * get_tab_num() / (x1 - x0)));

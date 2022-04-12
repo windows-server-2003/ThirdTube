@@ -203,6 +203,7 @@ View *get_playlist_categories_tab_view(const std::vector<std::pair<std::string, 
 			res_view->views.push_back(cur_list_view);
 		}
 		res_view->set_tab_texts<std::string>(titles);
+		res_view->set_lr_tab_switch_enabled(false);
 		return res_view;
 	} else return (new TextView(0, 0, 320, DEFAULT_FONT_INTERVAL))
 		->set_text((std::function<std::string ()>) [] () { return LOCALIZED(EMPTY); })
