@@ -14,6 +14,7 @@ bool var_show_fps = false;
 bool var_full_screen_mode = false;
 bool var_video_show_debug_info = false;
 bool var_video_linear_filter = true;
+float var_forward_buffer_ratio = 0.8;
 u8 var_wifi_state = 0;
 u8 var_wifi_signal = 0;
 u8 var_battery_charge = 0;

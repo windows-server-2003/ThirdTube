@@ -14,6 +14,7 @@ extern bool var_show_fps;
 extern bool var_full_screen_mode;
 extern bool var_video_show_debug_info;
 extern bool var_video_linear_filter;
+extern float var_forward_buffer_ratio;
 extern u8 var_wifi_state;
 extern u8 var_wifi_signal;
 extern u8 var_battery_charge;

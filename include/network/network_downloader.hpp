@@ -59,7 +59,6 @@ struct NetworkStream {
 class NetworkStreamDownloader {
 private :
 	static constexpr u64 BLOCK_SIZE = NetworkStream::BLOCK_SIZE;
-	static constexpr u64 MAX_FORWARD_READ_BLOCKS = 50;
 	static constexpr const char * USER_AGENT = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
 	
 	Mutex streams_lock;

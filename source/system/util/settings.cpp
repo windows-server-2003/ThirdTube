@@ -20,6 +20,13 @@ void load_settings() {
 		res = std::max<long>(res, std::numeric_limits<int>::min());
 		return (int) res;
 	};
+	auto load_double = [&] (std::string key, double default_value) {
+		if (!settings.count(key)) return default_value;
+		char *end;
+		double res = strtod(settings[key].c_str(), &end);
+		if (*end) return default_value;
+		return res;
+	};
 	auto load_string = [&] (std::string key, std::string default_value) {
 		return settings.count(key) ? settings[key] : default_value;
 	};
@@ -37,6 +44,7 @@ void load_settings() {
 	var_flash_mode = load_int("dark_theme_flash", 0);
 	var_community_image_size = std::min(COMMUNITY_IMAGE_SIZE_MAX, std::max(COMMUNITY_IMAGE_SIZE_MIN, load_int("community_image_size", COMMUNITY_IMAGE_SIZE_DEFAULT)));
 	var_autoplay_level = std::min(2, std::max(0, load_int("autoplay_level", 2)));
+	var_forward_buffer_ratio = std::max(0.1, std::min(1.0, load_double("forward_buffer_ratio", 0.8)));
 	var_history_enabled = load_int("history_enabled", 1);
 	var_video_show_debug_info = load_int("video_show_debug_info", 0);
 	var_video_linear_filter = load_int("linear_filter", 1);
@@ -59,6 +67,7 @@ void save_settings() {
 		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n" + 
 		"<community_image_size>" + std::to_string(var_community_image_size) + "</community_image_size>\n" +
 		"<autoplay_level>" + std::to_string(var_autoplay_level) + "</autoplay_level>\n" + 
+		"<forward_buffer_ratio>" + std::to_string(var_forward_buffer_ratio) + "</forward_buffer_ratio>\n" + 
 		"<history_enabled>" + std::to_string(var_history_enabled) + "</history_enabled>\n" +
 		"<video_show_debug_info>" + std::to_string(var_video_show_debug_info) + "</video_show_debug_info>\n" +
 		"<linear_filter>" + std::to_string(var_video_linear_filter) + "</linear_filter>\n";

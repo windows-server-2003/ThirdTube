@@ -330,6 +330,19 @@ void Sem_init(void) {
 								misc_tasks_request(TASK_CHANGE_BRIGHTNESS);
 							}
 						}),
+					// Forward buffer ratio
+					(new BarView(0, 0, 320, 40))
+						->set_values(0.1, 1.0, var_forward_buffer_ratio)
+						->set_title([] (const BarView &view) {
+							char ratio_str[16];
+							snprintf(ratio_str, 16, "%.2f", var_forward_buffer_ratio);
+							return LOCALIZED(FORWARD_BUFFER_RATIO) + " : " + ratio_str;
+						})
+						->set_while_holding([] (const BarView &view) { var_community_image_size = view.value; })
+						->set_on_release([] (const BarView &view) {
+							var_forward_buffer_ratio = view.value;
+							misc_tasks_request(TASK_SAVE_SETTINGS);
+						})
 				}),
 			// Tab #3 : Data
 			(new ScrollView(0, 0, 320, 0))

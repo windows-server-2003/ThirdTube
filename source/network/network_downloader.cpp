@@ -2,7 +2,7 @@
 #include "network/network_downloader.hpp"
 #include "network/network_io.hpp"
 
-#define MAX_CACHE_BLOCKS (var_is_new3ds ? NEW3DS_MAX_CACHE_BLOCKS : OLD3DS_MAX_CACHE_BLOCKS)
+#define MAX_CACHE_BLOCKS (var_is_new3ds ? NetworkStream::NEW3DS_MAX_CACHE_BLOCKS : NetworkStream::OLD3DS_MAX_CACHE_BLOCKS)
 
 
 // --------------------------------
@@ -149,15 +149,15 @@ void NetworkStreamDownloader::downloader_thread() {
 			}
 			if (streams[i]->whole_download) continue; // its entire content should already be downloaded
 			
+			int forward_buffer_block_num = std::max<int>(2, MAX_CACHE_BLOCKS * var_forward_buffer_ratio);
 			u64 read_head_block = read_heads[i] / BLOCK_SIZE;
 			u64 first_not_downloaded_block = read_head_block;
 			while (first_not_downloaded_block < streams[i]->block_num && streams[i]->downloaded_data.count(first_not_downloaded_block)) {
 				first_not_downloaded_block++;
-				if (first_not_downloaded_block == read_head_block + MAX_FORWARD_READ_BLOCKS) break;
+				if (first_not_downloaded_block == read_head_block + forward_buffer_block_num) break;
 			}
-			if (first_not_downloaded_block == streams[i]->block_num) continue; // no need to download this stream for now
-			
-			if (first_not_downloaded_block == read_head_block + MAX_FORWARD_READ_BLOCKS) continue; // no need to download this stream for now
+			if (first_not_downloaded_block == streams[i]->block_num) continue;
+			if (first_not_downloaded_block == read_head_block + forward_buffer_block_num) continue; // no need to download this stream for now
 			
 			double margin_percentage;
 			if (first_not_downloaded_block == read_head_block) margin_percentage = 0;
@@ -243,8 +243,10 @@ void NetworkStreamDownloader::downloader_thread() {
 			u64 expected_len = end - start;
 			
 			auto &session_list = cur_stream->session_list ? *cur_stream->session_list : thread_network_session_list;
+			int log_num = Util_log_save("debug", "accessing... ");
 			auto result = session_list.perform(HttpRequest::GET(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}}));
 			cur_stream->url = result.redirected_url;
+			Util_log_add(log_num, "ok");
 			
 			if (!result.fail && result.status_code_is_success()) {
 				if (!cur_stream->ready) {
