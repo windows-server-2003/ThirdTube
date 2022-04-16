@@ -933,8 +933,8 @@ Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cu
 			*size *= 2;
 			
 			double time_base = av_q2d(get_stream(AUDIO)->time_base);
-			my_assert(out_frame->pts != AV_NOPTS_VALUE);
-			*cur_pos = out_frame->pts * time_base + timestamp_offset;
+			my_assert(cur_frame->pts != AV_NOPTS_VALUE);
+			*cur_pos = cur_frame->pts * time_base + timestamp_offset;
 		} else {
 			result.error_description = "avcodec_receive_frame() failed " + std::to_string(ffmpeg_result);
 			goto fail;
