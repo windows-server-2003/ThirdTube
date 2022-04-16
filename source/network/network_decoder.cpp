@@ -555,8 +555,6 @@ Result_with_string NetworkDecoder::init_decoder(int type) {
 			Util_fake_pthread_set_enabled_core(slice_cores_enabled);
 			decoder_context[type]->thread_count = std::accumulate(std::begin(slice_cores_enabled), std::end(slice_cores_enabled), 0);
 		} else decoder_context[type]->thread_count = 1;
-		
-		decoder_context[type]->thread_safe_callbacks = 1;
 	}
 	ffmpeg_result = avcodec_open2(decoder_context[type], codec[type], NULL);
 	if (ffmpeg_result != 0) {
