@@ -272,7 +272,9 @@ void NetworkStreamDownloader::downloader_thread() {
 				cur_stream->error = true;
 			} else {
 				Util_log_save("net/dl", "access failed : " + result.error);
-				cur_stream->error = true;
+				if (cur_stream->retry_cnt_left) {
+					cur_stream->retry_cnt_left--;
+				} else cur_stream->error = true;
 			}
 		}
 	}
