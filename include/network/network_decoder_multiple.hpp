@@ -73,6 +73,7 @@ public :
 	
 	void set_frame_cores_enabled(bool *enabled) { decoder.set_frame_cores_enabled(enabled); }
 	void set_slice_cores_enabled(bool *enabled) { decoder.set_slice_cores_enabled(enabled); }
+	void request_avformat_reinit() { decoder.avformat_reinit_request[0] = decoder.avformat_reinit_request[1] = true; }
 	
 	using VideoFormatInfo = NetworkDecoder::VideoFormatInfo;
 	using AudioFormatInfo = NetworkDecoder::AudioFormatInfo;

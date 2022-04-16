@@ -9,18 +9,19 @@ extern "C" void memcpy_asm(u8*, u8*, int);
 /* --------------------------------------------------------- */
 /*                  NetworkDecoderFFmpegIOData               */
 /* --------------------------------------------------------- */
-void NetworkDecoderFFmpegIOData::deinit(bool deinit_stream) {
-	for (int type = 0; type < 2; type++) {
-		delete opaque[type];
-		opaque[type] = NULL;
-		if (io_context[type]) av_freep(&io_context[type]->buffer);
-		av_freep(&io_context[type]);
-		avformat_close_input(&format_context[type]);
-		if (deinit_stream) {
-			network_stream[type]->quit_request = true;
-			network_stream[type] = NULL;
-		}
+void NetworkDecoderFFmpegIOData::deinit_(int type, bool deinit_stream) {
+	delete opaque[type];
+	opaque[type] = NULL;
+	if (io_context[type]) av_freep(&io_context[type]->buffer);
+	av_freep(&io_context[type]);
+	avformat_close_input(&format_context[type]);
+	if (deinit_stream) {
+		network_stream[type]->quit_request = true;
+		network_stream[type] = NULL;
 	}
+}
+void NetworkDecoderFFmpegIOData::deinit(bool deinit_stream) {
+	for (int type = 0; type < 2; type++) deinit_(type, deinit_stream);
 }
 static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size or AVERROR_EOF
 	NetworkDecoder *decoder = ((std::pair<NetworkDecoder *, NetworkStream *> *) opaque)->first;
@@ -56,6 +57,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	}
 	stream->network_waiting_status = NULL;
+	
 	
 	{
 		auto tmp = stream->get_data(stream->read_head, std::min<u64>(buf_size, stream->len - stream->read_head));
@@ -215,6 +217,40 @@ Result_with_string NetworkDecoderFFmpegIOData::init(NetworkStream *both_stream, 
 Result_with_string NetworkDecoderFFmpegIOData::reinit() {
 	deinit(false);
 	return init(network_stream[VIDEO], network_stream[AUDIO], parent_decoder);
+}
+Result_with_string NetworkDecoderFFmpegIOData::reinit_stream(int type, int64_t seek_timestamp) {
+	Result_with_string result;
+	int ffmpeg_result;
+	AVPacket *test_packet = NULL;
+	
+	int log_num = Util_log_save("debug", "avformat reinit #" + std::to_string(type) + "...");
+	deinit_(type, false);
+	RETURN_WITH_PREFIX_ON_ERROR(init_(type, parent_decoder), video_audio_seperate ? "[v+a]" : type == VIDEO ? "[v]" : "[a]");
+	
+	ffmpeg_result = av_seek_frame(format_context[type], stream_index[type], seek_timestamp, 0);
+	if (ffmpeg_result != 0) {
+		result.error_description = "av_seek_frame() failed : " + std::to_string(ffmpeg_result);
+		goto ffmpeg_fail;
+	}
+	
+	// the dts of the first packet read from the new format_context should be equal to seek_timestamp
+	test_packet = av_packet_alloc();
+	ffmpeg_result = av_read_frame(format_context[type], test_packet);
+	if (ffmpeg_result != 0) {
+		result.error_description = "av_read_frame() failed : " + std::to_string(ffmpeg_result);
+		goto ffmpeg_fail;
+	}
+	if (test_packet->dts != seek_timestamp) Util_log_add(log_num, "warning : " + std::to_string(seek_timestamp) + " -> " + std::to_string(test_packet->dts));
+	else Util_log_add(log_num, "ok");
+	goto end;
+	
+	ffmpeg_fail :
+	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
+	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
+	
+	end :
+	av_packet_free(&test_packet);
+	return result;
 }
 double NetworkDecoderFFmpegIOData::get_duration() {
 	return (double) format_context[video_audio_seperate ? AUDIO : BOTH]->duration / AV_TIME_BASE;
@@ -417,8 +453,8 @@ void NetworkDecoder::deinit() {
 	sw_video_output_tmp = NULL;
 	
 	// its members should be freed by NetworkMultipleDecoder, not here
-	// just to prevent use-after-free, we set the pointers NULL
-	ffmpeg_io_data = NetworkDecoderFFmpegIOData();
+	// just to prevent use-after-free, we set the pointer to NULL
+	io = NULL;
 	
 	// deinit decoder
 	for (int type = 0; type < 2; type++) avcodec_free_context(&decoder_context[type]);
@@ -504,7 +540,7 @@ Result_with_string NetworkDecoder::init_decoder(int type) {
 		goto fail;
 	}
 	
-	if ((video_audio_seperate ? (type == VIDEO) : (type == BOTH))) {
+	if ((is_av_separate() ? (type == VIDEO) : (type == BOTH))) {
 		decoder_context[type]->lowres = 0;
 		decoder_context[type]->flags = AV_CODEC_FLAG_OUTPUT_CORRUPT;
 		
@@ -562,11 +598,11 @@ Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	interrupt = false;
 	
 	// init decoder
-	if (!audio_only) RETURN_WITH_PREFIX_ON_ERROR(init_decoder(VIDEO), "[v] ");
+	if (!is_audio_only()) RETURN_WITH_PREFIX_ON_ERROR(init_decoder(VIDEO), "[v] ");
 	RETURN_WITH_PREFIX_ON_ERROR(init_decoder(AUDIO), "[a] ");
 	
 	// init buffers based on decoder info
-	if (!audio_only) {
+	if (!is_audio_only()) {
 		result = init_output_buffer(request_hw_decoder);
 		if (result.code != 0) {
 			result.error_description = "[out buf] " + result.error_description;
@@ -590,7 +626,7 @@ void NetworkDecoder::clear_buffer() {
 
 NetworkDecoder::VideoFormatInfo NetworkDecoder::get_video_info() {
 	VideoFormatInfo res;
-	if (audio_only) {
+	if (is_audio_only()) {
 		res.width = res.height = res.framerate = res.duration = 0;
 		res.format_name = "N/A";
 	} else {
@@ -598,7 +634,7 @@ NetworkDecoder::VideoFormatInfo NetworkDecoder::get_video_info() {
 		res.height = decoder_context[VIDEO]->height;
 		res.framerate = av_q2d(get_stream(VIDEO)->avg_frame_rate);
 		res.format_name = codec[VIDEO]->long_name;
-		res.duration = (double) format_context[video_audio_seperate ? VIDEO : BOTH]->duration / AV_TIME_BASE;
+		res.duration = (double) io->format_context[is_av_separate() ? VIDEO : BOTH]->duration / AV_TIME_BASE;
 	}
 	return res;
 }
@@ -608,25 +644,26 @@ NetworkDecoder::AudioFormatInfo NetworkDecoder::get_audio_info() {
 	res.sample_rate = decoder_context[AUDIO]->sample_rate;
 	res.ch = decoder_context[AUDIO]->channels;
 	res.format_name = codec[AUDIO]->long_name;
-	res.duration = (double) format_context[video_audio_seperate ? AUDIO : BOTH]->duration / AV_TIME_BASE;
+	res.duration = (double) io->format_context[is_av_separate() ? AUDIO : BOTH]->duration / AV_TIME_BASE;
 	return res;
 }
 std::vector<std::pair<double, std::vector<double> > > NetworkDecoder::get_buffering_progress_bars(int bar_len) {
 	std::vector<std::pair<double, std::vector<double> > > res;
-	if (video_audio_seperate) {
-		if (network_stream[VIDEO] && !network_stream[VIDEO]->quit_request)
-			res.push_back({(double) network_stream[VIDEO]->read_head / network_stream[VIDEO]->len, network_stream[VIDEO]->get_buffering_progress_bar(bar_len)});
+	if (is_av_separate()) {
+		if (io->network_stream[VIDEO] && !io->network_stream[VIDEO]->quit_request)
+			res.push_back({(double) io->network_stream[VIDEO]->read_head / io->network_stream[VIDEO]->len, io->network_stream[VIDEO]->get_buffering_progress_bar(bar_len)});
 		else res.push_back({0, {}});
-		if (network_stream[AUDIO] && !network_stream[AUDIO]->quit_request)
-			res.push_back({(double) network_stream[AUDIO]->read_head / network_stream[AUDIO]->len, network_stream[AUDIO]->get_buffering_progress_bar(bar_len)});
+		if (io->network_stream[AUDIO] && !io->network_stream[AUDIO]->quit_request)
+			res.push_back({(double) io->network_stream[AUDIO]->read_head / io->network_stream[AUDIO]->len, io->network_stream[AUDIO]->get_buffering_progress_bar(bar_len)});
 		else res.push_back({0, {}});
 	} else {
-		if (network_stream[BOTH] && !network_stream[BOTH]->quit_request)
-			res.push_back({(double) network_stream[BOTH]->read_head / network_stream[BOTH]->len, network_stream[BOTH]->get_buffering_progress_bar(bar_len)});
+		if (io->network_stream[BOTH] && !io->network_stream[BOTH]->quit_request)
+			res.push_back({(double) io->network_stream[BOTH]->read_head / io->network_stream[BOTH]->len, io->network_stream[BOTH]->get_buffering_progress_bar(bar_len)});
 		else res.push_back({0, {}});
 	}
 	return res;
 }
+
 Result_with_string NetworkDecoder::read_packet(int type) {
 	Result_with_string result;
 	int ffmpeg_result;
@@ -639,29 +676,47 @@ Result_with_string NetworkDecoder::read_packet(int type) {
 		return result;
 	}
 	
-	ffmpeg_result = av_read_frame(format_context[type], tmp_packet);
+	ffmpeg_result = av_read_frame(io->format_context[type], tmp_packet);
 	if (ffmpeg_result != 0) {
 		result.error_description = "av_read_frame() failed";
-		goto fail;
+		goto ffmpeg_fail;
 	}
+	if (!tmp_packet->buf) Util_log_save("debug", "!!!!!!!!!!!!!!!!!!! --------------------- !!!!!!!!!!!!!!!!!!!");
+	
+	if (--io->packets_until_next_reinit <= 0) {
+		for (int i = 0; i < 2; i++) avformat_reinit_request[i] = true;
+		io->packets_until_next_reinit = DECODER_REINIT_INTERVAL_PACKETS;
+	}
+	if (is_av_separate() && avformat_reinit_request[type] && tmp_packet->flags & AV_PKT_FLAG_KEY) {
+		result = io->reinit_stream(type, tmp_packet->dts);
+		avformat_reinit_request[type] = false;
+	}
+	if (!is_av_separate() && avformat_reinit_request[VIDEO] && tmp_packet->stream_index == io->stream_index[VIDEO] && tmp_packet->flags & AV_PKT_FLAG_KEY) {
+		result = io->reinit_stream(VIDEO, tmp_packet->dts);
+		avformat_reinit_request[VIDEO] = avformat_reinit_request[AUDIO] = false;
+	}
+	if (result.code != 0) goto reinit_fail;
 	{
-		int packet_type = video_audio_seperate ? type : (tmp_packet->stream_index == stream_index[VIDEO] ? VIDEO : AUDIO);
+		int packet_type = is_av_separate() ? type : (tmp_packet->stream_index == io->stream_index[VIDEO] ? VIDEO : AUDIO);
 		packet_buffer[packet_type].push_back(tmp_packet);
 		return result;
 	}
 	
-	fail :
+	ffmpeg_fail :
 	av_packet_free(&tmp_packet);
 	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
+	reinit_fail :
+	Util_log_save("debug", "avformat reinit fail : " + result.error_description);
+	return result;
 }
 NetworkDecoder::PacketType NetworkDecoder::next_decode_type() {
-	if (video_audio_seperate) {
+	if (is_av_separate()) {
 		for (int type = 0; type < 2; type++) if (!packet_buffer[type].size())
 			read_packet(type);
 	} else {
-		while ((!audio_only && !packet_buffer[VIDEO].size()) || !packet_buffer[AUDIO].size()) {
+		while ((!is_audio_only() && !packet_buffer[VIDEO].size()) || !packet_buffer[AUDIO].size()) {
 			Result_with_string result = read_packet(BOTH);
 			if (result.code != 0) break;
 		}
@@ -776,7 +831,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 	av_packet_free(&packet_read);
 	packet_buffer[VIDEO].pop_front();
 	// refill the packet buffer
-	while (!packet_buffer[VIDEO].size() && read_packet(video_audio_seperate ? VIDEO : BOTH).code == 0);
+	while (!packet_buffer[VIDEO].size() && read_packet(is_av_separate() ? VIDEO : BOTH).code == 0);
 	
 	return result;
 }
@@ -844,7 +899,7 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 	av_packet_free(&packet_read);
 	packet_buffer[VIDEO].pop_front();
 	// refill the packet buffer
-	while (!packet_buffer[VIDEO].size() && read_packet(video_audio_seperate ? VIDEO : BOTH).code == 0);
+	while (!packet_buffer[VIDEO].size() && read_packet(is_av_separate() ? VIDEO : BOTH).code == 0);
 	
 	return result;
 }
@@ -885,7 +940,7 @@ Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cu
 
 	av_packet_free(&packet_read);
 	packet_buffer[AUDIO].pop_front();
-	while (!packet_buffer[AUDIO].size() && read_packet(video_audio_seperate ? AUDIO : BOTH).code == 0);
+	while (!packet_buffer[AUDIO].size() && read_packet(is_av_separate() ? AUDIO : BOTH).code == 0);
 	av_frame_free(&cur_frame);
 	return result;
 	
@@ -893,7 +948,7 @@ Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cu
 	
 	av_packet_free(&packet_read);
 	packet_buffer[AUDIO].pop_front();
-	while (!packet_buffer[AUDIO].size() && read_packet(video_audio_seperate ? AUDIO : BOTH).code == 0);
+	while (!packet_buffer[AUDIO].size() && read_packet(is_av_separate() ? AUDIO : BOTH).code == 0);
 	av_frame_free(&cur_frame);
 	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
@@ -954,11 +1009,11 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 	s64 min_ts = std::max<s64>(0, microseconds - 1000000);
 	s64 max_ts = microseconds + 500000;
 	
-	if (video_audio_seperate) {
-		int ffmpeg_result = avformat_seek_file(format_context[VIDEO], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?
+	if (is_av_separate()) {
+		int ffmpeg_result = avformat_seek_file(io->format_context[VIDEO], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?
 		for (int i = 2; i <= 3 && ffmpeg_result < 0; i++) { // retry with wider range backward
 			min_ts = std::max<s64>(0, microseconds - i * 1000000);
-			ffmpeg_result = avformat_seek_file(format_context[VIDEO], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME);
+			ffmpeg_result = avformat_seek_file(io->format_context[VIDEO], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME);
 			if (ffmpeg_result >= 0) Util_log_save("seek", "succeeded at " + std::to_string(ffmpeg_result));
 		}
 		if (ffmpeg_result < 0) {
@@ -977,7 +1032,7 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 		if (packet_buffer[VIDEO][0]->pts != AV_NOPTS_VALUE) microseconds = packet_buffer[VIDEO][0]->pts * time_base * 1000000;
 		else microseconds = packet_buffer[VIDEO][0]->dts * time_base * 1000000;
 		
-		ffmpeg_result = avformat_seek_file(format_context[AUDIO], -1, microseconds, microseconds, microseconds, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ???
+		ffmpeg_result = avformat_seek_file(io->format_context[AUDIO], -1, microseconds, microseconds, microseconds, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ???
 		if(ffmpeg_result < 0) {
 			result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
 			result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
@@ -989,10 +1044,10 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 		if (result.code != 0) return result;
 		return result;
 	} else {
-		int ffmpeg_result = avformat_seek_file(format_context[BOTH], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?
+		int ffmpeg_result = avformat_seek_file(io->format_context[BOTH], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME); // AVSEEK_FLAG_FRAME <- ?
 		for (int i = 2; i <= 3 && ffmpeg_result < 0; i++) { // retry with wider range backward
 			min_ts = std::max<s64>(0, microseconds - i * 1000000);
-			ffmpeg_result = avformat_seek_file(format_context[BOTH], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME);
+			ffmpeg_result = avformat_seek_file(io->format_context[BOTH], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME);
 			if (ffmpeg_result >= 0) Util_log_save("seek", "succeeded at " + std::to_string(ffmpeg_result));
 		}
 		if(ffmpeg_result < 0) {
@@ -1001,9 +1056,9 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 			result.error_description = "avformat_seek_file() failed " + std::to_string(ffmpeg_result);
 			return result;
 		}
-		if (!audio_only) avcodec_flush_buffers(decoder_context[VIDEO]);
+		if (!is_audio_only()) avcodec_flush_buffers(decoder_context[VIDEO]);
 		avcodec_flush_buffers(decoder_context[AUDIO]);
-		while ((!audio_only && !packet_buffer[VIDEO].size()) || !packet_buffer[AUDIO].size()) {
+		while ((!is_audio_only() && !packet_buffer[VIDEO].size()) || !packet_buffer[AUDIO].size()) {
 			result = read_packet(BOTH);
 			if (result.code != 0) return result;
 		}

@@ -31,6 +31,7 @@ using namespace SceneSwitcher;
 
 void Menu_worker_thread(void* arg);
 
+
 void Menu_init(void)
 {
 	Result_with_string result;
@@ -342,20 +343,18 @@ void Menu_get_system_info(void)
 
 int Menu_check_free_ram(void)
 {
-	u8* malloc_check[2000];
-	int count;
+	void *ptr[10000];
+	int head = 0;
+	int res = 0;
 	
-	for (count = 0; count < 2000; count++)
-	{
-		malloc_check[count] = (u8 *) malloc(100000);// 100 KB
-		if (malloc_check[count] == NULL)
-			break;
+	int cur_size = 1000 * 1000;
+	while (head < 10000 && cur_size >= 10000) {
+		ptr[head] = malloc(cur_size);
+		if (ptr[head]) res += cur_size, head++;
+		else cur_size /= 10;
 	}
-
-	for (int i = 0; i < count; i++)
-		free(malloc_check[i]);
-
-	return count * 100; // return free KB
+	for (int i = 0; i < head; i++) free(ptr[i]);
+	return res / 1000;
 }
 
 

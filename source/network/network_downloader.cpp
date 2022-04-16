@@ -51,13 +51,8 @@ void NetworkStream::set_data(u64 block, const std::vector<u8> &data) {
 	downloaded_data[block] = data;
 	if (downloaded_data.size() > MAX_CACHE_BLOCKS) { // ensure it doesn't cache too much and run out of memory
 		u64 read_head_block = read_head / BLOCK_SIZE;
-		if (downloaded_data.begin()->first < read_head_block) {
-			// Util_log_save("net/dl", "free " + std::to_string(downloaded_data.begin()->first));
-			downloaded_data.erase(downloaded_data.begin());
-		} else {
-			// Util_log_save("net/dl", "free " + std::to_string(std::prev(downloaded_data.end())->first));
-			downloaded_data.erase(std::prev(downloaded_data.end()));
-		}
+		if (std::next(downloaded_data.begin())->first < read_head_block) downloaded_data.erase(std::next(downloaded_data.begin()));
+		else downloaded_data.erase(std::prev(downloaded_data.end()));
 	}
 	downloaded_data_lock.unlock();
 }
@@ -149,7 +144,7 @@ void NetworkStreamDownloader::downloader_thread() {
 			}
 			if (streams[i]->whole_download) continue; // its entire content should already be downloaded
 			
-			int forward_buffer_block_num = std::max<int>(2, MAX_CACHE_BLOCKS * var_forward_buffer_ratio);
+			int forward_buffer_block_num = std::max<int>(2, (MAX_CACHE_BLOCKS - 1) * var_forward_buffer_ratio); // block #0 is always kept
 			u64 read_head_block = read_heads[i] / BLOCK_SIZE;
 			u64 first_not_downloaded_block = read_head_block;
 			while (first_not_downloaded_block < streams[i]->block_num && streams[i]->downloaded_data.count(first_not_downloaded_block)) {
@@ -243,10 +238,9 @@ void NetworkStreamDownloader::downloader_thread() {
 			u64 expected_len = end - start;
 			
 			auto &session_list = cur_stream->session_list ? *cur_stream->session_list : thread_network_session_list;
-			int log_num = Util_log_save("debug", "accessing... ");
 			auto result = session_list.perform(HttpRequest::GET(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}}));
 			cur_stream->url = result.redirected_url;
-			Util_log_add(log_num, "ok");
+			
 			
 			if (!result.fail && result.status_code_is_success()) {
 				if (!cur_stream->ready) {

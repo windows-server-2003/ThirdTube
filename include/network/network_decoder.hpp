@@ -81,6 +81,8 @@ namespace network_decoder_ {
 
 class NetworkDecoder;
 
+#define DECODER_REINIT_INTERVAL_PACKETS 40000
+
 class NetworkDecoderFFmpegIOData {
 private :
 	static constexpr int VIDEO = 0;
@@ -88,7 +90,6 @@ private :
 	static constexpr int BOTH = 0;
 	
 	// type : VIDEO, AUDIO
-	Result_with_string init_(int type, NetworkDecoder *parent_decoder);
 public :
 	bool video_audio_seperate = false;
 	bool audio_only = false;
@@ -98,11 +99,15 @@ public :
 	AVIOContext *io_context[2] = {NULL, NULL};
 	int stream_index[2] = {0, 0};
 	NetworkDecoder *parent_decoder = NULL;
+	int packets_until_next_reinit = DECODER_REINIT_INTERVAL_PACKETS;
 	
+	Result_with_string init_(int type, NetworkDecoder *parent_decoder);
 	Result_with_string init(NetworkStream *video_stream, NetworkStream *audio_stream, NetworkDecoder *parent_decoder);
 	Result_with_string init(NetworkStream *both_stream, NetworkDecoder *parent_decoder);
+	void deinit_(int type, bool deinit_stream);
 	void deinit(bool deinit_stream);
 	Result_with_string reinit();
+	Result_with_string reinit_stream(int type, int64_t seek_timestamp);
 	double get_duration();
 };
 
@@ -128,13 +133,7 @@ private :
 	static constexpr int BOTH = 0;
 	
 	// ffmpeg io/format related things
-	NetworkDecoderFFmpegIOData ffmpeg_io_data;
-	// references to its members
-	bool &video_audio_seperate = ffmpeg_io_data.video_audio_seperate;
-	bool &audio_only = ffmpeg_io_data.audio_only;
-	NetworkStream *(&network_stream)[2] = ffmpeg_io_data.network_stream;
-	AVFormatContext *(&format_context)[2] = ffmpeg_io_data.format_context;
-	int (&stream_index)[2] = ffmpeg_io_data.stream_index;
+	NetworkDecoderFFmpegIOData *io = NULL;
 	// ffmpeg decoder
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
@@ -156,22 +155,27 @@ private :
 	Result_with_string init_decoder(int type);
 	Result_with_string read_packet(int type);
 	Result_with_string mvd_decode(int *width, int *height);
-	AVStream *get_stream(int type) { return format_context[video_audio_seperate ? type : BOTH]->streams[stream_index[type]]; }
+	AVStream *get_stream(int type) { return io->format_context[is_av_separate() ? type : BOTH]->streams[io->stream_index[type]]; }
 public :
 	bool hw_decoder_enabled = false;
 	volatile bool interrupt = false;
 	volatile bool need_reinit = false;
 	volatile bool ready = false;
+	volatile bool avformat_reinit_request[2] = {false, false};
 	double timestamp_offset = 0;
 	bool frame_cores_enabled[4];
 	bool slice_cores_enabled[4];
+	
+	bool is_audio_only() { return io->audio_only; }
+	bool is_av_separate() { return io->video_audio_seperate; }
 	
 	void set_frame_cores_enabled(bool *enabled) { memcpy(frame_cores_enabled, enabled, 4); }
 	void set_slice_cores_enabled(bool *enabled) { memcpy(slice_cores_enabled, enabled, 4); }
 	
 	const char *get_network_waiting_status() {
-		if (network_stream[VIDEO] && network_stream[VIDEO]->network_waiting_status) return network_stream[VIDEO]->network_waiting_status;
-		if (network_stream[AUDIO] && network_stream[AUDIO]->network_waiting_status) return network_stream[AUDIO]->network_waiting_status;
+		if (!io) return NULL;
+		if (io->network_stream[VIDEO] && io->network_stream[VIDEO]->network_waiting_status) return io->network_stream[VIDEO]->network_waiting_status;
+		if (io->network_stream[AUDIO] && io->network_stream[AUDIO]->network_waiting_status) return io->network_stream[AUDIO]->network_waiting_status;
 		return NULL;
 	}
 	std::vector<std::pair<double, std::vector<double> > > get_buffering_progress_bars(int bar_len);
@@ -189,9 +193,9 @@ public :
 	// should be called after this->init()
 	Result_with_string init_filter(double volume, double tempo, double pitch) { return filter.init(decoder_context[AUDIO], volume, tempo, pitch); }
 	// used for livestreams/premieres where the video is splitted into fragments
-	void change_ffmpeg_io_data(const NetworkDecoderFFmpegIOData &ffmpeg_io_data, double timestamp_offset) {
+	void change_ffmpeg_io_data(NetworkDecoderFFmpegIOData &ffmpeg_io_data, double timestamp_offset) {
 		interrupt = false;
-		this->ffmpeg_io_data = ffmpeg_io_data;
+		this->io = &ffmpeg_io_data;
 		this->timestamp_offset = timestamp_offset;
 	}
 	
