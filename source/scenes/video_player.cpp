@@ -1062,6 +1062,7 @@ static void load_video_page(void *arg) {
 			small_resource_lock.unlock();
 			return;
 		}
+		if (tmp_video_info.duration_ms > 60 * 60 * 1000) tmp_video_info.both_stream_url = ""; // for some reason, itag 18 causes problems when the video is long enough
 		playing_video_info = tmp_video_info;
 		video_info_cache[url] = tmp_video_info;
 		
@@ -1086,9 +1087,10 @@ static void load_video_page(void *arg) {
 		for (auto i : available_qualities) if (var_is_new3ds || i <= 240) video_quality_selector_view->button_texts.push_back(std::to_string(i) + "p");
 		video_quality_selector_view->button_num = video_quality_selector_view->button_texts.size();
 		
-		if (!audio_only_mode && !tmp_video_info.video_stream_urls.count((int) video_p_value)) {
+		auto is_available = [&] (int p_value) { return tmp_video_info.video_stream_urls.count(p_value) || (p_value == 360 && tmp_video_info.both_stream_url != ""); };
+		if (!audio_only_mode && !is_available(video_p_value)) {
 			video_p_value = var_is_new3ds ? 360 : 144;
-			if (!tmp_video_info.video_stream_urls.count((int) video_p_value)) audio_only_mode = true;
+			if (!is_available(video_p_value)) audio_only_mode = true;
 		}
 		video_quality_selector_view->selected_button = audio_only_mode ? 0 : 1 + std::find(available_qualities.begin(), available_qualities.end(), (int) video_p_value) - available_qualities.begin();
 		video_quality_selector_view->set_on_change([available_qualities] (const SelectorView &view) {
@@ -1613,7 +1615,7 @@ static void decode_thread(void* arg) {
 			if (audio_only_mode) {
 				result = network_decoder.init(playing_video_info.audio_stream_url, stream_downloader,
 					playing_video_info.is_livestream ? playing_video_info.stream_fragment_len : -1, playing_video_info.needs_timestamp_adjusting(), var_is_new3ds);
-			} else if (video_p_value == 360 && playing_video_info.duration_ms <= 60 * 60 * 1000 && playing_video_info.both_stream_url != "") {
+			} else if (video_p_value == 360 && playing_video_info.both_stream_url != "") {
 				// itag 18 (both_stream) of a long video takes too much time and sometimes leads to a crash 
 				result = network_decoder.init(playing_video_info.both_stream_url, stream_downloader,
 					playing_video_info.is_livestream ? playing_video_info.stream_fragment_len : -1, playing_video_info.needs_timestamp_adjusting(), var_is_new3ds);
