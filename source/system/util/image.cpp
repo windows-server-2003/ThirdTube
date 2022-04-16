@@ -17,17 +17,14 @@ u8 *Image_decode(u8 *input, size_t input_len, int* width, int* height)
 		stbi_image_free(rgb_image);
 		return NULL;
 	}
-	for (int i = 0; i < *width * *height; i++) {
-		u8 r = rgb_image[i * 3 + 0];
-		u8 g = rgb_image[i * 3 + 1];
-		u8 b = rgb_image[i * 3 + 2];
-		r >>= 3;
-		g >>= 2;
-		b >>= 3;
-		bgr_image[i * 2 + 0] = b | g << 5;
-		bgr_image[i * 2 + 1] = g >> 3 | r << 3;
+	int in_size = *width * *height * 3;
+	u16 *out_head = (u16 *) bgr_image;
+	for (int i = 0; i < in_size; i += 3) {
+		u16 r = rgb_image[i + 0];
+		u16 g = rgb_image[i + 1];
+		u16 b = rgb_image[i + 2];
+		*out_head++ = ((r & 0b11111000) << 8) | ((g & 0b11111100) << 3) | (b >> 3);
 	}
-	
 	
 	stbi_image_free(rgb_image);
 	return bgr_image;
