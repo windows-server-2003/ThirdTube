@@ -1702,7 +1702,7 @@ static void decode_thread(void* arg) {
 						break;
 					}
 					network_decoder_critical_lock.unlock();
-					if (eof_reached) vid_pausing = false;
+					if (eof_reached) vid_pausing = false; // if it was stuck at the end of the video, resume playing after seek
 					network_waiting_status = NULL;
 					var_need_reflesh = true;
 				}
@@ -1713,14 +1713,19 @@ static void decode_thread(void* arg) {
 				
 				if (type == NetworkMultipleDecoder::PacketType::EoF) {
 					vid_pausing = true;
+					bool break_flag = false;
 					if (!eof_reached) { // the first time it reaches EOF
 						small_resource_lock.lock();
 						if ((var_autoplay_level == 2 && playing_video_info.has_next_video()) ||
-							(var_autoplay_level == 1 && playing_video_info.has_next_video_in_playlist()))
-								send_change_video_request_wo_lock(playing_video_info.get_next_video().url, true, false, false);
+							(var_autoplay_level == 1 && playing_video_info.has_next_video_in_playlist())) {
+							
+							send_change_video_request_wo_lock(playing_video_info.get_next_video().url, true, false, false);
+							break_flag = true;
+						}
 						small_resource_lock.unlock();
 					}
 					eof_reached = true;
+					if (break_flag) break;
 					usleep(10000);
 					continue;
 				} else eof_reached = false;
