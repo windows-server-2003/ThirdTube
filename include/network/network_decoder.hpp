@@ -151,6 +151,8 @@ private :
 	std::multiset<double> buffered_pts_list; // used for HW decoder to determine the pts when outputting a frame
 	bool mvd_first = false;
 	
+	Mutex critical_op_lock; // lock between main(ui) thread and decoder thread
+	
 	Result_with_string init_output_buffer(bool);
 	Result_with_string init_decoder(int type);
 	Result_with_string read_packet(int type);
@@ -173,10 +175,12 @@ public :
 	void set_slice_cores_enabled(bool *enabled) { memcpy(slice_cores_enabled, enabled, 4); }
 	
 	const char *get_network_waiting_status() {
-		if (!io) return NULL;
-		if (io->network_stream[VIDEO] && io->network_stream[VIDEO]->network_waiting_status) return io->network_stream[VIDEO]->network_waiting_status;
-		if (io->network_stream[AUDIO] && io->network_stream[AUDIO]->network_waiting_status) return io->network_stream[AUDIO]->network_waiting_status;
-		return NULL;
+		const char *res = NULL;
+		critical_op_lock.lock();
+		if (ready && io && io->network_stream[VIDEO] && io->network_stream[VIDEO]->network_waiting_status) res = io->network_stream[VIDEO]->network_waiting_status;
+		if (ready && io && io->network_stream[AUDIO] && io->network_stream[AUDIO]->network_waiting_status) res = io->network_stream[AUDIO]->network_waiting_status;
+		critical_op_lock.unlock();
+		return res;
 	}
 	std::vector<std::pair<double, std::vector<double> > > get_buffering_progress_bars(int bar_len);
 	
@@ -226,16 +230,22 @@ public :
 	PacketType next_decode_type();
 	
 	enum class DecoderType {
-		HW,
-		MT_FRAME,
-		MT_SLICE,
-		ST
+		HW, // hardware decoder
+		MT_FRAME, // frame-multithreaded
+		MT_SLICE, // slice-multithreaded
+		ST, // single threaded
+		NA // not initialized
 	};
 	DecoderType get_decoder_type() {
-		if (hw_decoder_enabled) return DecoderType::HW;
-		if (decoder_context[VIDEO]->thread_type == FF_THREAD_FRAME) return DecoderType::MT_FRAME;
-		if (decoder_context[VIDEO]->thread_type == FF_THREAD_SLICE) return DecoderType::MT_SLICE;
-		return DecoderType::ST;
+		DecoderType res;
+		critical_op_lock.lock();
+		if (!ready) res = DecoderType::NA;
+		else if (hw_decoder_enabled) res = DecoderType::HW;
+		else if (decoder_context[VIDEO]->active_thread_type == FF_THREAD_FRAME) res = DecoderType::MT_FRAME;
+		else if (decoder_context[VIDEO]->active_thread_type == FF_THREAD_SLICE) res = DecoderType::MT_SLICE;
+		else res = DecoderType::ST;
+		critical_op_lock.unlock();
+		return res;
 	}
 	
 	

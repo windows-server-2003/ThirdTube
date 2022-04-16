@@ -437,6 +437,9 @@ Result_with_string NetworkDecoderFilterData::process_audio_frame(AVFrame *input)
 
 void NetworkDecoder::deinit() {
 	ready = false;
+	// ensure the UI thread will see read == false after locking the mutex durning deiniting
+	critical_op_lock.lock();
+	critical_op_lock.unlock();
 	
 	for (int type = 0; type < 2; type++) {
 		for (auto i : packet_buffer[type]) av_packet_free(&i);
@@ -592,6 +595,7 @@ Result_with_string NetworkDecoder::init_decoder(int type) {
 Result_with_string NetworkDecoder::init(bool request_hw_decoder) {
 	Result_with_string result;
 	
+	
 	hw_decoder_enabled = request_hw_decoder;
 	interrupt = false;
 	
@@ -647,18 +651,22 @@ NetworkDecoder::AudioFormatInfo NetworkDecoder::get_audio_info() {
 }
 std::vector<std::pair<double, std::vector<double> > > NetworkDecoder::get_buffering_progress_bars(int bar_len) {
 	std::vector<std::pair<double, std::vector<double> > > res;
-	if (is_av_separate()) {
-		if (io->network_stream[VIDEO] && !io->network_stream[VIDEO]->quit_request)
-			res.push_back({(double) io->network_stream[VIDEO]->read_head / io->network_stream[VIDEO]->len, io->network_stream[VIDEO]->get_buffering_progress_bar(bar_len)});
-		else res.push_back({0, {}});
-		if (io->network_stream[AUDIO] && !io->network_stream[AUDIO]->quit_request)
-			res.push_back({(double) io->network_stream[AUDIO]->read_head / io->network_stream[AUDIO]->len, io->network_stream[AUDIO]->get_buffering_progress_bar(bar_len)});
-		else res.push_back({0, {}});
-	} else {
-		if (io->network_stream[BOTH] && !io->network_stream[BOTH]->quit_request)
-			res.push_back({(double) io->network_stream[BOTH]->read_head / io->network_stream[BOTH]->len, io->network_stream[BOTH]->get_buffering_progress_bar(bar_len)});
-		else res.push_back({0, {}});
+	critical_op_lock.lock();
+	if (ready) {
+		if (is_av_separate()) {
+			if (io->network_stream[VIDEO] && !io->network_stream[VIDEO]->quit_request)
+				res.push_back({(double) io->network_stream[VIDEO]->read_head / io->network_stream[VIDEO]->len, io->network_stream[VIDEO]->get_buffering_progress_bar(bar_len)});
+			else res.push_back({0, {}});
+			if (io->network_stream[AUDIO] && !io->network_stream[AUDIO]->quit_request)
+				res.push_back({(double) io->network_stream[AUDIO]->read_head / io->network_stream[AUDIO]->len, io->network_stream[AUDIO]->get_buffering_progress_bar(bar_len)});
+			else res.push_back({0, {}});
+		} else {
+			if (io->network_stream[BOTH] && !io->network_stream[BOTH]->quit_request)
+				res.push_back({(double) io->network_stream[BOTH]->read_head / io->network_stream[BOTH]->len, io->network_stream[BOTH]->get_buffering_progress_bar(bar_len)});
+			else res.push_back({0, {}});
+		}
 	}
+	critical_op_lock.unlock();
 	return res;
 }
 

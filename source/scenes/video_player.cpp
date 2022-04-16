@@ -229,6 +229,7 @@ void VideoPlayer_init(void) {
 				[] () {
 					auto decoder_type = network_decoder.get_decoder_type();
 					std::string decoder_type_str =
+						decoder_type == NetworkMultipleDecoder::DecoderType::NA ? "N/A" :
 						decoder_type == NetworkMultipleDecoder::DecoderType::HW ? LOCALIZED(HW_DECODER) :
 						decoder_type == NetworkMultipleDecoder::DecoderType::MT_SLICE ? LOCALIZED(MULTITHREAD_SLICE) :
 						decoder_type == NetworkMultipleDecoder::DecoderType::MT_FRAME ? LOCALIZED(MULTITHREAD_FRAME) : LOCALIZED(SINGLE_THREAD);
