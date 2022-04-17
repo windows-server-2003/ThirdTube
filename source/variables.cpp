@@ -35,6 +35,7 @@ int var_system_region = 0;
 bool var_is_new3ds;
 bool var_core2_available;
 bool var_core3_available;
+bool var_app_suspended = false;
 int var_community_image_size = COMMUNITY_IMAGE_SIZE_DEFAULT;
 double var_scroll_speed = 0.5;
 double var_battery_voltage = 0;

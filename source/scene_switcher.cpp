@@ -24,6 +24,8 @@ namespace SceneSwitcher {
 	static Thread menu_worker_thread, thumbnail_downloader_thread, async_task_thread, misc_tasks_thread;
 
 	static void empty_thread(void* arg) { threadExit(0); }
+	
+	bool bot_screen_disabled = false;
 
 	static Result sound_init_result;
 };
@@ -67,6 +69,7 @@ void Menu_init(void)
 	
 	APT_CheckNew3DS(&var_is_new3ds);
 	CFGU_GetSystemModel(&var_model);
+	
 	
 	if (var_is_new3ds) { // check core availability
 		Thread core_2 = threadCreate(empty_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
@@ -252,6 +255,8 @@ bool Menu_main(void)
 	if (key.h_select && key.p_x) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
 	if (Util_log_query_log_show_flag()) Util_log_main(key);
 	if (key.h_touch || key.p_touch) var_need_reflesh = true;
+	if (((key.h_select && key.p_start) || (key.h_start && key.p_select)) && var_model != CFG_MODEL_2DS) bot_screen_disabled = !bot_screen_disabled;
+	
 	
 	if (global_intent.next_scene == SceneType::EXIT) return false;
 	else if (global_intent.next_scene != SceneType::NO_CHANGE && global_intent != scene_stack.back()) {
@@ -363,8 +368,7 @@ void Menu_worker_thread(void* arg)
 	Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Thread started.");
 	int count = 0;
 	Result_with_string result;
-
-	int prev_state = 2; // 0 : turned off, 1 : set to 10, 2 : full
+	
 	while (menu_thread_run)
 	{
 		usleep(49000);
@@ -379,24 +383,33 @@ void Menu_worker_thread(void* arg)
 		
 		var_afk_time += 0.05;
 		
-		int cur_state;
-		if(var_afk_time > var_time_to_turn_off_lcd) cur_state = 0;
-		else if(var_afk_time > std::max<float>(var_time_to_turn_off_lcd * 0.5, (var_time_to_turn_off_lcd - 10))) cur_state = 1;
-		else cur_state = 2;
-
-		if (cur_state != prev_state) {
-			if (prev_state == 0) Util_cset_set_screen_state(true, true, true);
-			if (cur_state == 0) Util_cset_set_screen_state(true, true, false);
-			if (cur_state == 1) {
-				result = Util_cset_set_screen_brightness(true, true, 10);
-				if(result.code != 0)
-					Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Util_cset_set_screen_brightness()..." + result.string + result.error_description, result.code);
-			} else if (cur_state == 2) {
-				result = Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
-				if(result.code != 0)
-					Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Util_cset_set_screen_brightness()..." + result.string + result.error_description, result.code);
+		static bool cur_screen_on = true;
+		static bool cur_screen_dimmed = false;
+		static bool cur_bot_screen_disabled = false;
+		bool next_screen_on;
+		bool next_screen_dimmed = cur_screen_dimmed;
+		bool next_bot_screen_disabled = bot_screen_disabled && !var_app_suspended;
+		
+		if (var_afk_time > var_time_to_turn_off_lcd) next_screen_on = false;
+		else if(var_afk_time > std::max<float>(var_time_to_turn_off_lcd * 0.5, (var_time_to_turn_off_lcd - 10))) next_screen_on = true, next_screen_dimmed = true;
+		else next_screen_on = true, next_screen_dimmed = false;
+		
+		if (cur_screen_on != next_screen_on || cur_screen_dimmed != next_screen_dimmed || cur_bot_screen_disabled != next_bot_screen_disabled) {
+			// first handle on/off
+			bool cur_top_on = cur_screen_on;
+			bool cur_bot_on = cur_screen_on && !cur_bot_screen_disabled;
+			bool next_top_on = next_screen_on;
+			bool next_bot_on = next_screen_on && !next_bot_screen_disabled;
+			if (cur_top_on == cur_bot_on && cur_top_on != next_top_on && cur_bot_on != next_bot_on) Util_cset_set_screen_state(true, true, next_top_on); // change both
+			else {
+				if (cur_top_on != next_top_on) Util_cset_set_screen_state(true, false, next_top_on);
+				if (cur_bot_on != next_bot_on) Util_cset_set_screen_state(false, true, next_bot_on);
 			}
-			prev_state = cur_state;
+			
+			if (cur_screen_dimmed != next_screen_dimmed) Util_cset_set_screen_brightness(true, true, next_screen_dimmed ? 10 : var_lcd_brightness);
+			cur_screen_on = next_screen_on;
+			cur_screen_dimmed = next_screen_dimmed;
+			cur_bot_screen_disabled = next_bot_screen_disabled;
 		}
 
 		if (var_flash_mode)

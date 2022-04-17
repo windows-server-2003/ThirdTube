@@ -8,11 +8,15 @@ static void apt_callback(APT_HookType hook, void* param){
 			video_set_should_suspend_decoding(true);
 			add_cpu_limit(30);
 		}
+		var_app_suspended = true;
+		var_afk_time = 0;
 	} else if (hook == APTHOOK_ONRESTORE) {
 		if (!var_is_new3ds) {
 			video_set_should_suspend_decoding(false);
 			remove_cpu_limit(30);
 		}
+		var_app_suspended = false;
+		var_afk_time = 0;
 	}
 }
 

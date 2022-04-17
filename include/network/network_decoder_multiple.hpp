@@ -7,7 +7,6 @@
 #include "network_decoder.hpp"
 #include "network_downloader.hpp"
 
-// TODO : do mvd init/deinit here
 
 class NetworkMultipleDecoder {
 private :

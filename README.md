@@ -41,6 +41,7 @@ You can use the qr code below to download & install .cia from 3ds(Thanks @Minion
  - B button : go back to the previous scene  
  - C-pad up/down : scroll
  - L/R : switch between tabs
+ - Select + Start : blackout the bottom screen
  - In video player
     - Arrow left/right : 10 s seek
 
