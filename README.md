@@ -14,9 +14,13 @@ It utilizes some undocumented YouTube APIs to get the raw video url and plays th
 It does not run any javascripts or render html/css, so it's significantly faster than YouTube on the browser.  
 The name is derived from the fact that it is the third YouTube client on 3DS, following the official YouTube app (discontinued) and the new 3DS browser.  
 
+## QR code
+You can use the qr code below to download & install .cia from 3ds(Thanks @Minionguyjpro)
+<img src="https://github.com/windows-server-2003/ThirdTube/blob/main/images/qr_code.png" width="200" height="200">
+
 ## Screenshots
-<img src="https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/0.jpg" width="400" height="480"> ![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/1.bmp)  
-![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/3.bmp) ![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/4.bmp)  
+<img src="https://github.com/windows-server-2003/ThirdTube/blob/main/images/0.jpg" width="400" height="480"> ![](https://github.com/windows-server-2003/ThirdTube/blob/main/images/1.bmp)  
+![](https://github.com/windows-server-2003/ThirdTube/blob/main/images/3.bmp) ![](https://github.com/windows-server-2003/ThirdTube/blob/main/images/4.bmp)  
 
 ## Features
 
