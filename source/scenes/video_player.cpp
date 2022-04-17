@@ -304,7 +304,7 @@ void VideoPlayer_init(void) {
 					}
 				}),
 			video_quality_selector_view,
-			(new BarView(0, 0, 320, 40)) // preamp
+			(new BarView(0, 0, 260, 40)) // preamp
 				->set_values(std::log(0.25), std::log(4), 0) // exponential scale
 				->set_title([] (const BarView &view) { return LOCALIZED(PREAMP) + " : " + std::to_string((int) std::round(std::exp(view.value) * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
@@ -319,7 +319,7 @@ void VideoPlayer_init(void) {
 					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.value = 0;
 					network_decoder.preamp_change_request = volume;
 				}),
-			(new BarView(0, 0, 320, 40)) // speed
+			(new BarView(0, 0, 260, 40)) // speed
 				->set_values(0.3, 1.5, 1.0)
 				->set_title([] (const BarView &view) { return LOCALIZED(SPEED) + " : " + std::to_string((int) std::round(view.value * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
@@ -331,7 +331,7 @@ void VideoPlayer_init(void) {
 					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
 					network_decoder.tempo_change_request = view.value;
 				}),
-			(new BarView(0, 0, 320, 40)) // pitch
+			(new BarView(0, 0, 260, 40)) // pitch
 				->set_values(0.5, 2.0, 1.0)
 				->set_title([] (const BarView &view) { return LOCALIZED(PITCH) + " : " + std::to_string((int) std::round(view.value * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
