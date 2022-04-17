@@ -10,32 +10,32 @@ As this app is still in the alpha stage, you may and will encounter crashes and 
 If you find one of those, it would be helpful to open an issue on this GitHub repository.  
 
 ## Description
-It accesses the mobile version of YouTube, parses the important part of the downloaded html and plays the stream using the decoder taken from [Video player for 3DS by Core-2-Extreme](https://github.com/Core-2-Extreme/Video_player_for_3DS).  
+It utilizes some undocumented YouTube APIs to get the raw video url and plays the stream using the decoder taken from [Video player for 3DS by Core-2-Extreme](https://github.com/Core-2-Extreme/Video_player_for_3DS).  
 It does not run any javascripts or render html/css, so it's significantly faster than YouTube on the browser.  
 The name is derived from the fact that it is the third YouTube client on 3DS, following the official YouTube app (discontinued) and the new 3DS browser.  
 
 ## Screenshots
-![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/0.bmp) ![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/1.bmp)  
-![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/2.bmp) ![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/3.bmp)  
+<img src="https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/0.jpg" width="400" height="480"> ![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/1.bmp)  
+![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/3.bmp) ![](https://github.com/windows-server-2003/ThirdTube/blob/main/screenshots/4.bmp)  
 
 ## Features
 
  - Video Playback up to 360p  
    480p might be possible and could be considered in the future development
- - Livestreams and premiere videos support
+ - Livestreams and premiere videos support  
  - Searching  
  - Video suggestion  
  - Comments  
  - Captions  
  - Local watch history and channel subscription  
  - No ads  
-   As this app web-scrapes YouTube, it's more like "Ads are not implemented" rather than "We have ad-blocking functionality".  
+   It's more like "Ads are not implemented" rather than "We have ad-blocking functionality".  
    Of course, I will never "implement" it :)  
 
 ## Controls
 
  - B button : go back to the previous scene  
- - D-pad up/down : scroll
+ - C-pad up/down : scroll
  - L/R : switch between tabs
  - In video player
     - Arrow left/right : 10 s seek
@@ -51,12 +51,6 @@ Below are for debug purposes
 ## Requirments
 A New 3DS (including a new 2DS) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.  
 I haven't tested the minimum system version, but at least 8.1.0-0 is needed.  
-
-### Issues that won't be fixed
-
- - Old 3DS support  
-   I'm one who is obsessed about the support of "legacy" devices, but it turned out that old 3DS, without a hardware-decoding capability, cannot even play 144p at a constant 30 FPS.  
-   I regret to say that I have no plan to support the old 3DS.  
 
 ## FAQs
 
