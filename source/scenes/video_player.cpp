@@ -20,6 +20,8 @@
 #define SUGGESTION_LOAD_MORE_MARGIN 30
 #define COMMENT_LOAD_MORE_MARGIN 30
 #define CONTROL_BUTTON_HEIGHT 20
+#define EQUALIZER_POPUP_WIDTH 280
+#define EQUALIZER_POPUP_HEIGHT (240 - VIDEO_PLAYING_BAR_HEIGHT)
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 12
 #define MAX_COMMENT_ICON_LOAD_REQUEST 18
@@ -146,6 +148,8 @@ namespace VideoPlayer {
 	SelectorView *video_quality_selector_view;
 	VerticalListView *debug_info_view = NULL;
 	ScrollView *playback_tab_view = NULL;
+	
+	OverlayView *equalizer_popup_view = (new OverlayView(0, 0, 320, 240 - VIDEO_PLAYING_BAR_HEIGHT));
 };
 using namespace VideoPlayer;
 
@@ -304,7 +308,7 @@ void VideoPlayer_init(void) {
 					}
 				}),
 			video_quality_selector_view,
-			(new BarView(0, 0, 260, 40)) // preamp
+			(new BarView(0, 0, 260, 30)) // preamp
 				->set_values(std::log(0.25), std::log(4), 0) // exponential scale
 				->set_title([] (const BarView &view) { return LOCALIZED(PREAMP) + " : " + std::to_string((int) std::round(std::exp(view.value) * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
@@ -312,40 +316,94 @@ void VideoPlayer_init(void) {
 					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.value = 0;
 					// volume change is needs a reconstruction of the filter graph, so don't update volume too often
 					static int cnt = 0;
-					if (++cnt >= 15) cnt = 0, network_decoder.preamp_change_request = volume;
+					if (++cnt >= 15) cnt = 0, network_decoder.set_preamp(volume);
 				})
 				->set_on_release([] (BarView &view) {
 					double volume = std::exp(view.value);
 					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.value = 0;
-					network_decoder.preamp_change_request = volume;
+					network_decoder.set_preamp(volume);
 				}),
-			(new BarView(0, 0, 260, 40)) // speed
+			(new BarView(0, 0, 260, 30)) // speed
 				->set_values(0.3, 1.5, 1.0)
 				->set_title([] (const BarView &view) { return LOCALIZED(SPEED) + " : " + std::to_string((int) std::round(view.value * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
 					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
 					static int cnt = 0;
-					if (++cnt >= 15) cnt = 0, network_decoder.tempo_change_request = view.value;
+					if (++cnt >= 15) cnt = 0, network_decoder.set_tempo(view.value);
 				})
 				->set_on_release([] (BarView &view) {
 					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
-					network_decoder.tempo_change_request = view.value;
+					network_decoder.set_tempo(view.value);
 				}),
-			(new BarView(0, 0, 260, 40)) // pitch
+			(new BarView(0, 0, 260, 30)) // pitch
 				->set_values(0.5, 2.0, 1.0)
 				->set_title([] (const BarView &view) { return LOCALIZED(PITCH) + " : " + std::to_string((int) std::round(view.value * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
 					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
 					static int cnt = 0;
-					if (++cnt >= 15) cnt = 0, network_decoder.pitch_change_request = view.value;
+					if (++cnt >= 15) cnt = 0, network_decoder.set_pitch(view.value);
 				})
 				->set_on_release([] (BarView &view) {
 					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
-					network_decoder.pitch_change_request = view.value;
+					network_decoder.set_pitch(view.value);
 				}),
+			(new TextView(SMALL_MARGIN * 2, 0, 100, 20))
+				->set_text([] () { return LOCALIZED(OPEN_EQUALIZER); })
+				->set_x_alignment(TextView::XAlign::CENTER)
+				->set_text_offset(0, -1)
+				->set_get_background_color([] (const View &) { return DEF_DRAW_WEAK_YELLOW; })
+				->set_on_view_released([] (View &view) { equalizer_popup_view->set_is_visible(true); }),
 			(new RuleView(0, 0, 320, SMALL_MARGIN)),
 			debug_info_view
 		});
+	std::vector<View *> equalizer_views;
+	std::vector<double *> equalizer_value_pointers;
+	constexpr int equalizer_hz_list[18] = {65, 92, 131, 185, 262, 370, 523, 740, 1047, 1480, 2093, 2960, 4186, 5920, 8372, 11840, 16744, 20000};
+	for (int i = 0; i < 18; i++) {
+		BarView *bar_view = 
+			(new BarView(0, 0, 180, DEFAULT_FONT_INTERVAL))
+				->set_values(0.0, 2.0, 1.0)
+				->set_while_holding([i] (BarView &view) {
+					static int cnt = 0;
+					if (++cnt >= 30) {
+						cnt = 0;
+						network_decoder.set_equalizer_value(i, view.value);
+					}
+				})
+				->set_on_release([i] (BarView &view) {
+					Util_log_save("debug", std::to_string(i) + " : " + std::to_string(view.value));
+					network_decoder.set_equalizer_value(i, view.value);
+				});
+		equalizer_views.push_back((new HorizontalListView(0, 0, DEFAULT_FONT_INTERVAL))->set_views({
+			(new TextView(0, 0, 60, DEFAULT_FONT_INTERVAL))
+				->set_text(std::to_string(equalizer_hz_list[i]) + " Hz"),
+			bar_view
+		}));
+		equalizer_value_pointers.push_back(&bar_view->value);
+	}
+	equalizer_popup_view->set_subview((new VerticalListView(0, 0, EQUALIZER_POPUP_WIDTH))->set_views({
+		(new TextView(0, 0, EQUALIZER_POPUP_WIDTH, 19))
+			->set_text([] () { return LOCALIZED(RESET); })
+			->set_x_alignment(TextView::XAlign::CENTER)
+			->set_get_background_color(View::STANDARD_BACKGROUND)
+			->set_on_view_released([equalizer_value_pointers] (View &) {
+				for (auto value : equalizer_value_pointers) *value = 1;
+				for (int i = 0; i < 18; i++) network_decoder.set_equalizer_value(i, 1);
+			}),
+		(new RuleView(0, 0, EQUALIZER_POPUP_WIDTH, 1))->set_margin(0),
+		(new ScrollView(0, 0, EQUALIZER_POPUP_WIDTH, EQUALIZER_POPUP_HEIGHT - 40))
+			->set_views(equalizer_views)
+			->set_get_background_color([] (const View &) { return DEFAULT_BACK_COLOR; }),
+		(new TextView(0, 0, EQUALIZER_POPUP_WIDTH, 20))
+			->set_text([] () { return LOCALIZED(CLOSE); })
+			->set_x_alignment(TextView::XAlign::CENTER)
+			->set_on_view_released([] (View &) {
+				equalizer_popup_view->set_is_visible(false);
+				var_need_reflesh = true;
+			})
+			->set_get_background_color(View::STANDARD_BACKGROUND)
+	})->set_draw_order({2, 0, 1, 3}));
+	equalizer_popup_view->set_is_visible(false);
 	playlist_title_view = (new TextView(0, 0, 320, MIDDLE_FONT_INTERVAL))->set_font_size(MIDDLE_FONT_SIZE, MIDDLE_FONT_INTERVAL);
 	playlist_author_view = (new TextView(0, 0, 320, PLAYLIST_TOP_HEIGHT - MIDDLE_FONT_INTERVAL))->set_get_text_color([] () { return LIGHT0_TEXT_COLOR; });
 	playlist_list_videos_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
@@ -1556,9 +1614,7 @@ static void decode_thread(void* arg) {
 	int audio_size = 0;
 	int w = 0;
 	int h = 0;
-	double pos = 0;
 	bool key = false;
-	u8* audio = NULL;
 	std::string format = "";
 	std::string type = (char*)arg;
 	TickCounter counter0, counter1;
@@ -1731,13 +1787,14 @@ static void decode_thread(void* arg) {
 				} else eof_reached = false;
 				
 				if (type == NetworkMultipleDecoder::PacketType::AUDIO) {
+					double pos;
+					u8* audio = NULL;
 					osTickCounterUpdate(&counter0);
 					result = network_decoder.decode_audio(&audio_size, &audio, &pos);
 					osTickCounterUpdate(&counter0);
 					vid_audio_time = osTickCounterRead(&counter0);
 					
-					if(result.code == 0)
-					{
+					if(result.code == 0) {
 						while(true)
 						{
 							result = Util_speaker_add_buffer(0, ch, audio, audio_size, pos);
@@ -1747,22 +1804,19 @@ static void decode_thread(void* arg) {
 							
 							usleep(10000);
 						}
-					}
-					else
+						free(audio);
+						audio = NULL;
+					} else if (result.code != DEF_ERR_NEED_MORE_INPUT) // ignore NEED_MORE_INPUT error
 						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_audio_decoder_decode()..." + result.string + result.error_description, result.code);
-
-					free(audio);
-					audio = NULL;
 				} else if (type == NetworkMultipleDecoder::PacketType::VIDEO) {
 					osTickCounterUpdate(&counter0);
-					result = network_decoder.decode_video(&w, &h, &key, &pos);
+					result = network_decoder.decode_video(&w, &h, &key);
 					osTickCounterUpdate(&counter0);
 					
-					// Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "decoded a video packet at " + std::to_string(pos));
 					while (result.code == DEF_ERR_NEED_MORE_OUTPUT && vid_play_request && !vid_seek_request && !vid_change_video_request) {
 						usleep(10000);
 						osTickCounterUpdate(&counter0);
-						result = network_decoder.decode_video(&w, &h, &key, &pos);
+						result = network_decoder.decode_video(&w, &h, &key);
 						osTickCounterUpdate(&counter0);
 					}
 					vid_video_time = osTickCounterRead(&counter0);
@@ -1891,7 +1945,8 @@ static void convert_thread(void* arg) {
 						
 					} else {
 						while (pts - cur_sound_pos > 0.003 && vid_play_request && !vid_seek_request && !vid_change_video_request) {
-							usleep((pts - cur_sound_pos - 0.0015) * 1000000);
+							double sleep_microseconds = std::min(0.1, (pts - cur_sound_pos - 0.0015) / network_decoder.get_tempo()) * 1000000;
+							usleep(sleep_microseconds);
 							cur_sound_pos = Util_speaker_get_current_timestamp(0, vid_sample_rate);
 							if (cur_sound_pos < 0) break;
 						}
@@ -1969,11 +2024,10 @@ void VideoPlayer_draw(void)
 
 		small_resource_lock.lock();
 		main_view->draw();
-		small_resource_lock.unlock();
-		
-		// playing bar
 		video_draw_playing_bar();
 		draw_overlay_menu(240 - VIDEO_PLAYING_BAR_HEIGHT - TAB_SELECTOR_HEIGHT - OVERLAY_MENU_ICON_SIZE);
+		equalizer_popup_view->draw();
+		small_resource_lock.unlock();
 		
 		if(Util_expl_query_show_flag())
 			Util_expl_draw();
@@ -2053,7 +2107,8 @@ void VideoPlayer_draw(void)
 		
 		update_overlay_menu(&key);
 		
-		main_view->update(key);
+		if (equalizer_popup_view->is_visible) equalizer_popup_view->update(key);
+		else main_view->update(key);
 		
 		if (channel_id_pressed != "") {
 			global_intent.next_scene = SceneType::CHANNEL;

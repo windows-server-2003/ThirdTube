@@ -44,10 +44,6 @@ private :
 	volatile int seq_head = 0; // the latest sequence id available
 	volatile double duration_first_fragment = 0; // for some reason, the first fragment of a livestream differs in length from other fragments
 	
-	double cur_preamp = 1.0;
-	double cur_tempo = 1.0;
-	double cur_pitch = 1.0;
-	
 	void check_filter_update();
 	void recalc_buffered_head();
 public :
@@ -55,9 +51,14 @@ public :
 	volatile bool &interrupt = decoder.interrupt;
 	volatile bool &need_reinit = decoder.need_reinit;
 	volatile const bool &ready = decoder.ready;
-	volatile double preamp_change_request = -1;
-	volatile double tempo_change_request = -1;
-	volatile double pitch_change_request = -1;
+	
+	volatile bool filter_update_request = false;
+	void set_preamp(double volume) { decoder.filter.volume_request = volume; filter_update_request = true; }
+	void set_tempo(double tempo) { decoder.filter.tempo_request = tempo; filter_update_request = true; }
+	void set_pitch(double pitch) { decoder.filter.pitch_request = pitch; filter_update_request = true; }
+	void set_equalizer_value(int i, double value) { decoder.filter.equalizer_values_request[i] = value; filter_update_request = true; }
+	double get_tempo() { return decoder.filter.tempo; }
+	
 	const char *get_network_waiting_status() { return decoder.get_network_waiting_status(); }
 	
 	NetworkMultipleDecoder () = default;
@@ -109,8 +110,8 @@ public :
 	
 	// decode the previously read video packet
 	// decoded image is stored internally and can be acquired via get_decoded_video_frame()
-	Result_with_string decode_video(int *width, int *height, bool *key_frame, double *cur_pos) {
-		auto res = decoder.decode_video(width, height, key_frame, cur_pos);
+	Result_with_string decode_video(int *width, int *height, bool *key_frame) {
+		auto res = decoder.decode_video(width, height, key_frame);
 		return res;
 	}
 	

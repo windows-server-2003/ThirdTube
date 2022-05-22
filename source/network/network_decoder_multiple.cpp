@@ -100,7 +100,7 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	decoder.change_ffmpeg_io_data(fragments[fragment_id], adjust_timestamp ? fragment_id * fragment_len : 0);
 	result = decoder.init(request_hw_decoder);
 	if (result.code != 0) goto cleanup;
-	result = decoder.init_filter(cur_preamp, cur_tempo, cur_pitch);
+	result = decoder.init_filter();
 	if (result.code != 0) goto cleanup;
 	
 	seq_using = fragment_id;
@@ -128,15 +128,10 @@ Result_with_string NetworkMultipleDecoder::init(std::string both_url, NetworkStr
 }
 
 void NetworkMultipleDecoder::check_filter_update() {
-	if (preamp_change_request > 0 || tempo_change_request > 0 || pitch_change_request> 0) {
-		if (preamp_change_request > 0) cur_preamp = preamp_change_request;
-		if (tempo_change_request > 0) cur_tempo = tempo_change_request;
-		if (pitch_change_request > 0) cur_pitch = pitch_change_request;
+	if (filter_update_request) {
+		filter_update_request = false;
 		decoder.deinit_filter();
-		decoder.init_filter(cur_preamp, cur_tempo, cur_pitch);
-		preamp_change_request = -1;
-		tempo_change_request = -1;
-		pitch_change_request = -1;
+		decoder.init_filter();
 	}
 }
 
@@ -214,6 +209,10 @@ Result_with_string NetworkMultipleDecoder::seek(s64 microseconds) {
 		fragments_lock.unlock();
 	} else {
 		decoder.clear_buffer();
+		// flush data buffered inside the filter
+		decoder.deinit_filter();
+		decoder.init_filter();
+		
 		decoder.change_ffmpeg_io_data(fragments[(int) seq_using], adjust_timestamp ? seq_using * fragment_len : 0);
 		// trying to seek to a point too close to the end somehow causes ffmpeg to read the entire stream again ?
 		microseconds = std::max(0.0, std::min((double) microseconds, (get_duration() - 1) * 1000000));

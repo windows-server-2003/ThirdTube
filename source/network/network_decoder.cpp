@@ -270,20 +270,30 @@ void NetworkDecoderFilterData::deinit() {
 	av_frame_free(&output_frame);
 	audio_filter_src = audio_filter_sink = NULL;
 }
-Result_with_string NetworkDecoderFilterData::init(AVCodecContext *audio_context, double volume, double tempo, double pitch) {
+Result_with_string NetworkDecoderFilterData::init(AVCodecContext *audio_context) {
 	Result_with_string result;
 	int ffmpeg_result = 0;
 	
+	first_frame = true;
+	initial_timestamp = -1;
+	received_frame_num = 0;
+	input_time_base = av_q2d(audio_context->time_base);
+	
+	volume = volume_request;
+	tempo = tempo_request;
+	pitch = pitch_request;
+	memcpy(equalizer_values, (void *) equalizer_values_request, sizeof(equalizer_values));
+	
 	{
-		// av_log_set_level(AV_LOG_ERROR);
-		// av_log_set_callback(ffmpeg_log_callback);
+		av_log_set_level(AV_LOG_ERROR);
+		av_log_set_callback(ffmpeg_log_callback);
 		
 		output_frame = av_frame_alloc();
 		if (!output_frame) {
 			result.error_description = "av_frame_alloc() failed";
 			goto fail;
 		}
-		
+
 		audio_filter_graph = avfilter_graph_alloc();
 		if (!audio_filter_graph) {
 			result.error_description = "avfilter_graph_alloc() failed ";
@@ -292,16 +302,22 @@ Result_with_string NetworkDecoderFilterData::init(AVCodecContext *audio_context,
 		const AVFilter *abuffer = avfilter_get_by_name("abuffer");
 		const AVFilter *atempo = avfilter_get_by_name("atempo");
 		const AVFilter *asetrate = avfilter_get_by_name("asetrate");
+		const AVFilter *asuperequalizer = avfilter_get_by_name("superequalizer");
 		const AVFilter *aecho = avfilter_get_by_name("aecho");
 		const AVFilter *volume_filter = avfilter_get_by_name("volume");
 		const AVFilter *aformat = avfilter_get_by_name("aformat");
 		const AVFilter *abuffersink = avfilter_get_by_name("abuffersink");
 		
-		if (!abuffer || !atempo || !aecho || !volume_filter || !aformat || !abuffersink) {
-			std::string missing = !abuffer ? "abuffer" : !atempo ? "atempo" : !volume_filter ? "volume" : !aformat ? "aformat" : !abuffersink ? "abuffersink" : "[ERR]";
-			result.error_description = "filter \"" + missing + "\" not found";
-			goto fail;
-		}
+#		define ERROR_IF_NULL(val) if (!val) { result.error_description = "filter " + std::string(#val) + " not found"; goto fail; }
+		ERROR_IF_NULL(abuffer);
+		ERROR_IF_NULL(atempo);
+		ERROR_IF_NULL(asetrate);
+		ERROR_IF_NULL(asuperequalizer);
+		ERROR_IF_NULL(aecho);
+		ERROR_IF_NULL(volume_filter);
+		ERROR_IF_NULL(aformat);
+		ERROR_IF_NULL(abuffersink);
+		
 		std::vector<AVFilterContext *> filter_sequence;
 		char option_buffer[256] = { 0 };
 		// abuffer (source)
@@ -314,9 +330,10 @@ Result_with_string NetworkDecoderFilterData::init(AVCodecContext *audio_context,
 			goto fail;
 		}
 		filter_sequence.push_back(audio_filter_src);
+		double atempo_value = tempo;
 		// asetrate (simultaneous tempo/pitch shift)
 		if (std::abs(1.0 - pitch) >= 0.01) {
-			tempo /= pitch;
+			atempo_value /= pitch;
 			AVFilterContext *audio_pitch_filter;
 			snprintf(option_buffer, 256, "sample_rate=%f", audio_context->sample_rate * pitch);
 			ffmpeg_result = avfilter_graph_create_filter(&audio_pitch_filter, asetrate, NULL, option_buffer, NULL, audio_filter_graph);
@@ -329,9 +346,9 @@ Result_with_string NetworkDecoderFilterData::init(AVCodecContext *audio_context,
 		
 		// atempo (tempo filter)
 		// atempo does not support a tempo lower than 0.5, so chain multiple atempo filters in that case
-		while (std::abs(1.0 - tempo) >= 0.01) {
-			double cur_tempo = std::max(0.5, tempo);
-			tempo /= cur_tempo;
+		while (std::abs(1.0 - atempo_value) >= 0.01) {
+			double cur_tempo = std::max(0.5, atempo_value);
+			atempo_value /= cur_tempo;
 			AVFilterContext *audio_tempo_filter;
 			snprintf(option_buffer, 256, "tempo=%f", cur_tempo);
 			ffmpeg_result = avfilter_graph_create_filter(&audio_tempo_filter, atempo, NULL, option_buffer, NULL, audio_filter_graph);
@@ -362,6 +379,24 @@ Result_with_string NetworkDecoderFilterData::init(AVCodecContext *audio_context,
 			}
 			filter_sequence.push_back(audio_volume_filter);
 		}
+		// superequalizer
+		bool use_equalizer = false;
+		for (int i = 0; i < 18; i++) if (std::abs(1.0 - equalizer_values[i]) >= 0.01) use_equalizer = true;
+		if (use_equalizer) {
+			AVFilterContext *superequalizer_filter;
+			char *head = option_buffer;
+			for (int i = 0; i < 18; i++) {
+				if (i) *head++ = ':';
+				head += snprintf(head, option_buffer + 256 - head, "%db=%.3f", i + 1, equalizer_values[i]);
+			}
+			ffmpeg_result = avfilter_graph_create_filter(&superequalizer_filter, asuperequalizer, NULL, option_buffer, NULL, audio_filter_graph);
+			if (ffmpeg_result < 0) {
+				result.error_description = "asuperequalizer creation failed";
+				goto fail;
+			}
+			filter_sequence.push_back(superequalizer_filter);
+		}
+		
 		// aformat
 		AVFilterContext *audio_format_filter;
 		snprintf(option_buffer, 256, "sample_fmts=%s:sample_rates=%d:channel_layouts=0x%" PRIx64,
@@ -393,7 +428,6 @@ Result_with_string NetworkDecoderFilterData::init(AVCodecContext *audio_context,
 			goto fail;
 		}
 	}
-	
 	return result;
 	
 	fail :
@@ -401,22 +435,31 @@ Result_with_string NetworkDecoderFilterData::init(AVCodecContext *audio_context,
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
 }
-Result_with_string NetworkDecoderFilterData::process_audio_frame(AVFrame *input) {
+Result_with_string NetworkDecoderFilterData::process_audio_frame(AVFrame *input, double *out_pts) {
 	Result_with_string result;
 	int ffmpeg_result = 0;
 	
+	if (first_frame) first_frame = false, initial_timestamp = input->pts * input_time_base;
+	
 	ffmpeg_result = av_buffersrc_write_frame(audio_filter_src, input);
 	if (ffmpeg_result < 0) {
-		result.error_description = "av_buffersrc_write_frame() failed";
+		result.error_description = "av_buffersrc_write_frame() failed : " + std::to_string(ffmpeg_result);
 		goto fail;
 	}
 	
 	av_frame_unref(output_frame);
 	ffmpeg_result = av_buffersink_get_frame(audio_filter_sink, output_frame);
+	if (ffmpeg_result == AVERROR(EAGAIN)) {
+		result.code = DEF_ERR_NEED_MORE_INPUT;
+		return result;
+	}
 	if (ffmpeg_result < 0) {
-		result.error_description = "av_buffersink_get_frame() failed";
+		result.error_description = "av_buffersink_get_frame() failed : " + std::to_string(ffmpeg_result);
 		goto fail;
 	}
+	
+	*out_pts = initial_timestamp + (double) received_frame_num / 44100 * tempo;
+	received_frame_num += output_frame->nb_samples;
 	
 	return result;
 	
@@ -437,7 +480,7 @@ Result_with_string NetworkDecoderFilterData::process_audio_frame(AVFrame *input)
 
 void NetworkDecoder::deinit() {
 	ready = false;
-	// ensure the UI thread will see read == false after locking the mutex durning deiniting
+	// ensure the UI thread will see ready == false after locking the mutex durning deiniting
 	critical_op_lock.lock();
 	critical_op_lock.unlock();
 	
@@ -734,7 +777,6 @@ NetworkDecoder::PacketType NetworkDecoder::next_decode_type() {
 	double audio_dts = packet_buffer[AUDIO][0]->dts * av_q2d(get_stream(AUDIO)->time_base);
 	return video_dts <= audio_dts ? PacketType::VIDEO : PacketType::AUDIO;
 }
-static std::string debug_str = "";
 Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 	Result_with_string result;
 	
@@ -841,7 +883,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 	
 	return result;
 }
-Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *key_frame, double *cur_pos) {
+Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *key_frame) {
 	Result_with_string result;
 	int ffmpeg_result = 0;
 	
@@ -853,11 +895,6 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 			result.code = DEF_ERR_NEED_MORE_OUTPUT;
 			return result;
 		}
-		double time_base = av_q2d(get_stream(VIDEO)->time_base);
-		if (packet_read->pts != AV_NOPTS_VALUE) *cur_pos = packet_read->pts * time_base;
-		else *cur_pos = packet_read->dts * time_base;
-		*cur_pos += timestamp_offset;
-		
 		auto tmp = mvd_decode(width, height);
 		return tmp;
 	}
@@ -881,12 +918,13 @@ Result_with_string NetworkDecoder::decode_video(int *width, int *height, bool *k
 			*height = cur_frame->height;
 			
 			double time_base = av_q2d(get_stream(VIDEO)->time_base);
-			if (cur_frame->pts != AV_NOPTS_VALUE) *cur_pos = cur_frame->pts * time_base;
-			else *cur_pos = cur_frame->pkt_dts * time_base;
-			*cur_pos += timestamp_offset;
+			double cur_pos;
+			if (cur_frame->pts != AV_NOPTS_VALUE) cur_pos = cur_frame->pts * time_base;
+			else cur_pos = cur_frame->pkt_dts * time_base;
+			cur_pos += timestamp_offset;
 			
 			buffered_pts_list_lock.lock();
-			buffered_pts_list.insert(*cur_pos);
+			buffered_pts_list.insert(cur_pos);
 			buffered_pts_list_lock.unlock();
 			
 			video_tmp_frames.push();
@@ -919,45 +957,38 @@ Result_with_string NetworkDecoder::decode_audio(int *size, u8 **data, double *cu
 	AVFrame *cur_frame = av_frame_alloc();
 	if (!cur_frame) {
 		result.error_description = "av_frame_alloc() failed";
-		goto fail;
+		goto ffmpeg_fail;
 	}
 	
 	ffmpeg_result = avcodec_send_packet(decoder_context[AUDIO], packet_read);
 	if(ffmpeg_result == 0) {
 		ffmpeg_result = avcodec_receive_frame(decoder_context[AUDIO], cur_frame);
 		if(ffmpeg_result == 0) {
-			auto tmp_result = filter.process_audio_frame(cur_frame); // failure in filtering is normal for the first few frames after initialization, so ignore it
-			auto out_frame = tmp_result.code == 0 ? filter.output_frame : cur_frame;
+			result = filter.process_audio_frame(cur_frame, cur_pos);
+			if (result.code != 0) goto cleanup;
+			auto out_frame = filter.output_frame;
 			*data = (u8 *) malloc(out_frame->nb_samples * 2 * decoder_context[AUDIO]->channels);
-			*size = swr_convert(swr_context, data, out_frame->nb_samples, (const u8 **) out_frame->data, out_frame->nb_samples);
-			*size *= 2;
-			
-			double time_base = av_q2d(get_stream(AUDIO)->time_base);
-			my_assert(cur_frame->pts != AV_NOPTS_VALUE);
-			*cur_pos = cur_frame->pts * time_base + timestamp_offset;
+			*size = 2 * swr_convert(swr_context, data, out_frame->nb_samples, (const u8 **) out_frame->data, out_frame->nb_samples);
+			*cur_pos += timestamp_offset;
 		} else {
 			result.error_description = "avcodec_receive_frame() failed " + std::to_string(ffmpeg_result);
-			goto fail;
+			goto ffmpeg_fail;
 		}
 	} else {
 		result.error_description = "avcodec_send_packet() failed " + std::to_string(ffmpeg_result) + " " + std::to_string(AVERROR(EAGAIN));
-		goto fail;
+		goto ffmpeg_fail;
 	}
-
-	av_packet_free(&packet_read);
-	packet_buffer[AUDIO].pop_front();
-	while (!packet_buffer[AUDIO].size() && read_packet(is_av_separate() ? AUDIO : BOTH).code == 0);
-	av_frame_free(&cur_frame);
-	return result;
+	goto cleanup;
 	
-	fail:
-	
-	av_packet_free(&packet_read);
-	packet_buffer[AUDIO].pop_front();
-	while (!packet_buffer[AUDIO].size() && read_packet(is_av_separate() ? AUDIO : BOTH).code == 0);
-	av_frame_free(&cur_frame);
+	ffmpeg_fail:
 	result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
+	
+	cleanup :
+	av_packet_free(&packet_read);
+	packet_buffer[AUDIO].pop_front();
+	while (!packet_buffer[AUDIO].size() && read_packet(is_av_separate() ? AUDIO : BOTH).code == 0);
+	av_frame_free(&cur_frame);
 	return result;
 }
 

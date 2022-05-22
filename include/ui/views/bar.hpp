@@ -21,7 +21,7 @@ public :
 	inline double bar_len() const { return (x1 - x0) * 0.8; }
 	inline double get_x_from_value(double value) const { return bar_x0() + bar_len() * (value - low) / (high - low); }
 	inline double get_value_from_x(double x) const { return std::max(low, std::min(high, low + (high - low) * (x - bar_x0()) / bar_len())); }
-	inline double bar_y() const { return (int) ((y0 + DEFAULT_FONT_INTERVAL + y1) / 2); }
+	inline double bar_y() const { return (int) ((y0 + ((std::string) title == "" ? 0 : DEFAULT_FONT_INTERVAL) + y1) / 2); }
 	
 	CallBackFuncType on_release_func;
 	CallBackFuncType while_holding_func;
@@ -54,7 +54,7 @@ public :
 	}
 	
 	void draw_() const override {
-		Draw(title, x0 + SMALL_MARGIN, y0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
+		if ((std::string) title != "") Draw(title, x0 + SMALL_MARGIN, y0, 0.5, 0.5, DEFAULT_TEXT_COLOR);
 		Draw_texture(var_square_image[0], DEF_DRAW_LIGHT_GRAY, bar_x0(), bar_y() - 1, bar_len(), 3);
 		Draw_texture(var_square_image[0], DEF_DRAW_WEAK_AQUA, bar_x0(), bar_y() - 1, get_x_from_value(value) - bar_x0(), 3);
 		C2D_DrawCircleSolid(get_x_from_value(value), bar_y(), 0, holding ? 6 : 4, DEF_DRAW_WEAK_AQUA);

@@ -119,9 +119,25 @@ public :
 	AVFilterContext *audio_filter_sink = NULL;
 	AVFrame *output_frame;
 	
+	// actual values used
+	double volume = 1.0;
+	double tempo = 1.0;
+	double pitch = 1.0;
+	double equalizer_values[18] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+	// change requests(applied at reinitialization)
+	volatile double volume_request = 1.0;
+	volatile double tempo_request = 1.0;
+	volatile double pitch_request = 1.0;
+	volatile double equalizer_values_request[18] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+	// used to determine the pts of the output frames
+	bool first_frame = true;
+	double input_time_base = 0;
+	double initial_timestamp = -1;
+	int64_t received_frame_num = 0;
+	
 	void deinit();
-	Result_with_string init(AVCodecContext *audio_context, double volume, double tempo, double pitch);
-	Result_with_string process_audio_frame(AVFrame *input); // filtered frame goes to output_frame. It should NOT be freed
+	Result_with_string init(AVCodecContext *audio_context);
+	Result_with_string process_audio_frame(AVFrame *input, double *out_pts); // filtered frame goes to output_frame. It should NOT be freed
 };
 
 class NetworkDecoder {
@@ -138,8 +154,6 @@ private :
 	AVCodecContext *decoder_context[2] = {NULL, NULL};
 	SwrContext *swr_context = NULL;
 	const AVCodec *codec[2] = {NULL, NULL};
-	// ffmpeg filter
-	NetworkDecoderFilterData filter;
 	
 	// buffers
 	std::deque<AVPacket *> packet_buffer[2];
@@ -193,9 +207,10 @@ public :
 	void clear_buffer();
 	
 	
+	NetworkDecoderFilterData filter;
 	void deinit_filter() { filter.deinit(); }
 	// should be called after this->init()
-	Result_with_string init_filter(double volume, double tempo, double pitch) { return filter.init(decoder_context[AUDIO], volume, tempo, pitch); }
+	Result_with_string init_filter() { return filter.init(decoder_context[AUDIO]); }
 	// used for livestreams/premieres where the video is splitted into fragments
 	void change_ffmpeg_io_data(NetworkDecoderFFmpegIOData &ffmpeg_io_data, double timestamp_offset) {
 		interrupt = false;
@@ -251,9 +266,11 @@ public :
 	
 	// decode the previously read video packet
 	// decoded image is stored internally and can be acquired via get_decoded_video_frame()
-	Result_with_string decode_video(int *width, int *height, bool *key_frame, double *cur_pos);
+	Result_with_string decode_video(int *width, int *height, bool *key_frame);
 	
 	// decode the previously read audio packet
+	// if return.code == 0, *data is a malloced pointer and should be freed
+	// otherwise, *data is untouched
 	Result_with_string decode_audio(int *size, u8 **data, double *cur_pos);
 	
 	// get the previously decoded video frame raw data
