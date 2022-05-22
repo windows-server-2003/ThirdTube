@@ -47,8 +47,8 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 		}
 		usleep(20000);
 		if (stream->error || stream->quit_request) {
-			Util_log_save("dec", "read dead stream : " + std::string(stream->error ? "error" : "quitted"));
-			usleep(100000);
+			// show the error message only once per stream
+			if (!stream->read_dead_tried) stream->read_dead_tried = true, Util_log_save("dec", "read dead stream : " + std::string(stream->error ? "error" : "quitted"));
 			goto fail;
 		}
 	}

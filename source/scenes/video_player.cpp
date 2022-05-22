@@ -25,7 +25,7 @@
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 12
 #define MAX_COMMENT_ICON_LOAD_REQUEST 18
-#define MAX_RETRY_CNT 5
+#define MAX_RETRY_CNT 2 // 3 trials as a total
 
 #define TAB_GENERAL 0
 #define TAB_COMMENTS 1

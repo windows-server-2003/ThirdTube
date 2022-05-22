@@ -35,6 +35,7 @@ struct NetworkStream {
 	int seq_id = -1;
 	bool livestream_eof = false;
 	bool livestream_private = false;
+	bool read_dead_tried = false;
 	
 	// if `whole_download` is true, it will not use Range request but download the whole content at once (used for livestreams)
 	NetworkStream (std::string url, bool whole_download, NetworkSessionList *session_list) : url(url), whole_download(whole_download), session_list(session_list) {}
