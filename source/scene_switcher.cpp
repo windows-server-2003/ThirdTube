@@ -33,6 +33,21 @@ using namespace SceneSwitcher;
 
 void Menu_worker_thread(void* arg);
 
+#define DECRYPTER_VERSION 0
+#define DECRYPTER_URL ("https://raw.githubusercontent.com/windows-server-2003/ThirdTube/main/decrypter/" + std::to_string(DECRYPTER_VERSION) + "_latest.txt")
+static void yt_load_decrypter(void *) {
+	static NetworkSessionList session_list;
+	static bool first = true;
+	if (first) first = false, session_list.init();
+	
+	auto result = session_list.perform(HttpRequest::GET(DECRYPTER_URL, {}));
+	if (result.fail) Util_log_save("yt-dec", "fail: " + result.error);
+	else if (!result.status_code_is_success()) Util_log_save("yt-dec", "fail http: " + std::to_string(result.status_code));
+	else {
+		youtube_set_cipher_decrypter(std::string(result.data.begin(), result.data.end()));
+		Util_file_save_to_file(std::to_string(DECRYPTER_VERSION) + "_decrypter.txt", DEF_MAIN_DIR, result.data.data(), result.data.size(), true);
+	}
+}
 
 void Menu_init(void)
 {
@@ -126,6 +141,21 @@ void Menu_init(void)
 	misc_tasks_thread = threadCreate(misc_tasks_thread_func, NULL, DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
 	Menu_get_system_info();
+	
+	// load default youtube decrypter
+	u8 decrypter_buf[1001] = { 0 };
+	u32 read_size;
+	// first load from romfs, which is reliable
+	result = Util_file_load_from_rom("yt_decrypter.txt", "romfs:/", decrypter_buf, 1000, &read_size);
+	if (result.code != 0) Util_log_save("yt-dec", "default fail: " + result.error_description);
+	else youtube_set_cipher_decrypter((char *) decrypter_buf);
+	// then try loading from local cache, which may be newer but does not always exist
+	memset(decrypter_buf, 0, sizeof(decrypter_buf));
+	result = Util_file_load_from_file(std::to_string(DECRYPTER_VERSION) + "_decrypter.txt", DEF_MAIN_DIR, decrypter_buf, 1000, &read_size);
+	if (result.code != 0) Util_log_save("yt-dec", "cache fail: " + result.error_description);
+	else youtube_set_cipher_decrypter((char *) decrypter_buf);
+	// fetch from remote
+	queue_async_task(yt_load_decrypter, NULL);
 	
 	Util_log_save(DEF_MENU_INIT_STR, "Initialized");
 }

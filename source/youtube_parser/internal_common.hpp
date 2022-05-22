@@ -2,7 +2,7 @@
 #include <map>
 #include <vector>
 #include "parser.hpp"
-#include "hardcode.hpp"
+#include "cipher.hpp"
 #include "rapidjson_wrapper.hpp"
 
 #ifdef _WIN32

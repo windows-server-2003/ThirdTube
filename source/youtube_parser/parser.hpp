@@ -226,6 +226,7 @@ YouTubeHomeResult youtube_load_home_page();
 
 
 void youtube_change_content_language(std::string language_code);
+void youtube_set_cipher_decrypter(std::string decrypter); // cipher.cpp
 
 /* -------------------------------- utils.cpp -------------------------------- */
 std::string youtube_get_video_id_by_url(const std::string &url);

@@ -21,7 +21,7 @@ static bool extract_player_data(Document &json_root, RJson player_response, YouT
 		
 		auto cipher_params = parse_parameters(i.has_key("cipher") ? i["cipher"].string_value() : i["signatureCipher"].string_value());
 		i.set_str(json_root, "url",
-			(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + cipher_transform(cipher_params["s"])).c_str());
+			(cipher_params["url"] + "&" + cipher_params["sp"] + "=" + sig_transform(cipher_params["s"])).c_str());
 	}
 	for (auto &i : formats) { // modify the `n` parameter
 		std::string url = i["url"].string_value();
@@ -250,7 +250,7 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 	post_content = std::regex_replace(post_content, std::regex("%1"), playlist_id == "" ? "" : "\"playlistId\": \"" + playlist_id + "\", ");
 	post_content = std::regex_replace(post_content, std::regex("%2"), language_code);
 	post_content = std::regex_replace(post_content, std::regex("%3"), country_code);
-	post_content = std::regex_replace(post_content, std::regex("%4"), std::to_string(YOUTUBE_STS));
+	post_content = std::regex_replace(post_content, std::regex("%4"), std::to_string(get_sts()));
 	std::string urls[2] = {
 		get_innertube_api_url("next"),
 		get_innertube_api_url("player")
