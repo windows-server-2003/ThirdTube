@@ -71,13 +71,17 @@ YouTubeChannelDetail youtube_load_channel_page(std::string url_or_id) {
 			}
 		}
 		
-		std::string html = http_get(url);
-		if (!html.size()) {
-			res.error = "failed to download video page";
-			return res;
+		auto result = http_get(url);
+		if (!result.first) debug((res.error = "[ch-id] " + result.second));
+		else {
+			auto html = result.second;
+			if (!html.size()) {
+				res.error = "[ch-id] html empty";
+				return res;
+			}
+			Document json_root;
+			parse_channel_data(get_initial_data(json_root, html), res);
 		}
-		Document json_root;
-		parse_channel_data(get_initial_data(json_root, html), res);
 	} else {
 		std::string &id = url_or_id;
 		res.url_original = "https://m.youtube.com/channel/" + id;
@@ -280,19 +284,23 @@ void YouTubeChannelDetail::load_more_community_posts() {
 		community_loaded = true;
 		// community post seems to be only available in the desktop version
 		std::string url = convert_url_to_desktop(this->url + "/community");
-		std::string html = http_get(url, {{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0"}});
-		if (!html.size()) {
-			error = "failed to download community page";
-			return;
+		auto result = http_get(url, {{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0"}});
+		if (!result.first) debug((this->error = "[ch/c+] " + result.second));
+		else {
+			auto html = result.second;
+			if (!html.size()) {
+				error = "failed to download community page";
+				return;
+			}
+			Document json_root;
+			RJson initial_data = get_initial_data(json_root, html);
+			
+			RJson contents;
+			for (auto tab : initial_data["contents"]["twoColumnBrowseResultsRenderer"]["tabs"].array_items())
+				for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items())
+					contents = i["itemSectionRenderer"]["contents"];
+			load_community_items(contents, *this);
 		}
-		Document json_root;
-		RJson initial_data = get_initial_data(json_root, html);
-		
-		RJson contents;
-		for (auto tab : initial_data["contents"]["twoColumnBrowseResultsRenderer"]["tabs"].array_items())
-			for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items())
-				contents = i["itemSectionRenderer"]["contents"];
-		load_community_items(contents, *this);
 	} else {
 		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "WEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}}, "continuation": "%2"})";
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);

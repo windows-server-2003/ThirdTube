@@ -11,7 +11,7 @@ namespace youtube_parser {
 	std::string country_code = "US";
 	
 #ifdef _WIN32
-	std::string http_get(const std::string &url, std::map<std::string, std::string> headers) {
+	std::pair<bool, std::string> http_get(const std::string &url, std::map<std::string, std::string> headers) {
 		static int cnt = 0;
 		static const std::string user_agent = "Mozilla/5.0 (Linux; Android 11; Pixel 3a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.101 Mobile Safari/537.36";
 		if (!headers.count("User-Agent")) headers["User-Agent"] = user_agent;
@@ -31,9 +31,9 @@ namespace youtube_parser {
 		std::ifstream file(save_file_name, std::ios::binary);
 		std::stringstream sstream;
 		sstream << file.rdbuf();
-		return sstream.str();
+		return {true, sstream.str()};
 	}
-	std::string http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
+	std::pair<bool, std::string> http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
 		{
 			std::ofstream file("post_tmp.txt");
 			file << json;
@@ -46,7 +46,7 @@ namespace youtube_parser {
 		std::ifstream file("curl_tmp.txt", std::ios::binary);
 		std::stringstream sstream;
 		sstream << file.rdbuf();
-		return sstream.str();
+		return {true, sstream.str()};
 	}
 #else
 	static bool thread_network_session_list_inited = false;
@@ -63,12 +63,16 @@ namespace youtube_parser {
 		if (!headers.count("Accept-Language")) headers["Accept-Language"] = language_code + ";q=0.9";
 		return HttpRequest::GET(url, headers);
 	}
-	std::string http_get(const std::string &url, std::map<std::string, std::string> headers) {
+	std::pair<bool, std::string> http_get(const std::string &url, std::map<std::string, std::string> headers) {
 		debug("accessing...");
 		auto result = thread_network_session_list.perform(http_get_request(url, headers));
-		if (result.fail) debug("fail : " + result.error);
-		else debug("ok");
-		return std::string(result.data.begin(), result.data.end());
+		if (result.fail) {
+			debug("fail : " + result.error);
+			return {false, result.error};
+		} else {
+			debug("ok");
+			return {true, std::string(result.data.begin(), result.data.end())};
+		}
 	}
 	HttpRequest http_post_json_request(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
 		confirm_thread_network_session_list_inited();
@@ -77,12 +81,16 @@ namespace youtube_parser {
 		
 		return HttpRequest::POST(url, headers, json);
 	}
-	std::string http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
+	std::pair<bool, std::string> http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
 		debug("accessing(POST)...");
 		auto result = thread_network_session_list.perform(http_post_json_request(url, json, headers));
-		if (result.fail) debug("fail : " + result.error);
-		else debug("ok");
-		return std::string(result.data.begin(), result.data.end());
+		if (result.fail) {
+			debug("fail : " + result.error);
+			return {false, result.error};
+		} else {
+			debug("ok");
+			return {true, std::string(result.data.begin(), result.data.end())};
+		}
 	}
 #endif
 	

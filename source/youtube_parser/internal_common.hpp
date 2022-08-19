@@ -50,8 +50,8 @@ namespace youtube_parser {
 	HttpRequest http_get_request(const std::string &url, std::map<std::string, std::string> headers = {});
 	HttpRequest http_post_json_request(const std::string &url, const std::string &json, std::map<std::string, std::string> headers = {});
 #	endif
-	std::string http_get(const std::string &url, std::map<std::string, std::string> header = {});
-	std::string http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> header = {});
+	std::pair<bool, std::string> http_get(const std::string &url, std::map<std::string, std::string> header = {});
+	std::pair<bool, std::string> http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> header = {});
 	
 	// string util
 	bool starts_with(const std::string &str, const std::string &pattern, size_t offset = 0);
@@ -97,8 +97,9 @@ namespace youtube_parser {
 	// properly handles the lifetime of json objects
 	template<class Func1, class Func2, class Func3>
 	void access_and_parse_json(const Func1 &access, const Func2 &on_success, const Func3 &on_fail) {
-		std::string received_str = access();
-		parse_json_destructive(&received_str[0], on_success, on_fail);
+		auto result = access();
+		if (result.first) parse_json_destructive(&result.second[0], on_success, on_fail);
+		else on_fail(result.second);
 	}
 	
 	std::string convert_url_to_mobile(std::string url);
