@@ -276,9 +276,7 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 			if (prev_font_list_num == -1) { // linebreak
 				y += 20.0 * text_size_y;
 				x = original_x;
-				continue;
-			}
-			if (!Exfont_is_loaded_external_font(0) || (prev_font_list_num >= 0 && prev_font_list_num <= 3)) {
+			} else if (!Exfont_is_loaded_external_font(0) || (prev_font_list_num >= 0 && prev_font_list_num <= 3)) {
 				C2D_Font cur_font = Exfont_is_loaded_external_font(0) ? system_fonts[prev_font_list_num] : NULL;
 				
 				C2D_TextBufClear(c2d_buf);
