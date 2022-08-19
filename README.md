@@ -1,6 +1,6 @@
 # ThirdTube
 
-A work-in-progress homebrew YouTube client for the new 3DS  
+A work-in-progress homebrew YouTube client for the 3DS  
 [GBAtemp Thread](https://gbatemp.net/threads/release-thirdtube-a-homebrew-youtube-client-for-the-new-3ds.591696/)  
 [Discord Server](https://discord.gg/CVcThBCQJM)
 
@@ -54,7 +54,7 @@ Below are for debug purposes
 
 
 ## Requirments
-A New 3DS (including a new 2DS) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.  
+A 3DS (including 2DS) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.  
 I haven't tested the minimum system version, but at least 8.1.0-0 is needed.  
 
 ## FAQs
@@ -65,7 +65,7 @@ I haven't tested the minimum system version, but at least 8.1.0-0 is needed.
 ## Building
 You need:
 
- - devkitPro with devkitARM r57  
+ - devkitPro with devkitARM r58  
  - ```3ds-zlib``` and ```3ds-mbedtls``` installed in portlibs of devkitPro  
    You can install it by opening devkitPro msys2 and typing ```pacman -S [package name]```.
 
