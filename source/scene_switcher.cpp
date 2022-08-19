@@ -228,25 +228,30 @@ bool Menu_main(void)
 	if (sound_init_result != 0) {
 		std::string error_msg = 
 			"Could not initialize NDSP (sound service)\n"
-			"This is probably because you haven't run DSP1\n"
-			"You can download it from the link below\n\n"
-			"https://github.com/zoogie/DSP1/releases/";
+			"This is probably because you haven't run DSP1.\n"
+			"You can download it from the link below:\n\n"
+			"https://github.com/zoogie/DSP1/releases/\n\n"
+			"If you are on Luma3DS v11.0 or later, you\n"
+			"can open Rosalina menu, go to Misc. options\n"
+			" -> Dump DSP firmware instead.\n";
 		error_msg += "\n\nPress A to close the app";
 		
 		
 		Draw_frame_ready();
 		Draw_screen_ready(0, DEF_DRAW_WHITE);
 		
-		{
-			int width = Draw_get_width(error_msg, 0.5);
-			int height = Draw_get_height(error_msg, 0.5);
-			Draw(error_msg, (400 - width) / 2, (240 - height) / 2, 0.5, 0.5, DEF_DRAW_BLACK);
-		}
+		Draw_xy_centered(error_msg, 0, 400, 0, 240, 0.5, 0.5, DEF_DRAW_BLACK);
 		Draw_top_ui();
 
 		Draw_screen_ready(1, DEF_DRAW_WHITE);
 		
 		Draw_apply_draw();
+		
+		static int frame_cnt = 0;
+		if (++frame_cnt >= 30) {
+			frame_cnt = 0;
+			Util_log_save(DEF_MENU_INIT_STR, "ndspInit()...", (sound_init_result = ndspInit()));//0xd880A7FA
+		}
 		
 		if (key.h_a) return false;
 		return true;
