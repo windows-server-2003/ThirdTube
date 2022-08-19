@@ -310,42 +310,42 @@ void VideoPlayer_init(void) {
 			video_quality_selector_view,
 			(new BarView(0, 0, 260, 30)) // preamp
 				->set_values(std::log(0.25), std::log(4), 0) // exponential scale
-				->set_title([] (const BarView &view) { return LOCALIZED(PREAMP) + " : " + std::to_string((int) std::round(std::exp(view.value) * 100)) + "%"; })
+				->set_title([] (const BarView &view) { return LOCALIZED(PREAMP) + " : " + std::to_string((int) std::round(std::exp(view.get_value()) * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
-					double volume = std::exp(view.value);
-					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.value = 0;
+					double volume = std::exp(view.get_value());
+					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.set_value(0);
 					// volume change is needs a reconstruction of the filter graph, so don't update volume too often
 					static int cnt = 0;
 					if (++cnt >= 15) cnt = 0, network_decoder.set_preamp(volume);
 				})
 				->set_on_release([] (BarView &view) {
-					double volume = std::exp(view.value);
-					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.value = 0;
+					double volume = std::exp(view.get_value());
+					if (volume >= 0.95 && volume <= 1.05) volume = 1.0, view.set_value(0);
 					network_decoder.set_preamp(volume);
 				}),
 			(new BarView(0, 0, 260, 30)) // speed
 				->set_values(0.3, 1.5, 1.0)
-				->set_title([] (const BarView &view) { return LOCALIZED(SPEED) + " : " + std::to_string((int) std::round(view.value * 100)) + "%"; })
+				->set_title([] (const BarView &view) { return LOCALIZED(SPEED) + " : " + std::to_string((int) std::round(view.get_value() * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
-					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
+					view.fix_close_values(0.97, 1.0, 1.03);
 					static int cnt = 0;
-					if (++cnt >= 15) cnt = 0, network_decoder.set_tempo(view.value);
+					if (++cnt >= 15) cnt = 0, network_decoder.set_tempo(view.get_value());
 				})
 				->set_on_release([] (BarView &view) {
-					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
-					network_decoder.set_tempo(view.value);
+					view.fix_close_values(0.97, 1.0, 1.03);
+					network_decoder.set_tempo(view.get_value());
 				}),
 			(new BarView(0, 0, 260, 30)) // pitch
 				->set_values(0.5, 2.0, 1.0)
-				->set_title([] (const BarView &view) { return LOCALIZED(PITCH) + " : " + std::to_string((int) std::round(view.value * 100)) + "%"; })
+				->set_title([] (const BarView &view) { return LOCALIZED(PITCH) + " : " + std::to_string((int) std::round(view.get_value() * 100)) + "%"; })
 				->set_while_holding([] (BarView &view) {
-					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
+					view.fix_close_values(0.97, 1.0, 1.03);
 					static int cnt = 0;
-					if (++cnt >= 15) cnt = 0, network_decoder.set_pitch(view.value);
+					if (++cnt >= 15) cnt = 0, network_decoder.set_pitch(view.get_value());
 				})
 				->set_on_release([] (BarView &view) {
-					if (view.value >= 0.97 && view.value <= 1.03) view.value = 1.0;
-					network_decoder.set_pitch(view.value);
+					view.fix_close_values(0.97, 1.0, 1.03);
+					network_decoder.set_pitch(view.get_value());
 				}),
 			(new TextView(SMALL_MARGIN * 2, 0, 100, 20))
 				->set_text([] () { return LOCALIZED(OPEN_EQUALIZER); })
@@ -357,37 +357,37 @@ void VideoPlayer_init(void) {
 			debug_info_view
 		});
 	std::vector<View *> equalizer_views;
-	std::vector<double *> equalizer_value_pointers;
 	constexpr int equalizer_hz_list[18] = {65, 92, 131, 185, 262, 370, 523, 740, 1047, 1480, 2093, 2960, 4186, 5920, 8372, 11840, 16744, 20000};
+	static double equalizer_values[18];
+	std::fill(equalizer_values, equalizer_values + 18, 1.0);
 	for (int i = 0; i < 18; i++) {
 		BarView *bar_view = 
 			(new BarView(0, 0, 180, DEFAULT_FONT_INTERVAL))
-				->set_values(0.0, 2.0, 1.0)
+				->set_values_sync(0.0, 2.0, &equalizer_values[i])
 				->set_while_holding([i] (BarView &view) {
 					static int cnt = 0;
 					if (++cnt >= 30) {
 						cnt = 0;
-						network_decoder.set_equalizer_value(i, view.value);
+						network_decoder.set_equalizer_value(i, view.get_value());
 					}
 				})
 				->set_on_release([i] (BarView &view) {
-					Util_log_save("debug", std::to_string(i) + " : " + std::to_string(view.value));
-					network_decoder.set_equalizer_value(i, view.value);
+					Util_log_save("debug", std::to_string(i) + " : " + std::to_string(view.get_value()));
+					network_decoder.set_equalizer_value(i, view.get_value());
 				});
 		equalizer_views.push_back((new HorizontalListView(0, 0, DEFAULT_FONT_INTERVAL))->set_views({
 			(new TextView(0, 0, 60, DEFAULT_FONT_INTERVAL))
 				->set_text(std::to_string(equalizer_hz_list[i]) + " Hz"),
 			bar_view
 		}));
-		equalizer_value_pointers.push_back(&bar_view->value);
 	}
 	equalizer_popup_view->set_subview((new VerticalListView(0, 0, EQUALIZER_POPUP_WIDTH))->set_views({
 		(new TextView(0, 0, EQUALIZER_POPUP_WIDTH, 19))
 			->set_text([] () { return LOCALIZED(RESET); })
 			->set_x_alignment(TextView::XAlign::CENTER)
 			->set_get_background_color(View::STANDARD_BACKGROUND)
-			->set_on_view_released([equalizer_value_pointers] (View &) {
-				for (auto value : equalizer_value_pointers) *value = 1;
+			->set_on_view_released([] (View &) {
+				std::fill(equalizer_values, equalizer_values + 18, 1.0);
 				for (int i = 0; i < 18; i++) network_decoder.set_equalizer_value(i, 1);
 			}),
 		(new RuleView(0, 0, EQUALIZER_POPUP_WIDTH, 1))->set_margin(0),

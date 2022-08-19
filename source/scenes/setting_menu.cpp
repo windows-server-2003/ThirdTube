@@ -255,20 +255,17 @@ void Sem_init(void) {
 						}),
 					// LCD Brightness
 					(new BarView(0, 0, 320, 40))
-						->set_values(15, 163, var_lcd_brightness)
+						->set_values_sync(15, 163, &var_lcd_brightness)
 						->set_title([] (const BarView &view) { return LOCALIZED(LCD_BRIGHTNESS); })
-						->set_while_holding([] (const BarView &view) {
-							var_lcd_brightness = view.value;
-							misc_tasks_request(TASK_CHANGE_BRIGHTNESS);
-						})
+						->set_while_holding([] (const BarView &view) { misc_tasks_request(TASK_CHANGE_BRIGHTNESS); })
 						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
 					// Time to turn off LCD
 					(new BarView(0, 0, 320, 40))
 						->set_values(10, 310, var_time_to_turn_off_lcd <= 309 ? var_time_to_turn_off_lcd : 310)
 						->set_title([] (const BarView &view) { return LOCALIZED(TIME_TO_TURN_OFF_LCD) + " : " +
-							(view.value <= 309 ? std::to_string((int) view.value) + " " + LOCALIZED(SECONDS) : LOCALIZED(NEVER_TURN_OFF)); })
+							(view.get_value() <= 309 ? std::to_string((int) view.get_value()) + " " + LOCALIZED(SECONDS) : LOCALIZED(NEVER_TURN_OFF)); })
 						->set_on_release([] (const BarView &view) {
-							var_time_to_turn_off_lcd = view.value <= 309 ? view.value : 1000000000;
+							var_time_to_turn_off_lcd = view.get_value() <= 309 ? view.get_value() : 1000000000;
 							misc_tasks_request(TASK_SAVE_SETTINGS);
 						}),
 					// full screen mode
@@ -302,14 +299,31 @@ void Sem_init(void) {
 								misc_tasks_request(TASK_SAVE_SETTINGS);
 							}
 						}),
+					// Scroll speed 0
+					(new BarView(0, 0, 320, 35))
+						->set_values_sync(DPAD_SCROLL_SPEED_MIN, DPAD_SCROLL_SPEED_MAX, &var_dpad_scroll_speed0)
+						->set_title([] (const BarView &view) { return LOCALIZED(SCROLL_SPEED0) + " : " + double2str(var_dpad_scroll_speed0, 1); })
+						->set_while_holding([] (const BarView &view) {
+							var_dpad_scroll_speed1 = std::max(var_dpad_scroll_speed1, var_dpad_scroll_speed0);
+						})
+						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
+					// Scroll speed 1
+					(new BarView(0, 0, 320, 35))
+						->set_values_sync(DPAD_SCROLL_SPEED_MIN, DPAD_SCROLL_SPEED_MAX, &var_dpad_scroll_speed1)
+						->set_title([] (const BarView &view) { return LOCALIZED(SCROLL_SPEED1) + " : " + double2str(var_dpad_scroll_speed1, 1); })
+						->set_while_holding([] (const BarView &view) {
+							var_dpad_scroll_speed0 = std::min(var_dpad_scroll_speed0, var_dpad_scroll_speed1);
+						})
+						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
+					// Scroll speed change threashold
+					(new BarView(0, 0, 320, 40))
+						->set_values_sync(DPAD_SCROLL_THREASHOLD_MIN, DPAD_SCROLL_THREASHOLD_MAX, &var_dpad_scroll_speed1_threashold)
+						->set_title([] (const BarView &view) { return LOCALIZED(SCROLL_SPEED_THREASHOLD) + " : " + double2str(var_dpad_scroll_speed1_threashold, 1); })
+						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
 					// Size of images in community posts
 					(new BarView(0, 0, 320, 40))
-						->set_values(COMMUNITY_IMAGE_SIZE_MIN, COMMUNITY_IMAGE_SIZE_MAX, var_community_image_size)
+						->set_values_sync(COMMUNITY_IMAGE_SIZE_MIN, COMMUNITY_IMAGE_SIZE_MAX, &var_community_image_size)
 						->set_title([] (const BarView &view) { return LOCALIZED(COMMUNITY_POST_IMAGE_SIZE) + " : " + std::to_string(var_community_image_size) + " px"; })
-						->set_while_holding([] (const BarView &view) {
-							var_community_image_size = view.value;
-							misc_tasks_request(TASK_CHANGE_BRIGHTNESS);
-						})
 						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); }),
 					(new EmptyView(0, 0, 320, 10))
 				}),
@@ -332,17 +346,13 @@ void Sem_init(void) {
 						}),
 					// Forward buffer ratio
 					(new BarView(0, 0, 320, 40))
-						->set_values(0.1, 1.0, var_forward_buffer_ratio)
+						->set_values_sync(0.1, 1.0, &var_forward_buffer_ratio)
 						->set_title([] (const BarView &view) {
 							char ratio_str[16];
 							snprintf(ratio_str, 16, "%.2f", var_forward_buffer_ratio);
 							return LOCALIZED(FORWARD_BUFFER_RATIO) + " : " + ratio_str;
 						})
-						->set_while_holding([] (const BarView &view) { var_community_image_size = view.value; })
-						->set_on_release([] (const BarView &view) {
-							var_forward_buffer_ratio = view.value;
-							misc_tasks_request(TASK_SAVE_SETTINGS);
-						})
+						->set_on_release([] (const BarView &view) { misc_tasks_request(TASK_SAVE_SETTINGS); })
 				}),
 			// Tab #3 : Data
 			(new ScrollView(0, 0, 320, 0))

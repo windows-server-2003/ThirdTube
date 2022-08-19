@@ -48,6 +48,9 @@ void load_settings() {
 	var_history_enabled = load_int("history_enabled", 1);
 	var_video_show_debug_info = load_int("video_show_debug_info", 0);
 	var_video_linear_filter = load_int("linear_filter", 1);
+	var_dpad_scroll_speed0 = std::max(1.0, std::min(12.0, load_double("dpad_scroll_speed0", 6.0)));
+	var_dpad_scroll_speed1 = std::max(var_dpad_scroll_speed0, std::min(12.0, load_double("dpad_scroll_speed1", 9.0)));
+	var_dpad_scroll_speed1_threashold = std::max(0.3, std::min(5.0, load_double("dpad_scroll_speed1_threashold", 2.0)));
 	
 	Util_cset_set_wifi_state(true);
 	Util_cset_set_screen_brightness(true, true, var_lcd_brightness);
@@ -56,21 +59,34 @@ void load_settings() {
 	video_set_show_debug_info(var_video_show_debug_info);
 }
 void save_settings() {
-	std::string data = 
-		"<lang_ui>" + var_lang + "</lang_ui>\n" +
-		"<lang_content>" + var_lang_content + "</lang_content>\n" +
-		"<lcd_brightness>" + std::to_string(var_lcd_brightness) + "</lcd_brightness>\n" +
-		"<time_to_turn_off_lcd>" + std::to_string(var_time_to_turn_off_lcd) + "</time_to_turn_off_lcd>\n" +
-		"<eco_mode>" + std::to_string(var_eco_mode) + "</eco_mode>\n" + 
-		"<full_screen_mode>" + std::to_string(var_full_screen_mode) + "</full_screen_mode>\n" +
-		"<dark_theme>" + std::to_string(var_night_mode) + "</dark_theme>\n" + 
-		"<dark_theme_flash>" + std::to_string(var_flash_mode) + "</dark_theme_flash>\n" + 
-		"<community_image_size>" + std::to_string(var_community_image_size) + "</community_image_size>\n" +
-		"<autoplay_level>" + std::to_string(var_autoplay_level) + "</autoplay_level>\n" + 
-		"<forward_buffer_ratio>" + std::to_string(var_forward_buffer_ratio) + "</forward_buffer_ratio>\n" + 
-		"<history_enabled>" + std::to_string(var_history_enabled) + "</history_enabled>\n" +
-		"<video_show_debug_info>" + std::to_string(var_video_show_debug_info) + "</video_show_debug_info>\n" +
-		"<linear_filter>" + std::to_string(var_video_linear_filter) + "</linear_filter>\n";
+	std::string data;
+	auto add_str = [&] (const std::string &key, const std::string &val) {
+		data += "<" + key + ">" + val + "</" + key + ">\n";
+	};
+	auto add_int = [&] (const std::string &key, int val) {
+		data += "<" + key + ">" + std::to_string(val) + "</" + key + ">\n";
+	};
+	auto add_double = [&] (const std::string &key, double val) {
+		data += "<" + key + ">" + std::to_string(val) + "</" + key + ">\n";
+	};
+	
+	add_str("lang_ui", var_lang);
+	add_str("lang_content", var_lang_content);
+	add_int("lcd_brightness", var_lcd_brightness);
+	add_int("time_to_turn_off_lcd", var_time_to_turn_off_lcd);
+	add_int("eco_mode", var_eco_mode);
+	add_int("full_screen_mode", var_full_screen_mode);
+	add_int("dark_theme", var_night_mode);
+	add_int("dark_theme_flash", var_flash_mode);
+	add_int("community_image_size", var_community_image_size);
+	add_int("autoplay_level", var_autoplay_level);
+	add_double("forward_buffer_ratio", var_forward_buffer_ratio);
+	add_int("history_enabled", var_history_enabled);
+	add_int("video_show_debug_info", var_video_show_debug_info);
+	add_int("linear_filter", var_video_linear_filter);
+	add_double("dpad_scroll_speed0", var_dpad_scroll_speed0);
+	add_double("dpad_scroll_speed1", var_dpad_scroll_speed1);
+	add_double("dpad_scroll_speed1_threashold", var_dpad_scroll_speed1_threashold);
 	
 	Result_with_string result = Util_file_save_to_file("settings.txt", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
 	Util_log_save("settings/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);

@@ -14,7 +14,7 @@ extern bool var_show_fps;
 extern bool var_full_screen_mode;
 extern bool var_video_show_debug_info;
 extern bool var_video_linear_filter;
-extern float var_forward_buffer_ratio;
+extern double var_forward_buffer_ratio;
 extern u8 var_wifi_state;
 extern u8 var_wifi_signal;
 extern u8 var_battery_charge;
@@ -26,6 +26,17 @@ extern int var_months;
 extern int var_years;
 extern int var_battery_level_raw;
 extern float var_afk_time;
+
+#define DPAD_SCROLL_SPEED_MIN 1.0
+#define DPAD_SCROLL_SPEED0_DEFAULT 6.0
+#define DPAD_SCROLL_SPEED1_DEFAULT 9.0
+#define DPAD_SCROLL_SPEED_MAX 15.0
+extern double var_dpad_scroll_speed0;
+extern double var_dpad_scroll_speed1;
+#define DPAD_SCROLL_THREASHOLD_MIN 0.3
+#define DPAD_SCROLL_THREASHOLD_DEFAULT 2.0
+#define DPAD_SCROLL_THREASHOLD_MAX 5.0
+extern double var_dpad_scroll_speed1_threashold; // in seconds
 extern int var_free_ram;
 extern int var_free_linear_ram;
 extern int var_lcd_brightness;
