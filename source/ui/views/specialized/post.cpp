@@ -1,6 +1,6 @@
 #include "ui/views/specialized/post.hpp"
-#include "network/thumbnail_loader.hpp"
-#include "system/util/log.hpp"
+#include "network_decoder/thumbnail_loader.hpp"
+#include "util/log.hpp"
 #include "variables.hpp"
 
 void PostView::cancel_all_thumbnail_requests() {

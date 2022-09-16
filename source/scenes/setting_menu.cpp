@@ -2,16 +2,16 @@
 #include <functional>
 #include <regex>
 
-#include "system/util/settings.hpp"
+#include "data_io/settings.hpp"
+#include "data_io/history.hpp"
+#include "util/misc_tasks.hpp"
 #include "scenes/setting_menu.hpp"
 #include "scenes/video_player.hpp"
 #include "ui/overlay.hpp"
 #include "ui/ui.hpp"
 #include "youtube_parser/parser.hpp"
-#include "system/util/history.hpp"
-#include "system/util/misc_tasks.hpp"
-#include "network/thumbnail_loader.hpp"
-#include "network/network_io.hpp"
+#include "network_decoder/thumbnail_loader.hpp"
+#include "network_decoder/network_io.hpp"
 #include "rapidjson_wrapper.hpp"
 
 namespace Settings {

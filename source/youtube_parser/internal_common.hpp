@@ -25,13 +25,13 @@
 #	define debug_error(s) std::cerr << (s) << std::endl
 #else // if it's a 3ds...
 #	include "types.hpp"
-#	include "system/util/log.hpp"
-#	include "system/util/file.hpp"
-#	include "system/util/util.hpp"
-#	include "system/util/history.hpp"
-#	include "system/util/misc_tasks.hpp"
+#	include "system/file.hpp"
 #	include "system/cpu_limit.hpp"
-#	include "network/network_io.hpp"
+#	include "util/util.hpp"
+#	include "util/log.hpp"
+#	include "util/misc_tasks.hpp"
+#	include "data_io/history.hpp"
+#	include "network_decoder/network_io.hpp"
 #	include "definitions.hpp"
 #	define debug_info(s) logger.info("yt-parser", (s))
 #	define debug_caution(s) logger.caution("yt-parser", (s))

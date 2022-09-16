@@ -10,9 +10,9 @@
 #include "youtube_parser/parser.hpp"
 #include "ui/ui.hpp"
 #include "ui/overlay.hpp"
-#include "network/thumbnail_loader.hpp"
-#include "system/util/history.hpp"
-#include "system/util/misc_tasks.hpp"
+#include "network_decoder/thumbnail_loader.hpp"
+#include "data_io/history.hpp"
+#include "util/misc_tasks.hpp"
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 12
 

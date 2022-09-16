@@ -6,12 +6,12 @@
 #include "scenes/video_player.hpp"
 #include "ui/overlay.hpp"
 #include "ui/ui.hpp"
-#include "network/network_io.hpp"
-#include "network/network_decoder_multiple.hpp"
-#include "network/thumbnail_loader.hpp"
-#include "system/util/async_task.hpp"
-#include "system/util/misc_tasks.hpp"
-#include "system/util/util.hpp"
+#include "network_decoder/network_io.hpp"
+#include "network_decoder/network_decoder_multiple.hpp"
+#include "network_decoder/thumbnail_loader.hpp"
+#include "util/async_task.hpp"
+#include "util/misc_tasks.hpp"
+#include "util/util.hpp"
 
 #define ICON_SIZE 55
 #define TAB_SELECTOR_HEIGHT 20

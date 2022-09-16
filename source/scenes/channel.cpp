@@ -11,10 +11,10 @@
 #include "ui/overlay.hpp"
 #include "ui/colors.hpp"
 #include "ui/ui.hpp"
-#include "network/thumbnail_loader.hpp"
-#include "system/util/async_task.hpp"
-#include "system/util/misc_tasks.hpp"
-#include "system/util/subscription_util.hpp"
+#include "network_decoder/thumbnail_loader.hpp"
+#include "util/async_task.hpp"
+#include "util/misc_tasks.hpp"
+#include "data_io/subscription_util.hpp"
 
 #define VIDEOS_MARGIN 6
 #define VIDEOS_VERTICAL_INTERVAL (VIDEO_LIST_THUMBNAIL_HEIGHT + VIDEOS_MARGIN)

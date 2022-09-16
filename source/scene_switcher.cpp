@@ -7,10 +7,10 @@
 #include "scenes/setting_menu.hpp"
 #include "scenes/watch_history.hpp"
 #include "scenes/home.hpp"
-#include "network/network_io.hpp"
-#include "network/thumbnail_loader.hpp"
-#include "system/util/async_task.hpp"
-#include "system/util/misc_tasks.hpp"
+#include "network_decoder/network_io.hpp"
+#include "network_decoder/thumbnail_loader.hpp"
+#include "util/async_task.hpp"
+#include "util/misc_tasks.hpp"
 #include "ui/ui.hpp"
 // add here
 

@@ -6,7 +6,7 @@
 #include "scenes/video_player.hpp"
 #include "ui/overlay.hpp"
 #include "ui/ui.hpp"
-#include "network/thumbnail_loader.hpp"
+#include "network_decoder/thumbnail_loader.hpp"
 
 namespace About {
 	bool thread_suspend = false;

@@ -7,14 +7,14 @@
 
 #include "scenes/home.hpp"
 #include "scenes/search.hpp"
-#include "system/util/subscription_util.hpp"
 #include "scenes/video_player.hpp"
+#include "data_io/subscription_util.hpp"
 #include "youtube_parser/parser.hpp"
 #include "ui/ui.hpp"
 #include "ui/overlay.hpp"
-#include "network/thumbnail_loader.hpp"
-#include "system/util/misc_tasks.hpp"
-#include "system/util/async_task.hpp"
+#include "network_decoder/thumbnail_loader.hpp"
+#include "util/misc_tasks.hpp"
+#include "util/async_task.hpp"
 
 #define MAX_THUMBNAIL_LOAD_REQUEST 12
 
