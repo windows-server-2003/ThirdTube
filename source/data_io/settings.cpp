@@ -3,11 +3,13 @@
 #include "youtube_parser/parser.hpp"
 #include "scenes/video_player.hpp"
 
+#define SETTINGS_FILE_PATH (DEF_MAIN_DIR + "settings.txt")
+
 void load_settings() {
 	char buf[0x1001] = { 0 };
 	u32 read_size;
-	Result_with_string result = Util_file_load_from_file("settings.txt", DEF_MAIN_DIR, (u8 *) buf, 0x1000, &read_size);
-	logger.info(DEF_SEM_INIT_STR , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
+	Result_with_string result = Path(SETTINGS_FILE_PATH).read_file((u8 *) buf, 0x1000, read_size);
+	logger.info(DEF_SEM_INIT_STR , "read_file()..." + result.string + result.error_description, result.code);
 	auto settings = parse_xml_like_text(buf);
 	
 	auto load_int = [&] (std::string key, int default_value) {
@@ -87,6 +89,6 @@ void save_settings() {
 	add_double("dpad_scroll_speed1", var_dpad_scroll_speed1);
 	add_double("dpad_scroll_speed1_threashold", var_dpad_scroll_speed1_threashold);
 	
-	Result_with_string result = Util_file_save_to_file("settings.txt", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
-	logger.info("settings/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
+	Result_with_string result = Path(SETTINGS_FILE_PATH).write_file((u8 *) data.c_str(), data.size());
+	logger.info("settings/save", "write_file()..." + result.string + result.error_description, result.code);
 }

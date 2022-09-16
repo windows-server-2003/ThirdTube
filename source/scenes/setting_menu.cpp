@@ -100,9 +100,8 @@ std::string install_update(NetworkSessionList &session_list) {
 		char *slash_ptr = strrchr(path_3dsx.c_str(), '/');
 		if (!slash_ptr) return "no slash in 3dsx path : " + path_3dsx;
 		size_t slash_index = slash_ptr - path_3dsx.c_str();
-		libctru_result = Util_file_save_to_file(path_3dsx.substr(slash_index + 1, path_3dsx.size()), path_3dsx.substr(0, slash_index + 1),
-			result.data.data(), result.data.size(), true).code;
-		if (libctru_result) return "Failed to write to .3dsx file : " + std::to_string(libctru_result);
+		auto tmp_res = Path(path_3dsx).write_file(result.data.data(), result.data.size());
+		if (tmp_res.code != 0) return "Failed to write to .3dsx file : " + tmp_res.string + " " + std::to_string(tmp_res.code);
 	} else {
 		Handle am_handle = 0;
 		if ((libctru_result = AM_StartCiaInstall(MEDIATYPE_SD, &am_handle))) return "AM_StartCiaInstall() returned " + std::to_string(libctru_result);

@@ -272,8 +272,8 @@ void Util_expl_read_dir_thread(void* arg)
 				expl_size[i] = 0;
 			}
 
-			logger.info(DEF_EXPL_READ_DIR_THREAD_STR, "Util_file_read_dir()...");
-			result = Util_file_read_dir(expl_current_patch, &expl_num_of_file, expl_files, 256, expl_type, 256);
+			logger.info(DEF_EXPL_READ_DIR_THREAD_STR, "read_dir()...");
+			result = Path(expl_current_patch).read_dir(expl_files, expl_type, 256, expl_num_of_file);
 			logger.info(DEF_EXPL_READ_DIR_THREAD_STR, result.string, result.code);
 
 			if (result.code == 0)
@@ -386,7 +386,7 @@ void Util_expl_read_dir_thread(void* arg)
 				if (expl_read_dir_request)
 					break;
 
-				result = Util_file_check_file_size(expl_files[i], expl_current_patch, &file_size);
+				result = Path(expl_current_patch + expl_files[i]).get_size(file_size);
 				if (result.code == 0)
 				{
 					expl_size[i] = (int)file_size;

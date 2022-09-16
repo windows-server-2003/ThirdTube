@@ -45,7 +45,8 @@ static void yt_load_decrypter(void *) {
 	else if (!result.status_code_is_success()) logger.error("yt-dec", "fail http: " + std::to_string(result.status_code));
 	else {
 		youtube_set_cipher_decrypter(std::string(result.data.begin(), result.data.end()));
-		Util_file_save_to_file(std::to_string(DECRYPTER_VERSION) + "_decrypter.txt", DEF_MAIN_DIR, result.data.data(), result.data.size(), true);
+		auto write_res = Path(DEF_MAIN_DIR + std::to_string(DECRYPTER_VERSION) + "_decrypter.txt").write_file(result.data.data(), result.data.size());
+		if (write_res.code != 0) logger.error("yt-dec", "failed writing decypter: " + write_res.string, write_res.code);
 	}
 }
 
@@ -151,12 +152,12 @@ void Menu_init(void)
 	u8 decrypter_buf[1001] = { 0 };
 	u32 read_size;
 	// first load from romfs, which is reliable
-	result = Util_file_load_from_rom("yt_decrypter.txt", "romfs:/", decrypter_buf, 1000, &read_size);
+	result = Path("romfs:/yt_decrypter.txt").read_file(decrypter_buf, 1000, read_size);
 	if (result.code != 0) logger.warning("yt-dec", "default fail: " + result.error_description);
 	else youtube_set_cipher_decrypter((char *) decrypter_buf);
 	// then try loading from local cache, which may be newer but does not always exist
 	memset(decrypter_buf, 0, sizeof(decrypter_buf));
-	result = Util_file_load_from_file(std::to_string(DECRYPTER_VERSION) + "_decrypter.txt", DEF_MAIN_DIR, decrypter_buf, 1000, &read_size);
+	result = Path(DEF_MAIN_DIR + std::to_string(DECRYPTER_VERSION) + "_decrypter.txt").read_file(decrypter_buf, 1000, read_size);
 	if (result.code != 0) logger.warning("yt-dec", "cache fail: " + result.error_description);
 	else youtube_set_cipher_decrypter((char *) decrypter_buf);
 	// fetch from remote

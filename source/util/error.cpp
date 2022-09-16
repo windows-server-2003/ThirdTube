@@ -48,10 +48,10 @@ void Util_err_clear_error_message(void)
 
 void Util_err_save_error(void)
 {
-	Util_file_save_to_file(std::to_string(var_years) + std::to_string(var_months) + std::to_string(var_days)
-	+ std::to_string(var_minutes) + std::to_string(var_seconds) + ".txt", DEF_MAIN_DIR + "error/"
-	, (u8*)(err_error_summary + "\n" + err_error_description + "\n" + err_error_place + "\n" + err_error_code).c_str()
-	, (err_error_summary + "\n" + err_error_description + "\n" + err_error_place + "\n" + err_error_code).length(), true);
+	Path(DEF_MAIN_DIR + "error/" + std::to_string(var_years) + std::to_string(var_months) + std::to_string(var_days)
+	+ std::to_string(var_minutes) + std::to_string(var_seconds) + ".txt").write_file(
+		(u8*)(err_error_summary + "\n" + err_error_description + "\n" + err_error_place + "\n" + err_error_code).c_str(),
+		(err_error_summary + "\n" + err_error_description + "\n" + err_error_place + "\n" + err_error_code).length());
 	Util_err_set_error_show_flag(false);
 }
 

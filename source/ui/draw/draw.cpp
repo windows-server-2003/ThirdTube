@@ -555,17 +555,17 @@ Result_with_string Draw_load_kanji_samples(void)
 {
 	int characters = 0;
 	u8* fs_buffer = (u8*)malloc(0x8000);
-	u32 read_size = 0;
+	u32 size_read = 0;
 	Result_with_string result;
 
 	memset((void*)fs_buffer, 0x0, 0x8000);
-	result = Util_file_load_from_rom("kanji.txt", "romfs:/gfx/font/sample/", fs_buffer, 0x8000, &read_size);
+	result = Path("romfs:/gfx/font/sample/kanji.txt").read_file(fs_buffer, 0x8000, size_read);
 	if(result.code == 0)
 		Exfont_text_parse((char*)fs_buffer, draw_japanese_kanji, 3000, &characters);
 	japanese_kanji_num = characters;
 	
 	memset((void*)fs_buffer, 0x0, 0x8000);
-	result = Util_file_load_from_rom("hanyu_s.txt", "romfs:/gfx/font/sample/", fs_buffer, 0x8000, &read_size);
+	result = Path("romfs:/gfx/font/sample/hanyu_s.txt").read_file(fs_buffer, 0x8000, size_read);
 	if(result.code == 0)
 		Exfont_text_parse((char*)fs_buffer, draw_simple_chinese, 6300, &characters);
 	simple_chinese_num = characters;

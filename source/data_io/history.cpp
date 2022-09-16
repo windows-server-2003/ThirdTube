@@ -10,21 +10,21 @@ static std::vector<HistoryVideo> watch_history;
 static Mutex resource_lock;
 
 #define HISTORY_VERSION 0
-#define HISTORY_FILE_NAME "watch_history.json"
+#define HISTORY_FILE_PATH (DEF_MAIN_DIR + "watch_history.json")
 
 void load_watch_history() {
 	u64 file_size;
-	Result_with_string result = Util_file_check_file_size(HISTORY_FILE_NAME, DEF_MAIN_DIR, &file_size);
+	Result_with_string result = Path(HISTORY_FILE_PATH).get_size(file_size);
 	if (result.code != 0) {
-		logger.error("history/load" , "Util_file_check_file_size()..." + result.string + result.error_description, result.code);
+		logger.error("history/load" , "get_size()..." + result.string + result.error_description, result.code);
 		return;
 	}
 	
 	char *buf = (char *) malloc(file_size + 1);
 	
 	u32 read_size;
-	result = Util_file_load_from_file(HISTORY_FILE_NAME, DEF_MAIN_DIR, (u8 *) buf, file_size, &read_size);
-	logger.info("history/load" , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
+	result = Path(HISTORY_FILE_PATH).read_file((u8 *) buf, file_size, read_size);
+	logger.info("history/load" , "read_file()..." + result.string + result.error_description, result.code);
 	if (result.code == 0) {
 		buf[read_size] = '\0';
 		
@@ -91,8 +91,8 @@ void save_watch_history() {
 	
 	std::string data = RJson(json_root).dump();
 	
-	Result_with_string result = Util_file_save_to_file(HISTORY_FILE_NAME, DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
-	logger.info("history/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
+	Result_with_string result = Path(HISTORY_FILE_PATH).write_file((u8 *) data.c_str(), data.size());
+	logger.info("history/save", "write_file()..." + result.string + result.error_description, result.code);
 }
 void add_watched_video(HistoryVideo video) {
 	if (var_history_enabled) {

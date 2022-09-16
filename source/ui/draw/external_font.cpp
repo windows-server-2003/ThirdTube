@@ -746,19 +746,19 @@ void Exfont_init(void)
 	logger.info(DEF_EXFONT_INIT_STR, "Initializing...");
 	int characters = 0;
 	u8* fs_buffer = NULL;
-	u32 read_size = 0;
+	u32 size_read = 0;
 	Result_with_string result;
 	fs_buffer = (u8*)malloc(0x8000);
 
 	memset((void*)fs_buffer, 0x0, 0x8000);
-	result = Util_file_load_from_rom("font_name.txt", "romfs:/gfx/msg/", fs_buffer, 0x2000, &read_size);
+	result = Path("romfs:/gfx/msg/font_name.txt").read_file(fs_buffer, 0x2000, size_read);
 	if (result.code != 0) logger.error(DEF_EXFONT_INIT_STR, "Load font_name.txt: " + result.string + result.error_description, result.code);
 	
 	result = Util_parse_file((char*)fs_buffer, DEF_EXFONT_NUM_OF_FONT_NAME, exfont_font_name);
 	if (result.code != 0) logger.error(DEF_EXFONT_INIT_STR, "Util_parse_file()..." + result.string + result.error_description, result.code);
 
 	memset((void*)fs_buffer, 0x0, 0x8000);
-	result = Util_file_load_from_rom("font_samples.txt", "romfs:/gfx/font/sample/", fs_buffer, 0x8000, &read_size);
+	result = Path("romfs:/gfx/font/sample/font_samples.txt").read_file(fs_buffer, 0x8000, size_read);
 	if (result.code == 0) Exfont_text_parse((char*)fs_buffer, exfont_font_samples, 10240, &characters);
 	else logger.error(DEF_EXFONT_INIT_STR, "Load font_samples.txt: " + result.string + result.error_description, result.code);
 
@@ -769,7 +769,7 @@ void Exfont_init(void)
 		logger.error("font", "non-increasing at " + std::to_string(i));
 
 	memset((void*)fs_buffer, 0x0, 0x8000);
-	result = Util_file_load_from_rom("font_right_to_left_samples.txt", "romfs:/gfx/font/sample/", fs_buffer, 0x8000, &read_size);
+	result = Path("romfs:/gfx/font/sample/font_right_to_left_samples.txt").read_file(fs_buffer, 0x8000, size_read);
 	if (result.code == 0) Exfont_text_parse((char*)fs_buffer, exfont_font_right_to_left_samples, 256, &characters);
 	else logger.error(DEF_EXFONT_INIT_STR, "Load font_right_to_left_samples.txt: " + result.string + result.error_description, result.code);
 

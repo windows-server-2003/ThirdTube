@@ -17,7 +17,7 @@ Result_with_string load_string_resources(std::string lang) {
 	static char buffer[0x2001];
 	memset(buffer, 0, sizeof(buffer));
 	u32 read_size;
-	result = Util_file_load_from_rom("string_resources_" + lang + ".txt", "romfs:/gfx/msg/", (u8 *) buffer, 0x2000, &read_size);
+	result = Path("romfs:/gfx/msg/string_resources_" + lang + ".txt").read_file((u8 *) buffer, 0x2000, read_size);
 	if (result.code != 0)
 	{
 		result.code = -1;
