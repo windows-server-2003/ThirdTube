@@ -23,7 +23,7 @@ YouTubeHomeResult youtube_load_home_page() {
 		},
 		[&] (const std::string &error) {
 			res.error = "[home] " + error;
-			debug(res.error);
+			debug_error(res.error);
 		}
 	);
 	
@@ -33,7 +33,7 @@ void YouTubeHomeResult::load_more_results() {
 	if (continue_token == "") error = "[home] continue token not set";
 	if (visitor_data == "") error = "[home] visitor data not set";
 	if (error != "") {
-		debug(error);
+		debug_error(error);
 		return;
 	}
 	
@@ -57,7 +57,7 @@ void YouTubeHomeResult::load_more_results() {
 				}
 			}
 		},
-		[&] (const std::string &error) { debug((this->error = "[home-c] " + error)); }
+		[&] (const std::string &error) { debug_error((this->error = "[home-c] " + error)); }
 	);
 }
 

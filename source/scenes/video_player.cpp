@@ -176,7 +176,7 @@ static void convert_thread(void* arg);
 
 
 void VideoPlayer_init(void) {
-	Util_log_save(DEF_SAPP0_INIT_STR, "Initializing...");
+	logger.info(DEF_SAPP0_INIT_STR, "Initializing...");
 	bool new_3ds = false;
 	Result_with_string result;
 	
@@ -372,7 +372,7 @@ void VideoPlayer_init(void) {
 					}
 				})
 				->set_on_release([i] (BarView &view) {
-					Util_log_save("debug", std::to_string(i) + " : " + std::to_string(view.get_value()));
+					logger.info("debug", std::to_string(i) + " : " + std::to_string(view.get_value()));
 					network_decoder.set_equalizer_value(i, view.get_value());
 				});
 		equalizer_views.push_back((new HorizontalListView(0, 0, DEFAULT_FONT_INTERVAL))->set_views({
@@ -497,16 +497,16 @@ void VideoPlayer_init(void) {
 	}
 
 	result = Draw_load_texture("romfs:/gfx/draw/video_player/banner.t3x", 61, vid_banner, 0, 2);
-	if (result.code != 0) Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+	if (result.code != 0) logger.error(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 
 	result = Draw_load_texture("romfs:/gfx/draw/video_player/control.t3x", 62, vid_control, 0, 2);
-	if (result.code != 0) Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+	if (result.code != 0) logger.error(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 	
 	result = Draw_load_texture("romfs:/gfx/draw/thumb_up.t3x", 63, var_texture_thumb_up, 0, 2);
-	if (result.code != 0) Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+	if (result.code != 0) logger.error(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 	
 	result = Draw_load_texture("romfs:/gfx/draw/thumb_down.t3x", 64, var_texture_thumb_down, 0, 2);
-	if (result.code != 0) Util_log_save(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
+	if (result.code != 0) logger.error(DEF_SAPP0_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
 	
 	
 	vid_x = 0;
@@ -528,10 +528,10 @@ void VideoPlayer_init(void) {
 	
 	video_set_show_debug_info(var_video_show_debug_info);
 	video_set_linear_filter_enabled(var_video_linear_filter);
-	Util_log_save(DEF_SAPP0_INIT_STR, "Initialized.");
+	logger.info(DEF_SAPP0_INIT_STR, "Initialized.");
 }
 void VideoPlayer_exit(void) {
-	Util_log_save(DEF_SAPP0_EXIT_STR, "Exiting...");
+	logger.info(DEF_SAPP0_EXIT_STR, "Exiting...");
 	u64 time_out = 10000000000;
 	Result_with_string result;
 
@@ -543,10 +543,10 @@ void VideoPlayer_exit(void) {
 	stream_downloader.request_thread_exit();
 	network_decoder.interrupt = true;
 	network_decoder.request_thread_exit();
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(stream_downloader_thread, time_out));
-	Util_log_save(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(livestream_initer_thread, time_out));
+	logger.info(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_decode_thread, time_out));
+	logger.info(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(vid_convert_thread, time_out));
+	logger.info(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(stream_downloader_thread, time_out));
+	logger.info(DEF_SAPP0_EXIT_STR, "threadJoin()...", threadJoin(livestream_initer_thread, time_out));
 	threadFree(vid_decode_thread);
 	threadFree(vid_convert_thread);
 	threadFree(stream_downloader_thread);
@@ -599,7 +599,7 @@ void VideoPlayer_exit(void) {
 	for(int i = 0; i < 2; i++)
 		Draw_c2d_image_free(vid_image[i]);
 	
-	Util_log_save(DEF_SAPP0_EXIT_STR, "Exited.");
+	logger.info(DEF_SAPP0_EXIT_STR, "Exited.");
 }
 void VideoPlayer_suspend(void) {
 	vid_thread_suspend = true;
@@ -767,14 +767,14 @@ static void load_video_page(void *arg) {
 	small_resource_lock.unlock();
 	
 	if (need_loading) {
-		Util_log_save("player/load-v", "request : " + url);
+		logger.info("player/load-v", "request : " + url);
 		add_cpu_limit(ADDITIONAL_CPU_LIMIT);
 		tmp_video_info = youtube_load_video_page(url);
 		remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	}
 	
 	if (is_to_display) {
-		Util_log_save("player/load-v", "truncate/view creation start");
+		logger.info("player/load-v", "truncate/view creation start");
 		// prepare views in the main tab
 		std::vector<View *> main_tab_views;
 		ImageView *new_main_icon_view = (new ImageView(0, 0, ICON_SIZE, ICON_SIZE));
@@ -1029,7 +1029,7 @@ static void load_video_page(void *arg) {
 		playlist_view_scroll = std::min<double>(playlist_view_scroll, tmp_video_info.playlist.videos.size() * SUGGESTIONS_VERTICAL_INTERVAL - (CONTENT_Y_HIGH - PLAYLIST_TOP_HEIGHT));
 		playlist_view_scroll = std::max<double>(playlist_view_scroll, 0);
 		
-		Util_log_save("player/load-v", "truncate/view creation end");
+		logger.info("player/load-v", "truncate/view creation end");
 		
 		
 		// acquire lock and perform actual replacements
@@ -1191,10 +1191,10 @@ static void load_more_suggestions(void *arg_) {
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	// wrap suggestion titles
-	Util_log_save("player/load-s", "truncate/view creation start");
+	logger.info("player/load-s", "truncate/view creation start");
 	std::vector<View *> new_suggestion_views;
 	for (size_t i = arg->suggestions.size(); i < new_result.suggestions.size(); i++) new_suggestion_views.push_back(suggestion_to_view(new_result.suggestions[i]));
-	Util_log_save("player/load-s", "truncate/view creation end");
+	logger.info("player/load-s", "truncate/view creation end");
 	
 	small_resource_lock.lock();
 	if (!vid_already_init) { // app shut down while loading
@@ -1222,9 +1222,9 @@ static void load_more_comments(void *arg_) {
 	
 	std::vector<View *> new_comment_views;
 	// wrap comments
-	Util_log_save("player/load-c", "truncate/views creation start");
+	logger.info("player/load-c", "truncate/views creation start");
 	for (size_t i = arg->comments.size(); i < new_result.comments.size(); i++) new_comment_views.push_back(comment_to_view(new_result.comments[i], i));
-	Util_log_save("player/load-c", "truncate/views creation end");
+	logger.info("player/load-c", "truncate/views creation end");
 	
 	small_resource_lock.lock();
 	if (!vid_already_init) { // app shut down while loading
@@ -1251,7 +1251,7 @@ static void load_more_replies(void *arg_) {
 	
 	std::vector<PostView *> new_reply_views;
 	// wrap comments
-	Util_log_save("player/load-r", "truncate start");
+	logger.info("player/load-r", "truncate start");
 	for (size_t i = comment.replies.size(); i < new_comment.replies.size(); i++) {
 		auto &cur_reply = new_comment.replies[i];
 		auto &cur_content = cur_reply.content;
@@ -1278,7 +1278,7 @@ static void load_more_replies(void *arg_) {
 			->set_is_reply(true)
 		);
 	}
-	Util_log_save("player/load-r", "truncate end");
+	logger.info("player/load-r", "truncate end");
 	
 	small_resource_lock.lock();
 	if (!vid_already_init) { // app shut down while loading
@@ -1600,14 +1600,14 @@ void video_draw_top_screen() {
 	
 	Draw_screen_ready(0, video_get_top_screen_background_color());
 	video_draw_video_frame();
-	if (Util_log_query_log_show_flag()) Util_log_draw();
+	logger.draw();
 	if (video_should_draw_top_bar()) Draw_top_ui();
 	if (var_debug_mode) Draw_debug_info();
 }
 
 
 static void decode_thread(void* arg) {
-	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Thread started.");
+	logger.info(DEF_SAPP0_DECODE_THREAD_STR, "Thread started.");
 
 	Result_with_string result;
 	int ch = 0;
@@ -1685,11 +1685,11 @@ static void decode_thread(void* arg) {
 				result.error_description = "No valid stream url extracted";
 			}
 			
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
+			logger.info(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.init()..." + result.string + result.error_description, result.code);
 			if(result.code != 0) {
 				if (video_retry_left > 0) {
 					video_retry_left--;
-					Util_log_save("dec", "failed, retrying. retry cnt left:" + std::to_string(video_retry_left));
+					logger.caution("dec", "failed, retrying. retry cnt left:" + std::to_string(video_retry_left));
 					send_change_video_request(cur_playing_url, true, false, true);
 				} else {
 					Util_err_set_error_message(result.string, result.error_description, DEF_SAPP0_DECODE_THREAD_STR, result.code);
@@ -1750,10 +1750,10 @@ static void decode_thread(void* arg) {
 						result = network_decoder.seek(seek_pos_bak * 1000 * 1000); // nano seconds
 						// if seek failed because of the lock, it's probably another seek request or other requests (change video etc...), so we can ignore it
 						if (network_decoder.interrupt) {
-							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "seek interrupted");
+							logger.info(DEF_SAPP0_DECODE_THREAD_STR, "seek interrupted");
 							continue; 
 						}
-						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
+						logger.info(DEF_SAPP0_DECODE_THREAD_STR, "network_decoder.seek()..." + result.string + result.error_description, result.code);
 						if (result.code != 0) vid_play_request = false;
 						break;
 					}
@@ -1807,7 +1807,7 @@ static void decode_thread(void* arg) {
 						free(audio);
 						audio = NULL;
 					} else if (result.code != DEF_ERR_NEED_MORE_INPUT) // ignore NEED_MORE_INPUT error
-						Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_audio_decoder_decode()..." + result.string + result.error_description, result.code);
+						logger.error(DEF_SAPP0_DECODE_THREAD_STR, "Util_audio_decoder_decode()..." + result.string + result.error_description, result.code);
 				} else if (type == NetworkMultipleDecoder::PacketType::VIDEO) {
 					osTickCounterUpdate(&counter0);
 					result = network_decoder.decode_video(&w, &h, &key);
@@ -1839,10 +1839,10 @@ static void decode_thread(void* arg) {
 					
 					if (vid_play_request && !vid_seek_request && !vid_change_video_request) {
 						if (result.code != 0 && result.code != DEF_ERR_NEED_MORE_INPUT)
-							Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
+							logger.error(DEF_SAPP0_DECODE_THREAD_STR, "Util_video_decoder_decode()..." + result.string + result.error_description, result.code);
 					}
 				} else if (type == NetworkMultipleDecoder::PacketType::INTERRUPTED) continue;
-				else Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "unknown type of packet");
+				else logger.error(DEF_SAPP0_DECODE_THREAD_STR, "unknown type of packet");
 			}
 			
 			network_waiting_status = NULL;
@@ -1861,7 +1861,7 @@ static void decode_thread(void* arg) {
 			var_need_reflesh = true;
 			vid_pausing = false;
 			vid_seek_request = false;
-			Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "deinit complete");
+			logger.info(DEF_SAPP0_DECODE_THREAD_STR, "deinit complete");
 		}
 		else
 			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
@@ -1870,12 +1870,12 @@ static void decode_thread(void* arg) {
 			usleep(DEF_INACTIVE_THREAD_SLEEP_TIME);
 	}
 	
-	Util_log_save(DEF_SAPP0_DECODE_THREAD_STR, "Thread exit.");
+	logger.info(DEF_SAPP0_DECODE_THREAD_STR, "Thread exit.");
 	threadExit(0);
 }
 
 static void convert_thread(void* arg) {
-	Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Thread started.");
+	logger.info(DEF_SAPP0_CONVERT_THREAD_STR, "Thread started.");
 	u8* yuv_video = NULL;
 	u8* video = NULL;
 	TickCounter counter0, counter1;
@@ -1913,7 +1913,7 @@ static void convert_thread(void* arg) {
 				}
 				if (!vid_play_request || vid_seek_request || vid_change_video_request) break;
 				if (result.code != 0) { // this is an unexpected error
-					Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "failure getting decoded result" + result.string + result.error_description, result.code);
+					logger.error(DEF_SAPP0_CONVERT_THREAD_STR, "failure getting decoded result" + result.string + result.error_description, result.code);
 					vid_play_request = false;
 					break;
 				}
@@ -1931,8 +1931,7 @@ static void convert_thread(void* arg) {
 				
 				double cur_convert_time = 0;
 				
-				if(result.code == 0)
-				{
+				if(result.code == 0) {
 					// we don't want to include the sleep time in the performance profiling
 					osTickCounterUpdate(&counter0);
 					vid_copy_time[1] = osTickCounterRead(&counter0);
@@ -1961,7 +1960,7 @@ static void convert_thread(void* arg) {
 						vid_tex_height[texture_index_head] = vid_height_org;
 						result = Draw_set_texture_data(&vid_image[texture_index_head], video, vid_width, vid_height_org, 1024, 1024, GPU_RGB565);
 						if(result.code != 0)
-							Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
+							logger.error(DEF_SAPP0_CONVERT_THREAD_STR, "Draw_set_texture_data()..." + result.string + result.error_description, result.code);
 						texture_index_head = !texture_index_head;
 					}
 
@@ -1969,9 +1968,7 @@ static void convert_thread(void* arg) {
 					vid_copy_time[1] += osTickCounterRead(&counter0);
 					
 					var_need_reflesh = true;
-				}
-				else
-					Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Util_converter_yuv420p_to_bgr565()..." + result.string + result.error_description, result.code);
+				} else logger.error(DEF_SAPP0_CONVERT_THREAD_STR, "Util_converter_yuv420p_to_bgr565()..." + result.string + result.error_description, result.code);
 
 				if (video_need_free) free(video);
 				video = NULL;
@@ -1992,7 +1989,7 @@ static void convert_thread(void* arg) {
 	
 	y2rExit();
 	
-	Util_log_save(DEF_SAPP0_CONVERT_THREAD_STR, "Thread exit.");
+	logger.info(DEF_SAPP0_CONVERT_THREAD_STR, "Thread exit.");
 	threadExit(0);
 }
 

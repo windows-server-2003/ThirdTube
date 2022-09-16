@@ -63,7 +63,7 @@ static void load_search_results(void *);
 static void load_more_search_results(void *);
 
 void Search_init(void) {
-	Util_log_save("search/init", "Initializing...");
+	logger.info("search/init", "Initializing...");
 	Result_with_string result;
 	
 	search_box_view = (new TextView(0, SEARCH_BOX_MARGIN, 320 - SEARCH_BOX_MARGIN * 3 - URL_BUTTON_WIDTH, RESULT_Y_LOW - SEARCH_BOX_MARGIN * 2 - 1));
@@ -145,7 +145,7 @@ void Search_exit(void) {
 	resource_lock.unlock();
 	
 	
-	Util_log_save("search/exit", "Exited.");
+	logger.info("search/exit", "Exited.");
 }
 
 void Search_suspend(void) {
@@ -245,10 +245,10 @@ static void load_search_results(void *) {
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
 	// wrap and truncate here
-	Util_log_save("search", "truncate/view creation start");
+	logger.info("search", "truncate/view creation start");
 	std::vector<View *> new_result_views;
 	for (size_t i = 0; i < new_result.results.size(); i++) new_result_views.push_back(result_item_to_view(new_result.results[i]));
-	Util_log_save("search", "truncate/view creation end");
+	logger.info("search", "truncate/view creation end");
 	
 	resource_lock.lock();
 	if (exiting) { // app shut down while loading
@@ -267,10 +267,10 @@ static void load_more_search_results(void *) {
 	auto new_result = search_result;
 	new_result.load_more_results();
 	
-	Util_log_save("search-c", "truncate/view creation start");
+	logger.info("search-c", "truncate/view creation start");
 	std::vector<View *> new_result_views;
 	for (size_t i = search_result.results.size(); i < new_result.results.size(); i++) new_result_views.push_back(result_item_to_view(new_result.results[i]));
-	Util_log_save("search-c", "truncate/view creation end");
+	logger.info("search-c", "truncate/view creation end");
 	
 	
 	resource_lock.lock();

@@ -54,7 +54,7 @@ static bool extract_player_data(Document &json_root, RJson player_response, YouT
 		if (i.has_key("targetDurationSec")) {
 			int new_stream_fragment_len = i["targetDurationSec"].int_value();
 			if (res.stream_fragment_len != -1 && res.stream_fragment_len != new_stream_fragment_len)
-				debug("[unexp] diff targetDurationSec for diff streams");
+				debug_warning("[unexp] diff targetDurationSec for diff streams");
 			res.stream_fragment_len = new_stream_fragment_len;
 			res.is_livestream = true;
 		}
@@ -166,7 +166,7 @@ static void extract_item(RJson content, YouTubeVideoDetail &res) {
 				auto video_id = get_video_id_from_thumbnail_url(cur_list.thumbnail_url);
 				cur_list.url = "https://m.youtube.com/watch?v=" + video_id + "&list=" + playlist_id;
 			} else {
-				debug("unknown playlist url");
+				debug_warning("unknown playlist url");
 				return;
 			}
 		}
@@ -257,7 +257,7 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 	};
 #	ifdef _WIN32
 	std::string json_str[2]; // {/next, /player}
-	for (int i = 0; i < 2; i++) json_str[i] = http_post_json(urls[i], post_content);
+	for (int i = 0; i < 2; i++) json_str[i] = http_post_json(urls[i], post_content).second;
 	for (int i = 0; i < 2; i++) {
 		parse_json_destructive(&json_str[i][0],
 			[&] (Document &json_root, RJson data) {
@@ -266,12 +266,12 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 			},
 			[&] (const std::string &error) {
 				res.error = "[v-#" + std::to_string(i) + "] " + error;
-				debug(res.error);
+				debug_error(res.error);
 			}
 		);
 	}
 #	else
-	debug("accessing(multi)...");
+	debug_info("accessing(multi)...");
 	std::vector<NetworkResult> results;
 	{
 		std::vector<HttpRequest> requests;
@@ -280,9 +280,9 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 		bool fail = false;
 		for (int i = 0; i < 2; i++) if (results[i].fail) {
 			fail = true;
-			debug("#" + std::to_string(i) + " fail");
+			debug_error("#" + std::to_string(i) + " fail");
 		}
-		if (!fail) debug("ok");
+		if (!fail) debug_info("ok");
 	}
 	for (int i = 0; i < 2; i++) {
 		results[i].data.push_back('\0');
@@ -293,7 +293,7 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 			},
 			[&] (const std::string &error) {
 				res.error = "[v-#" + std::to_string(i) + "] " + error;
-				debug(res.error);
+				debug_error(res.error);
 			}
 		);
 	}
@@ -302,11 +302,11 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 #	ifdef _WIN32
 	// for debug purpose, to check whether the extracted stream url is working
 	if (res.audio_stream_url != "") {
-		auto tmp_data = http_get(res.audio_stream_url, {{"Range", "bytes=0-400000"}});
+		auto tmp_data = http_get(res.audio_stream_url, {{"Range", "bytes=0-400000"}}).second;
 		if (tmp_data.size() != 400001) {
-			debug("!!!!!!!!!!!!!!!!!!!!! SIZE DIFFER : " + std::to_string(tmp_data.size()) + " !!!!!!!!!!!!!!!!!!!!!");
-		} else debug("----------------------- OK -----------------------");
-	} else debug("!!!!!!!!!!!!!!!!!!!!! AUDIO STREAM URL EMPTY !!!!!!!!!!!!!!!!!!!!!");
+			debug_error("!!!!!!!!!!!!!!!!!!!!! SIZE DIFFER : " + std::to_string(tmp_data.size()) + " !!!!!!!!!!!!!!!!!!!!!");
+		} else debug_info("----------------------- OK -----------------------");
+	} else debug_error("!!!!!!!!!!!!!!!!!!!!! AUDIO STREAM URL EMPTY !!!!!!!!!!!!!!!!!!!!!");
 #	endif
 	
 	if (res.id != "") res.succinct_thumbnail_url = youtube_get_video_thumbnail_url_by_id(res.id);
@@ -324,7 +324,7 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 	}
 #	endif
 	
-	debug(res.title != "" ? res.title : "preason : " + res.playability_reason);
+	debug_info(res.title != "" ? res.title : "preason : " + res.playability_reason);
 	return res;
 }
 
@@ -348,7 +348,7 @@ void YouTubeVideoDetail::load_more_suggestions() {
 				for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items())
 					extract_item(j, *this);
 		},
-		[&] (const std::string &error) { debug((this->error = "[v-sug+] " + error)); }
+		[&] (const std::string &error) { debug_error((this->error = "[v-sug+] " + error)); }
 	);
 }
 
@@ -398,7 +398,7 @@ void YouTubeVideoDetail::load_more_comments() {
 					}
 				}
 			},
-			[&] (const std::string &error) { debug((this->error = "[v-com+0] " + error)); }
+			[&] (const std::string &error) { debug_error((this->error = "[v-com+0] " + error)); }
 		);
 	} else {
 		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00", "utcOffsetMinutes": 0}, "request": {}, "user": {}}, "continuation": ")"
@@ -424,14 +424,14 @@ void YouTubeVideoDetail::load_more_comments() {
 					}
 				}
 			},
-			[&] (const std::string &error) { debug((this->error = "[v-com+1] " + error)); }
+			[&] (const std::string &error) { debug_error((this->error = "[v-com+1] " + error)); }
 		);
 	}
 }
 
 void YouTubeVideoDetail::Comment::load_more_replies() {
 	if (!this->has_more_replies()) {
-		debug("load_more_replies on a comment that has no replies to load");
+		debug_caution("load_more_replies on a comment that has no replies to load");
 		return;
 	}
 	
@@ -452,7 +452,7 @@ void YouTubeVideoDetail::Comment::load_more_replies() {
 				}
 			}
 		},
-		[&] (const std::string &error) { debug((this->error = "[v-rep+] " + error)); }
+		[&] (const std::string &error) { debug_error((this->error = "[v-rep+] " + error)); }
 	);
 }
 
@@ -463,7 +463,7 @@ void YouTubeVideoDetail::load_caption(const std::string &base_lang_id, const std
 		break;
 	}
 	if (base_lang_index == -1) {
-		debug("[caption] unknown base language");
+		debug_error("[caption] unknown base language");
 		return;
 	}
 		
@@ -474,7 +474,7 @@ void YouTubeVideoDetail::load_caption(const std::string &base_lang_id, const std
 			break;
 		}
 		if (translation_lang_index == -1) {
-			debug("[caption] unknown translation language");
+			debug_error("[caption] unknown translation language");
 			return;
 		}
 	}
@@ -498,7 +498,7 @@ void YouTubeVideoDetail::load_caption(const std::string &base_lang_id, const std
 			}
 			caption_data[{base_lang_id, translation_lang_id}] = cur_caption;
 		},
-		[&] (const std::string &error) { debug((this->error = "[v-cap+] " + error)); }
+		[&] (const std::string &error) { debug_error((this->error = "[v-cap+] " + error)); }
 	);
 }
 

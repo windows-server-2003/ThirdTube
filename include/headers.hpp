@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <cmath>
 #include <limits>
+#include <cstdint>
+#include <cinttypes>
 #include "citro2d.h"
 
 #include "definitions.hpp"

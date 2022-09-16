@@ -69,7 +69,7 @@ int thumbnail_request(const std::string &url, SceneType scene_id, int priority, 
 	requested_urls[url].type = type;
 	thumbnail_free_time.erase(url);
 	resource_lock.unlock();
-	if (requests.size() > 180) Util_log_save("tloader", "WARNING : request size too large, possible resource leak : " + std::to_string(requests.size()));
+	if (requests.size() > 180) logger.warning("tloader", "request size too large, possible resource leak : " + std::to_string(requests.size()));
 	return handle;
 }
 inline static void thumbnail_cancel_request_wo_lock(int handle) {
@@ -166,7 +166,7 @@ static std::vector<u8> http_get(const std::string &url, int &status_code) {
 	auto result = thread_network_session_list.perform(HttpRequest::GET(url, {}));
 	if (result.fail) {
 		status_code = -1;
-		Util_log_save("thumb-dl", "access fail : " + result.error);
+		logger.error("thumb-dl", "access fail : " + result.error);
 	} else {
 		if (result.data.size() && result.status_code / 100 == 2) {
 			resource_lock.lock();
@@ -185,7 +185,7 @@ static std::vector<u8> http_get(const std::string &url, int &status_code) {
 			}
 			thumbnail_cache[url] = result.data;
 			
-			if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) Util_log_save("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
+			if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) logger.warning("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
 			
 			resource_lock.unlock();
 		}
@@ -264,7 +264,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 					if (erase_url != "") thumbnail_cache.erase(erase_url);
 				}
 				thumbnail_cache[info.url] = res.data;
-				if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) Util_log_save("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
+				if (thumbnail_cache.size() >= THUMBNAIL_CACHE_MAX + 10) logger.warning("tloader", "over caching : " + std::to_string(thumbnail_cache.size()));
 				resource_lock.unlock();
 				
 				// some special operations on the picture here (it shouldn't be here but...)
@@ -300,10 +300,10 @@ void thumbnail_downloader_thread_func(void *arg) {
 				
 				Result_with_string result;
 				result = Draw_c2d_image_init(&result_image, texture_w, texture_h, GPU_RGB565);
-				if (result.code != 0) Util_log_save("thumb-dl", "out of linearmem");
+				if (result.code != 0) logger.error("thumb-dl", "out of linearmem");
 				else {
 					result = Draw_set_texture_data(&result_image, decoded_data, w, h, texture_w, texture_h, GPU_RGB565);
-					if (result.code != 0) Util_log_save("thumb-dl", "Draw_set_texture_data() failed");
+					if (result.code != 0) logger.error("thumb-dl", "Draw_set_texture_data() failed");
 					else {
 						resource_lock.lock();
 						if (requested_urls.count(info.url)) { // in case the request is cancelled while downloading
@@ -330,7 +330,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 				std::string err_msg = "load failed (http code : " + std::to_string(res.status_code) + ") size:" + std::to_string(res.data.size()) +
 					" err:" + res.error;
 				
-				Util_log_save("thumb-dl", err_msg);
+				logger.error("thumb-dl", err_msg);
 			}
 		};
 		TickCounter counter;
@@ -361,7 +361,7 @@ void thumbnail_downloader_thread_func(void *arg) {
 	requested_urls.clear();
 	resource_lock.unlock();
 	
-	Util_log_save("thumb-dl", "Thread exit.");
+	logger.info("thumb-dl", "Thread exit.");
 	threadExit(0);
 }
 void thumbnail_downloader_thread_exit_request() {

@@ -90,7 +90,7 @@ static int curl_debug_callback_func(CURL *handle, curl_infotype type, char *data
 	if (type == CURLINFO_SSL_DATA_OUT) prefix = "D>";
 	if (type == CURLINFO_DATA_IN) prefix = "d<";
 	if (type == CURLINFO_SSL_DATA_IN) prefix = "D<";
-	Util_log_save("curl", prefix + std::string(data, data + size));
+	logger.info("curl", prefix + std::string(data, data + size));
 	return 0;
 }
 
@@ -151,7 +151,7 @@ CURLMcode NetworkSessionList::curl_perform_requests() {
 				// Util_log_save("bench", "finished #" + std::to_string(request_index));
 				
 				if (request_index == -1) {
-					Util_log_save("curl", "unexpected : while processing multi message corresponding request not found");
+					logger.error("curl", "unexpected : while processing multi message corresponding request not found");
 					continue;
 				}
 				RequestInternal &req = curl_requests[request_index];
@@ -166,9 +166,9 @@ CURLMcode NetworkSessionList::curl_perform_requests() {
 					char *redirected_url;
 					curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &redirected_url);
 					res.redirected_url = redirected_url;
-					if (res.redirected_url != req.orig_url) Util_log_save("curl", "redir : " + res.redirected_url);
+					if (res.redirected_url != req.orig_url) logger.info("curl", "redir : " + res.redirected_url);
 				} else {
-					Util_log_save("curl", std::string("deep fail : ") + curl_easy_strerror(each_result) + " / " + req.errbuf);
+					logger.error("curl", std::string("deep fail : ") + curl_easy_strerror(each_result) + " / " + req.errbuf);
 					res.fail = true;
 					res.error = req.errbuf;
 				}
@@ -182,7 +182,7 @@ CURLMcode NetworkSessionList::curl_perform_requests() {
 		CURLMcode res = curl_multi_perform(curl_multi, &running_request_num);
 		if (res) {
 			std::string err = curl_multi_strerror(res);
-			Util_log_save("curl", "curl multi deep fail : " + err);
+			logger.error("curl", "curl multi deep fail : " + err);
 			for (auto &i : curl_requests) {
 				i.res->fail = true;
 				i.res->error = err;
@@ -252,7 +252,8 @@ static bool exclusive_state_entered = false;
 void lock_network_state() {
 	int res = 0;
 	if (!exclusive_state_entered) {
-		Util_log_save("init", "ndmuInit()...", ndmuInit());
+		res = ndmuInit();
+		if (res != 0) logger.error("init",  "ndmuInit(): " + std::to_string(res));
 		res = NDMU_EnterExclusiveState(NDM_EXCLUSIVE_STATE_INFRASTRUCTURE);
 		if (R_SUCCEEDED(res)) res = NDMU_LockState(); // prevents ndm from switching to StreetPass when the lid is closed
 		exclusive_state_entered = R_SUCCEEDED(res);

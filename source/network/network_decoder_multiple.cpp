@@ -25,11 +25,11 @@ void NetworkMultipleDecoder::init_mvd() {
 		for (int mb = 15; mb >= 5; mb--) {
 			mvd_result = mvdstdInit(MVDMODE_VIDEOPROCESSING, MVD_INPUT_H264, MVD_OUTPUT_BGR565, 1000000 * mb, NULL);
 			if (mvd_result == 0) {
-				Util_log_save("dec/init", "mvdstdInit ok at " + std::to_string(mb) + " MB (total : " + std::to_string(linearSpaceFree() / 1000) + " KB)");
+				logger.info("dec/init", "mvdstdInit ok at " + std::to_string(mb) + " MB (total : " + std::to_string(linearSpaceFree() / 1000) + " KB)");
 				break;
 			}
 		}
-		if (mvd_result != 0) Util_log_save("dec/init", "mvdstdInit returned " + std::to_string(mvd_result) + " with a minimum size of work buffer");
+		if (mvd_result != 0) logger.error("dec/init", "mvdstdInit returned " + std::to_string(mvd_result) + " with a minimum size of work buffer");
 		else mvd_inited = true;
 	}
 }
@@ -39,7 +39,7 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	Result_with_string result;
 	
 	if (inited) {
-		Util_log_save("net/mul-dec", "double init");
+		logger.caution("net/mul-dec", "double init, deiniting...");
 		deinit();
 	}
 	
@@ -241,7 +241,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			usleep(10000);
 			continue;
 		}
-		Util_log_save("net/live-init", "next : " + std::to_string(seq_next));
+		logger.info("net/live-init", "next : " + std::to_string(seq_next));
 		
 		NetworkDecoderFFmpegIOData tmp_ffmpeg_data;
 		if (video_audio_seperate) {
@@ -256,20 +256,20 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			if (result.code != 0) {
 				if (video_stream->livestream_eof || audio_stream->livestream_eof) {
 					if (++error_count[seq_next] >= MAX_LIVESTREAM_RETRY) {
-						Util_log_save("net/live-init", "eof detected, the end of the livestream");
+						logger.caution("net/live-init", "eof detected, the end of the livestream");
 						seq_num = std::min((int) seq_num, seq_next);
-					} else Util_log_save("net/live-init", "eof detected, retrying...  retry cnt : " + std::to_string(error_count[seq_next]));
+					} else logger.info("net/live-init", "eof detected, retrying...  retry cnt : " + std::to_string(error_count[seq_next]));
 				} else error_count[seq_next] = 0;
 				if (video_stream->livestream_private || audio_stream->livestream_private) {
-					Util_log_save("net/live-init", "the livestream became private");
+					logger.caution("net/live-init", "the livestream became private");
 					seq_num = 0;
 				}
-				Util_log_save("net/live-init", "init err : " + result.error_description);
+				logger.caution("net/live-init", "init err : " + result.error_description);
 				video_stream->quit_request = true;
 				audio_stream->quit_request = true;
 				continue;
 			} else if (decoder.interrupt) {
-				Util_log_save("net/live-init", "init interrupt but not err : " + result.error_description);
+				logger.caution("net/live-init", "init interrupt but not err : " + result.error_description);
 				video_stream->quit_request = true;
 				audio_stream->quit_request = true;
 				continue;
@@ -287,12 +287,12 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			} else {
 				if (both_stream->livestream_eof) {
 					if (++error_count[seq_next] >= MAX_LIVESTREAM_RETRY) {
-						Util_log_save("net/live-init", "eof detected, the end of the livestream");
+						logger.caution("net/live-init", "eof detected, the end of the livestream");
 						seq_num = std::min((int) seq_num, seq_next);
-					} else Util_log_save("net/live-init", "eof detected, retrying...  retry cnt : " + std::to_string(error_count[seq_next]));
+					} else logger.caution("net/live-init", "eof detected, retrying...  retry cnt : " + std::to_string(error_count[seq_next]));
 				} else error_count[seq_next] = 0;
 				if (both_stream->livestream_private) {
-					Util_log_save("net/live-init", "the livestream became private");
+					logger.caution("net/live-init", "the livestream became private");
 					seq_num = 0;
 				}
 				both_stream->quit_request = true;
@@ -315,7 +315,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 		recalc_buffered_head();
 		fragments_lock.unlock();
 		
-		Util_log_save("net/live-init", "finish : " + std::to_string(seq_next));
+		logger.info("net/live-init", "finish : " + std::to_string(seq_next));
 	}
 	initer_stopping = true;
 }
@@ -325,7 +325,7 @@ void livestream_initer_thread_func(void *arg) {
 	NetworkMultipleDecoder *mul_decoder = (NetworkMultipleDecoder *) arg;
 	mul_decoder->livestream_initer_thread_func();
 	
-	Util_log_save("net/live-init", "Thread exit.");
+	logger.info("net/live-init", "Thread exit.");
 	threadExit(0);
 }
 

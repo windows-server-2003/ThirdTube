@@ -45,7 +45,7 @@ void youtube_set_cipher_decrypter(std::string decrypter) {
 		if (op_str == "s" || op_str == "r" || op_str == "c" || op_str == "e") {
 			int arg;
 			if (!(stream >> arg)) {
-				debug("failed to read arg for " + op_str);
+				debug_error("failed to read arg for " + op_str);
 				break;
 			}
 			cur_ops.push_back({str2optype(op_str), arg, "", ""});
@@ -53,14 +53,14 @@ void youtube_set_cipher_decrypter(std::string decrypter) {
 		else if (op_str == "t") {
 			std::string arg1, arg2;
 			if (!(stream >> arg1 >> arg2)) {
-				debug("failed to read arg for " + op_str);
+				debug_error("failed to read arg for " + op_str);
 				break;
 			}
 			cur_ops.push_back({str2optype(op_str), 0, arg1, arg2});
 		} else if (op_str == ">") switched ^= 1; // switch between nparam and sig
 		else if (op_str == "#") {
 			if (!(stream >> sts)) {
-				debug("failed to read sts num");
+				debug_error("failed to read sts num");
 				break;
 			}
 		} 
@@ -69,8 +69,8 @@ void youtube_set_cipher_decrypter(std::string decrypter) {
 		::nparam_ops = nparam_ops;
 		::sig_ops = sig_ops;
 		::sts = sts;
-		debug("loaded decrypter (sts : " + std::to_string(sts) + ")");
-	} else debug("nparam or sig ops empty");
+		debug_info("loaded decrypter (sts : " + std::to_string(sts) + ")");
+	} else debug_error("nparam or sig ops empty");
 }
 
 

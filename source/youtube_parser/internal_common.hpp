@@ -19,7 +19,10 @@
 	typedef int32_t s32;
 	typedef int64_t s64;
 
-#	define debug(s) std::cerr << (s) << std::endl
+#	define debug_info(s) std::cerr << (s) << std::endl
+#	define debug_caution(s) std::cerr << (s) << std::endl
+#	define debug_warning(s) std::cerr << (s) << std::endl
+#	define debug_error(s) std::cerr << (s) << std::endl
 #else // if it's a 3ds...
 #	include "types.hpp"
 #	include "system/util/log.hpp"
@@ -30,7 +33,10 @@
 #	include "system/cpu_limit.hpp"
 #	include "network/network_io.hpp"
 #	include "definitions.hpp"
-#	define debug(s) Util_log_save("yt-parser", (s))
+#	define debug_info(s) logger.info("yt-parser", (s))
+#	define debug_caution(s) logger.caution("yt-parser", (s))
+#	define debug_warning(s) logger.warning("yt-parser", (s))
+#	define debug_error(s) logger.error("yt-parser", (s))
 #endif
 
 using namespace rapidjson;

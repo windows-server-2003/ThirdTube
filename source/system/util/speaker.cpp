@@ -84,7 +84,7 @@ double Util_speaker_get_current_timestamp(int play_ch, int sample_rate)
 	// weired...
 	if (!Util_speaker_is_playing(play_ch)) return -1;
 	// really weired...
-	Util_log_save("speaker", "unexpected behavior in get_current_timestamp");
+	logger.error("speaker", "unexpected behavior in get_current_timestamp");
 	return -1;
 }
 

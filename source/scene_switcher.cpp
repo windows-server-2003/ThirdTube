@@ -41,50 +41,60 @@ static void yt_load_decrypter(void *) {
 	if (first) first = false, session_list.init();
 	
 	auto result = session_list.perform(HttpRequest::GET(DECRYPTER_URL, {}));
-	if (result.fail) Util_log_save("yt-dec", "fail: " + result.error);
-	else if (!result.status_code_is_success()) Util_log_save("yt-dec", "fail http: " + std::to_string(result.status_code));
+	if (result.fail) logger.error("yt-dec", "fail: " + result.error);
+	else if (!result.status_code_is_success()) logger.error("yt-dec", "fail http: " + std::to_string(result.status_code));
 	else {
 		youtube_set_cipher_decrypter(std::string(result.data.begin(), result.data.end()));
 		Util_file_save_to_file(std::to_string(DECRYPTER_VERSION) + "_decrypter.txt", DEF_MAIN_DIR, result.data.data(), result.data.size(), true);
 	}
 }
 
+#define LOG_IF_ERROR(expr) \
+	do {\
+		auto res = expr;\
+		if (res != 0) logger.error(DEF_MENU_INIT_STR, #expr ": " + std::to_string(res));\
+	} while(0)
+
 void Menu_init(void)
 {
 	Result_with_string result;
 	
-	Util_log_init();
-	Util_log_save(DEF_MENU_INIT_STR, "Initializing..." + DEF_CURRENT_APP_VER);
+	logger.init();
+	
+	logger.info(DEF_MENU_INIT_STR, "Initializing..." + DEF_CURRENT_APP_VER);
 	
 	osSetSpeedupEnable(true);
 	svcSetThreadPriority(CUR_THREAD_HANDLE, DEF_THREAD_PRIORITY_HIGH - 1);
 	
-	Util_log_save(DEF_MENU_INIT_STR, "fsInit()...", fsInit());
-	Util_log_save(DEF_MENU_INIT_STR, "acInit()...", acInit());
-	Util_log_save(DEF_MENU_INIT_STR, "aptInit()...", aptInit());
-	Util_log_save(DEF_MENU_INIT_STR, "mcuHwcInit()...", mcuHwcInit());
-	Util_log_save(DEF_MENU_INIT_STR, "ptmuInit()...", ptmuInit());
+	logger.info(DEF_MENU_INIT_STR, "Initializing services...");
+	LOG_IF_ERROR(fsInit());
+	LOG_IF_ERROR(acInit());
+	LOG_IF_ERROR(aptInit());
+	LOG_IF_ERROR(mcuHwcInit());
+	LOG_IF_ERROR(ptmuInit());
 	{
 		constexpr int SOC_BUFFERSIZE = 0x100000;
 		u32 *soc_buffer = (u32 *) memalign(0x1000, SOC_BUFFERSIZE);
-		if (!soc_buffer) Util_log_save(DEF_MENU_INIT_STR, "soc buffer out of memory");
-		else Util_log_save(DEF_MENU_INIT_STR, "socInit()...", socInit(soc_buffer, SOC_BUFFERSIZE));
+		if (!soc_buffer) logger.error(DEF_MENU_INIT_STR, "soc buffer out of memory");
+		else LOG_IF_ERROR(socInit(soc_buffer, SOC_BUFFERSIZE));
 	}
-	Util_log_save(DEF_MENU_INIT_STR, "sslcInit()...", sslcInit(0));
-	Util_log_save(DEF_MENU_INIT_STR, "httpcInit()...", httpcInit(0x200000));
-	Util_log_save(DEF_MENU_INIT_STR, "romfsInit()...", romfsInit());
-	Util_log_save(DEF_MENU_INIT_STR, "cfguInit()...", cfguInit());
-	Util_log_save(DEF_MENU_INIT_STR, "amInit()...", amInit());
-	Util_log_save(DEF_MENU_INIT_STR, "ndspInit()...", (sound_init_result = ndspInit()));//0xd880A7FA
-	Util_log_save(DEF_MENU_INIT_STR, "APT_SetAppCpuTimeLimit()...", APT_SetAppCpuTimeLimit(30));
+	LOG_IF_ERROR(sslcInit(0));
+	LOG_IF_ERROR(httpcInit(0x200000));
+	LOG_IF_ERROR(romfsInit());
+	LOG_IF_ERROR(cfguInit());
+	LOG_IF_ERROR(amInit());
+	LOG_IF_ERROR((sound_init_result = ndspInit())); // 0xd880A7FA if ndsp firmware is lacking
+	LOG_IF_ERROR(APT_SetAppCpuTimeLimit(30));
 	lock_network_state();
 	
 	aptSetSleepAllowed(false);
 	set_apt_callback();
 	
+	logger.info(DEF_MENU_INIT_STR, "Services initialized.");
+	
+	
 	APT_CheckNew3DS(&var_is_new3ds);
 	CFGU_GetSystemModel(&var_model);
-	
 	
 	if (var_is_new3ds) { // check core availability
 		Thread core_2 = threadCreate(empty_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 2, false);
@@ -98,7 +108,7 @@ void Menu_init(void)
 		threadFree(core_3);
 	}
 	
-	Util_log_save(DEF_MENU_INIT_STR, "Draw_init()...", Draw_init(var_model != CFG_MODEL_2DS).code);
+	LOG_IF_ERROR(Draw_init(var_model != CFG_MODEL_2DS).code);
 	Draw_frame_ready();
 	Draw_screen_ready(0, DEF_DRAW_WHITE);
 	Draw_screen_ready(1, DEF_DRAW_WHITE);
@@ -106,17 +116,12 @@ void Menu_init(void)
 
 	Util_expl_init();
 	Exfont_init();
-	for (int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++)
-		Exfont_set_external_font_request_state(i, true);
-
-	for(int i = 0; i < 4; i++)
-		Exfont_set_system_font_request_state(i, true);
+	for (int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++) Exfont_set_external_font_request_state(i, true);
+	for(int i = 0; i < 4; i++) Exfont_set_system_font_request_state(i, true);
 
 	Exfont_request_load_external_font();
 	Exfont_request_load_system_font();
 	
-	Util_log_save(DEF_MENU_INIT_STR, "Draw_load_texture()..." + result.string + result.error_description, result.code);
-
 	menu_thread_run = true;
 	menu_worker_thread = threadCreate(Menu_worker_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_REALTIME, 1, false);
 	
@@ -147,22 +152,22 @@ void Menu_init(void)
 	u32 read_size;
 	// first load from romfs, which is reliable
 	result = Util_file_load_from_rom("yt_decrypter.txt", "romfs:/", decrypter_buf, 1000, &read_size);
-	if (result.code != 0) Util_log_save("yt-dec", "default fail: " + result.error_description);
+	if (result.code != 0) logger.warning("yt-dec", "default fail: " + result.error_description);
 	else youtube_set_cipher_decrypter((char *) decrypter_buf);
 	// then try loading from local cache, which may be newer but does not always exist
 	memset(decrypter_buf, 0, sizeof(decrypter_buf));
 	result = Util_file_load_from_file(std::to_string(DECRYPTER_VERSION) + "_decrypter.txt", DEF_MAIN_DIR, decrypter_buf, 1000, &read_size);
-	if (result.code != 0) Util_log_save("yt-dec", "cache fail: " + result.error_description);
+	if (result.code != 0) logger.warning("yt-dec", "cache fail: " + result.error_description);
 	else youtube_set_cipher_decrypter((char *) decrypter_buf);
 	// fetch from remote
 	queue_async_task(yt_load_decrypter, NULL);
 	
-	Util_log_save(DEF_MENU_INIT_STR, "Initialized");
+	logger.info(DEF_MENU_INIT_STR, "Initialized.");
 }
 
 void Menu_exit(void)
 {
-	Util_log_save(DEF_MENU_EXIT_STR, "Exiting...");
+	logger.info(DEF_MENU_EXIT_STR, "Exiting...");
 	u64 time_out = 10000000000;
 	Result_with_string result;
 
@@ -188,10 +193,10 @@ void Menu_exit(void)
 	
 	remove_apt_callback();
 	
-	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
-	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(thumbnail_downloader_thread, time_out));
-	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(async_task_thread, time_out));
-	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(misc_tasks_thread, time_out));
+	logger.info(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(menu_worker_thread, time_out));
+	logger.info(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(thumbnail_downloader_thread, time_out));
+	logger.info(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(async_task_thread, time_out));
+	logger.info(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(misc_tasks_thread, time_out));
 	threadFree(menu_worker_thread);
 	threadFree(thumbnail_downloader_thread);
 	threadFree(async_task_thread);
@@ -213,7 +218,7 @@ void Menu_exit(void)
 	socExit();
 	Draw_exit();
 
-	Util_log_save(DEF_MENU_EXIT_STR, "Exited.");
+	logger.info(DEF_MENU_EXIT_STR, "Exited.");
 }
 
 static std::vector<Intent> scene_stack = {{SceneType::HOME, ""}};
@@ -250,7 +255,7 @@ bool Menu_main(void)
 		static int frame_cnt = 0;
 		if (++frame_cnt >= 30) {
 			frame_cnt = 0;
-			Util_log_save(DEF_MENU_INIT_STR, "ndspInit()...", (sound_init_result = ndspInit()));//0xd880A7FA
+			logger.info(DEF_MENU_INIT_STR, "ndspInit() retry...", (sound_init_result = ndspInit()));//0xd880A7FA
 		}
 		
 		if (key.h_a) return false;
@@ -287,8 +292,8 @@ bool Menu_main(void)
 	// common updates
 	if (key.h_select && key.p_y) var_debug_mode = !var_debug_mode;
 	if (key.h_select && key.h_r && key.p_a) var_show_fps = !var_show_fps;
-	if (key.h_select && key.p_x) Util_log_set_log_show_flag(!Util_log_query_log_show_flag());
-	if (Util_log_query_log_show_flag()) Util_log_main(key);
+	if (key.h_select && key.p_x) logger.draw_enabled ^= 1, var_need_reflesh = true; // toggle log drawing
+	logger.update(key);
 	if (key.h_touch || key.p_touch) var_need_reflesh = true;
 	if (((key.h_select && key.p_start) || (key.h_start && key.p_select)) && var_model != CFG_MODEL_2DS) bot_screen_disabled = !bot_screen_disabled;
 	
@@ -400,7 +405,7 @@ int Menu_check_free_ram(void)
 
 void Menu_worker_thread(void* arg)
 {
-	Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Thread started.");
+	logger.info(DEF_MENU_WORKER_THREAD_STR, "Thread started.");
 	int count = 0;
 	Result_with_string result;
 	
@@ -453,6 +458,6 @@ void Menu_worker_thread(void* arg)
 			var_need_reflesh = true;
 		}
 	}
-	Util_log_save(DEF_MENU_WORKER_THREAD_STR, "Thread exit.");
+	logger.info(DEF_MENU_WORKER_THREAD_STR, "Thread exit.");
 	threadExit(0);
 }

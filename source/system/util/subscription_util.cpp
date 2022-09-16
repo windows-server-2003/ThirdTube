@@ -16,7 +16,7 @@ void load_subscription() {
 	u64 file_size;
 	Result_with_string result = Util_file_check_file_size(SUBSCRIPTION_FILE_NAME, DEF_MAIN_DIR, &file_size);
 	if (result.code != 0) {
-		Util_log_save("subsc/load" , "Util_file_check_file_size()..." + result.string + result.error_description, result.code);
+		logger.error("subsc/load" , "Util_file_check_file_size()..." + result.string + result.error_description, result.code);
 		return;
 	}
 	
@@ -24,7 +24,7 @@ void load_subscription() {
 	
 	u32 read_size;
 	result = Util_file_load_from_file(SUBSCRIPTION_FILE_NAME, DEF_MAIN_DIR, (u8 *) buf, file_size, &read_size);
-	Util_log_save("subsc/load" , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
+	logger.info("subsc/load" , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
 	if (result.code == 0) {
 		buf[read_size] = '\0';
 		
@@ -45,15 +45,15 @@ void load_subscription() {
 				cur_channel.subscriber_count_str = video["subscriber_count_str"].string_value();
 				
 				bool valid = is_youtube_url(cur_channel.url) && is_youtube_thumbnail_url(cur_channel.icon_url);
-				if (!valid) Util_log_save("subsc/load", "invalid channel, ignoring...");
+				if (!valid) logger.caution("subsc/load", "invalid channel, ignoring...");
 				else loaded_channels.push_back(cur_channel);
 			}
 			std::sort(loaded_channels.begin(), loaded_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
 			resource_lock.lock();
 			subscribed_channels = loaded_channels;
 			resource_lock.unlock();
-			Util_log_save("subsc/load" , "loaded subsc(" + std::to_string(subscribed_channels.size()) + " items)");
-		} else Util_log_save("subsc/load" , "json err: " + error);
+			logger.info("subsc/load" , "loaded subsc(" + std::to_string(subscribed_channels.size()) + " items)");
+		} else logger.error("subsc/load" , "json err: " + error);
 	}
 	free(buf);
 }
@@ -83,7 +83,7 @@ void save_subscription() {
 	std::string data = RJson(json_root).dump();
 	
 	Result_with_string result = Util_file_save_to_file(SUBSCRIPTION_FILE_NAME, DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
-	Util_log_save("subsc/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
+	logger.info("subsc/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
 }
 
 

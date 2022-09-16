@@ -32,11 +32,11 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 	bool cpu_limited = false;
 	while (!stream->ready || !stream->is_data_available(stream->read_head, std::min<u64>(buf_size, stream->len - stream->read_head))) {
 		if (stream->ready && stream->read_head >= stream->len) {
-			Util_log_save("dec", "read beyond eof : " + std::to_string(stream->read_head) + " " + std::to_string(stream->len));
+			logger.error("dec", "read beyond eof : " + std::to_string(stream->read_head) + " " + std::to_string(stream->len));
 			goto fail; // beyond the eof
 		}
 		if (!stream->disable_interrupt && decoder->interrupt) {
-			Util_log_save("dec", "read interrupt");
+			logger.info("dec", "read interrupt");
 			decoder->need_reinit = true;
 			goto fail;
 		}
@@ -48,7 +48,7 @@ static int read_network_stream(void *opaque, u8 *buf, int buf_size_) { // size o
 		usleep(20000);
 		if (stream->error || stream->quit_request) {
 			// show the error message only once per stream
-			if (!stream->read_dead_tried) stream->read_dead_tried = true, Util_log_save("dec", "read dead stream : " + std::string(stream->error ? "error" : "quitted"));
+			if (!stream->read_dead_tried) stream->read_dead_tried = true, logger.error("dec", "read dead stream : " + std::string(stream->error ? "error" : "quitted"));
 			goto fail;
 		}
 	}
@@ -114,7 +114,7 @@ static int64_t seek_network_stream(void *opaque, s64 offset, int whence) { // si
 void ffmpeg_log_callback(void *, int level, const char *fmt, va_list vargs) {
 	char buf[256] = { 0 };
 	vsnprintf(buf, 256, fmt, vargs);
-	if (level <= AV_LOG_WARNING) Util_log_save("ffmpeg", buf);
+	if (level <= AV_LOG_WARNING) logger.info("ffmpeg", buf);
 }
 
 #define NETWORK_BUFFER_SIZE 0x10000
@@ -223,7 +223,7 @@ Result_with_string NetworkDecoderFFmpegIOData::reinit_stream(int type, int64_t s
 	int ffmpeg_result;
 	AVPacket *test_packet = NULL;
 	
-	int log_num = Util_log_save("debug", "avformat reinit #" + std::to_string(type) + "...");
+	logger.info("debug", "avformat reinit #" + std::to_string(type) + "...");
 	deinit_(type, false);
 	RETURN_WITH_PREFIX_ON_ERROR(init_(type, parent_decoder), video_audio_seperate ? "[v+a]" : type == VIDEO ? "[v]" : "[a]");
 	
@@ -240,8 +240,8 @@ Result_with_string NetworkDecoderFFmpegIOData::reinit_stream(int type, int64_t s
 		result.error_description = "av_read_frame() failed : " + std::to_string(ffmpeg_result);
 		goto ffmpeg_fail;
 	}
-	if (test_packet->dts != seek_timestamp) Util_log_add(log_num, "warning : " + std::to_string(seek_timestamp) + " -> " + std::to_string(test_packet->dts));
-	else Util_log_add(log_num, "ok");
+	if (test_packet->dts != seek_timestamp) logger.warning("debug", "warning : " + std::to_string(seek_timestamp) + " -> " + std::to_string(test_packet->dts));
+	else logger.info("debug", "ok");
 	goto end;
 	
 	ffmpeg_fail :
@@ -519,7 +519,7 @@ Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
 	const size_t MAX_RAW_BUFFER_SIZE = var_is_new3ds ? NEW_MAX_RAW_BUFFER_SIZE : OLD_MAX_RAW_BUFFER_SIZE;
 	if (is_mvd) {
 		int buffer_size = MAX_RAW_BUFFER_SIZE / (width * height * 2);
-		if (buffer_size <= 10) Util_log_save("decoder", "mvd buffer size too low:" + std::to_string(buffer_size));
+		if (buffer_size <= 10) logger.warning("decoder", "mvd buffer size too low:" + std::to_string(buffer_size));
 		
 		std::vector<u8 *> init(buffer_size);
 		for (auto &i : init) {
@@ -538,7 +538,7 @@ Result_with_string NetworkDecoder::init_output_buffer(bool is_mvd) {
 		}
 	} else {
 		int buffer_size = MAX_RAW_BUFFER_SIZE / (width * height * 1.5);
-		if (buffer_size <= 10) Util_log_save("decoder", "buffer size too low:" + std::to_string(buffer_size));
+		if (buffer_size <= 10) logger.warning("decoder", "buffer size too low:" + std::to_string(buffer_size));
 		
 		std::vector<AVFrame *> init(buffer_size);
 		for (auto &i : init) {
@@ -730,7 +730,7 @@ Result_with_string NetworkDecoder::read_packet(int type) {
 		result.error_description = "av_read_frame() failed";
 		goto ffmpeg_fail;
 	}
-	if (!tmp_packet->buf) Util_log_save("debug", "!!!!!!!!!!!!!!!!!!! --------------------- !!!!!!!!!!!!!!!!!!!");
+	my_assert(tmp_packet->buf);
 	
 	if (--io->packets_until_next_reinit <= 0) {
 		for (int i = 0; i < 2; i++) avformat_reinit_request[i] = true;
@@ -757,7 +757,7 @@ Result_with_string NetworkDecoder::read_packet(int type) {
 	result.string = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS_STR;
 	return result;
 	reinit_fail :
-	Util_log_save("debug", "avformat reinit fail : " + result.error_description);
+	logger.error("debug", "avformat reinit fail : " + result.error_description);
 	return result;
 }
 NetworkDecoder::PacketType NetworkDecoder::next_decode_type() {
@@ -806,7 +806,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		offset += *(decoder_context[VIDEO]->extradata + 7);
 
 		result.code = mvdstdProcessVideoFrame(mvd_packet, offset, 0, NULL);
-		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) Util_log_save("mvd", "0 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
+		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) logger.caution("mvd", "0 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
 
 		offset = 0;
 		memset(mvd_packet, 0x0, 0x2);
@@ -817,7 +817,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 		offset += *(decoder_context[VIDEO]->extradata + 10 + *(decoder_context[VIDEO]->extradata + 7));
 		
 		result.code = mvdstdProcessVideoFrame(mvd_packet, offset, 0, NULL);
-		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) Util_log_save("mvd", "1 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
+		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) logger.caution("mvd", "1 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
 	}
 	
 	offset = 0;
@@ -850,7 +850,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 	{
 		//Do I need to send same nal data at first frame?
 		result.code = mvdstdProcessVideoFrame(mvd_packet, offset, 0, NULL);
-		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) Util_log_save("mvd", "1 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
+		if (!MVD_CHECKNALUPROC_SUCCESS(result.code)) logger.caution("mvd", "1 : mvdstdProcessVideoFrame() : " + std::to_string(result.code));
 	}
 
 	if (MVD_CHECKNALUPROC_SUCCESS(result.code)) {
@@ -871,7 +871,7 @@ Result_with_string NetworkDecoder::mvd_decode(int *width, int *height) {
 			memcpy_asm(video_mvd_tmp_frames.get_next_pushed(), mvd_frame, (*width * *height * 2) / 32 * 32);
 			video_mvd_tmp_frames.push();
 		}
-	} else Util_log_save("", "mvdstdProcessVideoFrame()...", result.code);
+	} else logger.caution("", "mvdstdProcessVideoFrame()...", result.code);
 	
 	mvd_first = false;
 	linearFree_concurrent(mvd_packet);
@@ -1027,12 +1027,9 @@ Result_with_string NetworkDecoder::get_decoded_video_frame(int width, int height
 	}
 	
 	buffered_pts_list_lock.lock();
-	if (!buffered_pts_list.size()) {
-		Util_log_save("decoder", "SET EMPTY");
-	} else {
-		*cur_pos = *buffered_pts_list.begin();
-		buffered_pts_list.erase(buffered_pts_list.begin());
-	}
+	my_assert(buffered_pts_list.size());
+	*cur_pos = *buffered_pts_list.begin();
+	buffered_pts_list.erase(buffered_pts_list.begin());
 	buffered_pts_list_lock.unlock();
 	
 	return result;
@@ -1051,7 +1048,7 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 		for (int i = 2; i <= 3 && ffmpeg_result < 0; i++) { // retry with wider range backward
 			min_ts = std::max<s64>(0, microseconds - i * 1000000);
 			ffmpeg_result = avformat_seek_file(io->format_context[VIDEO], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME);
-			if (ffmpeg_result >= 0) Util_log_save("seek", "succeeded at " + std::to_string(ffmpeg_result));
+			if (ffmpeg_result >= 0) logger.info("seek", "succeeded at " + std::to_string(ffmpeg_result));
 		}
 		if (ffmpeg_result < 0) {
 			result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;
@@ -1085,7 +1082,7 @@ Result_with_string NetworkDecoder::seek(s64 microseconds) {
 		for (int i = 2; i <= 3 && ffmpeg_result < 0; i++) { // retry with wider range backward
 			min_ts = std::max<s64>(0, microseconds - i * 1000000);
 			ffmpeg_result = avformat_seek_file(io->format_context[BOTH], -1, min_ts, microseconds, max_ts, AVSEEK_FLAG_FRAME);
-			if (ffmpeg_result >= 0) Util_log_save("seek", "succeeded at " + std::to_string(ffmpeg_result));
+			if (ffmpeg_result >= 0) logger.info("seek", "succeeded at " + std::to_string(ffmpeg_result));
 		}
 		if(ffmpeg_result < 0) {
 			result.code = DEF_ERR_FFMPEG_RETURNED_NOT_SUCCESS;

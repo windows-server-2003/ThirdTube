@@ -16,7 +16,7 @@ void load_watch_history() {
 	u64 file_size;
 	Result_with_string result = Util_file_check_file_size(HISTORY_FILE_NAME, DEF_MAIN_DIR, &file_size);
 	if (result.code != 0) {
-		Util_log_save("history/load" , "Util_file_check_file_size()..." + result.string + result.error_description, result.code);
+		logger.error("history/load" , "Util_file_check_file_size()..." + result.string + result.error_description, result.code);
 		return;
 	}
 	
@@ -24,7 +24,7 @@ void load_watch_history() {
 	
 	u32 read_size;
 	result = Util_file_load_from_file(HISTORY_FILE_NAME, DEF_MAIN_DIR, (u8 *) buf, file_size, &read_size);
-	Util_log_save("history/load" , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
+	logger.info("history/load" , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
 	if (result.code == 0) {
 		buf[read_size] = '\0';
 		
@@ -51,7 +51,7 @@ void load_watch_history() {
 				}
 				// validation
 				bool valid = youtube_is_valid_video_id(cur_video.id);
-				if (!valid) Util_log_save("history/load", "invalid history item, ignoring...");
+				if (!valid) logger.caution("history/load", "invalid history item, ignoring...");
 				else loaded_watch_history.push_back(cur_video);
 			}
 			std::sort(loaded_watch_history.begin(), loaded_watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
@@ -60,8 +60,8 @@ void load_watch_history() {
 			resource_lock.lock();
 			watch_history = loaded_watch_history;
 			resource_lock.unlock();
-			Util_log_save("history/load" , "loaded history(" + std::to_string(loaded_watch_history.size()) + " items)");
-		} else Util_log_save("history/load" , "failed to load history, json err:" + error);
+			logger.info("history/load" , "loaded history(" + std::to_string(loaded_watch_history.size()) + " items)");
+		} else logger.error("history/load" , "failed to load history, json err:" + error);
 		
 	}
 	free(buf);
@@ -92,7 +92,7 @@ void save_watch_history() {
 	std::string data = RJson(json_root).dump();
 	
 	Result_with_string result = Util_file_save_to_file(HISTORY_FILE_NAME, DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
-	Util_log_save("history/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
+	logger.info("history/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
 }
 void add_watched_video(HistoryVideo video) {
 	if (var_history_enabled) {

@@ -114,7 +114,7 @@ int	pthread_cond_broadcast(pthread_cond_t *__cond)
 int	pthread_cond_init(pthread_cond_t *__cond, const pthread_condattr_t *__attr)
 {
 	int res = svcCreateEvent((Handle*)__cond, RESET_ONESHOT);
-	if (res) Util_log_save("pthread", "cond init FAIL");
+	if (res) logger.error("pthread", "cond init FAIL");
 	return res;
 }
 

@@ -42,7 +42,7 @@ namespace About {
 using namespace About;
 
 void About_init(void) {
-	Util_log_save("about/init", "Initializing...");
+	logger.info("about/init", "Initializing...");
 	
 	VerticalListView *credits_view = new VerticalListView(0, 0, 320);
 	for (auto i : credits) {
@@ -123,7 +123,7 @@ void About_exit(void) {
 	delete main_view;
 	main_view = NULL;
 	
-	Util_log_save("about/exit", "Exited.");
+	logger.info("about/exit", "Exited.");
 }
 void About_suspend(void) { thread_suspend = true; }
 void About_resume(std::string arg) {

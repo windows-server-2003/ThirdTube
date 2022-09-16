@@ -78,23 +78,23 @@ void Util_expl_set_show_flag(bool flag)
 
 void Util_expl_init(void)
 {
-	Util_log_save(DEF_EXPL_INIT_STR, "Initializing...");
+	logger.info(DEF_EXPL_INIT_STR, "Initializing...");
 	
 	expl_thread_run = true;
 	expl_read_dir_thread = threadCreate(Util_expl_read_dir_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_HIGH, -1, false);
 	
-	Util_log_save(DEF_EXPL_INIT_STR, "Initialized.");
+	logger.info(DEF_EXPL_INIT_STR, "Initialized.");
 }
 
 void Util_expl_exit(void)
 {
-	Util_log_save(DEF_EXPL_EXIT_STR, "Exiting...");
+	logger.info(DEF_EXPL_EXIT_STR, "Exiting...");
 
 	expl_thread_run = false;
-	Util_log_save(DEF_EXPL_EXIT_STR, "threadJoin()...", threadJoin(expl_read_dir_thread, 10000000000));
+	logger.info(DEF_EXPL_EXIT_STR, "threadJoin()...", threadJoin(expl_read_dir_thread, 10000000000));
 	threadFree(expl_read_dir_thread);
 
-	Util_log_save(DEF_EXPL_EXIT_STR, "Exited.");
+	logger.info(DEF_EXPL_EXIT_STR, "Exited.");
 }
 
 void Util_expl_draw(void)
@@ -235,7 +235,7 @@ void Util_expl_main(Hid_info key)
 
 void Util_expl_read_dir_thread(void* arg)
 {
-	Util_log_save(DEF_EXPL_READ_DIR_THREAD_STR, "Thread started.");
+	logger.info(DEF_EXPL_READ_DIR_THREAD_STR, "Thread started.");
 	int log_num;
 	int num_of_hidden = 0;
 	int num_of_dir = 0;
@@ -272,9 +272,9 @@ void Util_expl_read_dir_thread(void* arg)
 				expl_size[i] = 0;
 			}
 
-			log_num = Util_log_save(DEF_EXPL_READ_DIR_THREAD_STR, "Util_file_read_dir()...");
+			logger.info(DEF_EXPL_READ_DIR_THREAD_STR, "Util_file_read_dir()...");
 			result = Util_file_read_dir(expl_current_patch, &expl_num_of_file, expl_files, 256, expl_type, 256);
-			Util_log_add(log_num, result.string, result.code);
+			logger.info(DEF_EXPL_READ_DIR_THREAD_STR, result.string, result.code);
 
 			if (result.code == 0)
 			{
@@ -397,6 +397,6 @@ void Util_expl_read_dir_thread(void* arg)
 		else
 			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 	}
-	Util_log_save(DEF_EXPL_READ_DIR_THREAD_STR, "Thread exit.");
+	logger.info(DEF_EXPL_READ_DIR_THREAD_STR, "Thread exit.");
 	threadExit(0);
 }

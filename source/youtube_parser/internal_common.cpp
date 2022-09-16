@@ -64,13 +64,13 @@ namespace youtube_parser {
 		return HttpRequest::GET(url, headers);
 	}
 	std::pair<bool, std::string> http_get(const std::string &url, std::map<std::string, std::string> headers) {
-		debug("accessing...");
+		debug_info("accessing...");
 		auto result = thread_network_session_list.perform(http_get_request(url, headers));
 		if (result.fail) {
-			debug("fail : " + result.error);
+			debug_error("fail : " + result.error);
 			return {false, result.error};
 		} else {
-			debug("ok");
+			debug_info("ok");
 			return {true, std::string(result.data.begin(), result.data.end())};
 		}
 	}
@@ -82,13 +82,13 @@ namespace youtube_parser {
 		return HttpRequest::POST(url, headers, json);
 	}
 	std::pair<bool, std::string> http_post_json(const std::string &url, const std::string &json, std::map<std::string, std::string> headers) {
-		debug("accessing(POST)...");
+		debug_info("accessing(POST)...");
 		auto result = thread_network_session_list.perform(http_post_json_request(url, json, headers));
 		if (result.fail) {
-			debug("fail : " + result.error);
+			debug_error("fail : " + result.error);
 			return {false, result.error};
 		} else {
-			debug("ok");
+			debug_info("ok");
 			return {true, std::string(result.data.begin(), result.data.end())};
 		}
 	}
@@ -147,7 +147,7 @@ namespace youtube_parser {
 	YouTubeVideoSuccinct parse_succinct_video(RJson video_renderer) {
 		YouTubeVideoSuccinct res;
 		std::string video_id = video_renderer["videoId"].string_value();
-		if (video_id == "") debug("!!!!!!!!!!!!!!!!!!!!! video id empty !!!!!!!!!!!!!!!!!!!!!!!!!");
+		if (video_id == "") debug_error("!!!!!!!!!!!!!!!!!!!!! video id empty !!!!!!!!!!!!!!!!!!!!!!!!!");
 		res.url = "https://m.youtube.com/watch?v=" + video_id;
 		res.title = get_text_from_object(video_renderer["title"]);
 		if (res.title == "") res.title = get_text_from_object(video_renderer["headline"]);
@@ -194,7 +194,7 @@ namespace youtube_parser {
 	std::string remove_garbage(const std::string &str, size_t start) {
 		while (start < str.size() && str[start] == ' ') start++;
 		if (start >= str.size()) {
-			debug("remove_garbage : empty");
+			debug_warning("remove_garbage : empty");
 			return "";
 		}
 		if (str[start] == '\'') {
@@ -223,7 +223,7 @@ namespace youtube_parser {
 							}
 						}
 						if (!ok) {
-							debug("remove_garbage : failed to parse " + str.substr(pos + 2, 2) + " as hex");
+							debug_error("remove_garbage : failed to parse " + str.substr(pos + 2, 2) + " as hex");
 							return "";
 						}
 						res_str.push_back(char_code);
@@ -249,12 +249,12 @@ namespace youtube_parser {
 				if (level == 0) break;
 			}
 			if (level != 0) {
-				debug("remove_garbage : the first parenthesis is never closed");
+				debug_error("remove_garbage : the first parenthesis is never closed");
 				return "";
 			}
 			return str.substr(start, pos - start + 1);
 		} else {
-			debug("remove_garbage : (, {, [, or ' expected");
+			debug_error("remove_garbage : (, {, [, or ' expected");
 			return "";
 		}
 	}
@@ -279,7 +279,7 @@ namespace youtube_parser {
 				while (pos < html.size() && isspace(html[pos])) pos++;
 				if (pos < html.size() && (html[pos] == '\'' || html[pos] == '{')) {
 					res = to_json(json_root, html, pos);
-					if (res.has_key("Error")) debug(std::string("fast_extract_initial : ") + res["Error"].string_value());
+					if (res.has_key("Error")) debug_error(std::string("fast_extract_initial : ") + res["Error"].string_value());
 					else if (res.is_valid()) return true;
 				}
 			}

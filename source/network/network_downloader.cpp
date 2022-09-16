@@ -184,14 +184,14 @@ void NetworkStreamDownloader::downloader_thread() {
 					auto value = result.get_header("x-head-seqnum");
 					cur_stream->seq_head = strtoll(value.c_str(), &end, 10);
 					if (*end || !value.size()) {
-						Util_log_save("net/dl", "failed to acquire x-head-seqnum");
+						logger.error("net/dl", "failed to acquire x-head-seqnum");
 						cur_stream->seq_head = -1;
 						cur_stream->error = true;
 					}
 					value = result.get_header("x-sequence-num");
 					cur_stream->seq_id = strtoll(value.c_str(), &end, 10);
 					if (*end || !value.size()) {
-						Util_log_save("net/dl", "failed to acquire x-sequence-num");
+						logger.error("net/dl", "failed to acquire x-sequence-num");
 						cur_stream->seq_id = -1;
 						cur_stream->error = true;
 					}
@@ -207,7 +207,7 @@ void NetworkStreamDownloader::downloader_thread() {
 					cur_stream->ready = true;
 				}
 			} else {
-				Util_log_save("net/dl", "failed accessing : " + result.error);
+				logger.error("net/dl", "failed accessing : " + result.error);
 				cur_stream->error = true;
 				switch (result.status_code) {
 					// these codes are returned when trying to read beyond the end of the livestream
@@ -226,7 +226,7 @@ void NetworkStreamDownloader::downloader_thread() {
 			if (cur_stream->ready) {
 				while (block_reading < cur_stream->block_num && cur_stream->downloaded_data.count(block_reading)) block_reading++;
 				if (block_reading == cur_stream->block_num) { // something unexpected happened
-					Util_log_save(LOG_THREAD_STR, "unexpected error (trying to read beyond the end of the stream)");
+					logger.error(LOG_THREAD_STR, "unexpected error (trying to read beyond the end of the stream)");
 					cur_stream->error = true;
 					continue;
 				}
@@ -253,12 +253,12 @@ void NetworkStreamDownloader::downloader_thread() {
 						if (!*end) {
 							ok = true;
 							cur_stream->block_num = (cur_stream->len + BLOCK_SIZE - 1) / BLOCK_SIZE;
-						} else Util_log_save(LOG_THREAD_STR, "failed to parse Content-Range : " + std::string(slash + 1));
-					} else Util_log_save(LOG_THREAD_STR, "no slash in Content-Range response header : " + content_range_str);
+						} else logger.error(LOG_THREAD_STR, "failed to parse Content-Range : " + std::string(slash + 1));
+					} else logger.error(LOG_THREAD_STR, "no slash in Content-Range response header : " + content_range_str);
 					if (!ok) cur_stream->error = true;
 				}
 				if (cur_stream->ready && result.data.size() != expected_len) {
-					Util_log_save(LOG_THREAD_STR, "size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(result.data.size()));
+					logger.error(LOG_THREAD_STR, "size discrepancy : " + std::to_string(expected_len) + " -> " + std::to_string(result.data.size()));
 					if (cur_stream->retry_cnt_left) {
 						cur_stream->retry_cnt_left--;
 					} else cur_stream->error = true;
@@ -268,20 +268,18 @@ void NetworkStreamDownloader::downloader_thread() {
 				cur_stream->set_data(block_reading, result.data);
 				cur_stream->ready = true;
 			} else if (!result.fail) {
-				Util_log_save("net/dl", "stream returned: " + std::to_string(result.status_code));
+				logger.error("net/dl", "stream returned: " + std::to_string(result.status_code));
 				cur_stream->error = true;
 			} else {
-				Util_log_save("net/dl", "access failed : " + result.error);
+				logger.error("net/dl", "access failed : " + result.error);
 				if (cur_stream->retry_cnt_left) {
 					cur_stream->retry_cnt_left--;
 				} else cur_stream->error = true;
 			}
 		}
 	}
-	Util_log_save(LOG_THREAD_STR, "Exit, deiniting...");
-	for (auto stream : streams) if (stream) {
-		stream->quit_request = true;
-	}
+	logger.info(LOG_THREAD_STR, "Exit, deiniting...");
+	for (auto stream : streams) if (stream) stream->quit_request = true;
 }
 void NetworkStreamDownloader::delete_all() {
 	for (auto &stream : streams) {

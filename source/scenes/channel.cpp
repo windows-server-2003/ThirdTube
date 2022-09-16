@@ -75,7 +75,7 @@ static void load_channel_community_posts(void *);
 
 void Channel_init(void)
 {
-	Util_log_save("channel/init", "Initializing...");
+	logger.info("channel/init", "Initializing...");
 	Result_with_string result;
 	
 	banner_view = new ImageView(0, 0, 320, BANNER_HEIGHT);
@@ -152,7 +152,7 @@ void Channel_exit(void)
 	
 	resource_lock.unlock();
 	
-	Util_log_save("search/exit", "Exited.");
+	logger.info("search/exit", "Exited.");
 }
 
 void Channel_resume(std::string arg)
@@ -272,7 +272,7 @@ static void load_channel(void *) {
 	}
 	
 	// wrap and truncate here to avoid taking time in locked state
-	Util_log_save("channel", "truncate start");
+	logger.info("channel", "truncate start");
 	std::vector<View *> video_views;
 	for (auto video : result.videos) video_views.push_back(video2view(video));
 	std::vector<std::string> description_lines;
@@ -293,7 +293,7 @@ static void load_channel(void *) {
 	std::vector<View *> new_community_posts_view;
 	for (auto post : result.community_posts)
 		new_community_posts_view.push_back(community_post_2_view(post));
-	Util_log_save("channel", "truncate end");
+	logger.info("channel", "truncate end");
 	
 	// update metadata if it's subscribed
 	if (subscription_is_subscribed(result.id) && result.name != "") {
@@ -406,11 +406,11 @@ static void load_channel_more(void *) {
 	auto new_result = channel_info;
 	new_result.load_more_videos();
 	
-	Util_log_save("channel-c", "truncate start");
+	logger.info("channel-c", "truncate start");
 	std::vector<View *> new_video_views;
 	for (size_t i = channel_info.videos.size(); i < new_result.videos.size(); i++)
 		new_video_views.push_back(video2view(new_result.videos[i]));
-	Util_log_save("channel-c", "truncate end");
+	logger.info("channel-c", "truncate end");
 	
 	
 	resource_lock.lock();
@@ -436,9 +436,9 @@ static void load_channel_playlists(void *) {
 	auto new_result = channel_info;
 	new_result.load_playlists();
 	
-	Util_log_save("channel-p", "truncate start");
+	logger.info("channel-p", "truncate start");
 	auto *playlist_tab_view = get_playlist_categories_tab_view(new_result.playlists);
-	Util_log_save("channel-p", "truncate end");
+	logger.info("channel-p", "truncate end");
 	
 	
 	resource_lock.lock();
@@ -460,11 +460,11 @@ static void load_channel_community_posts(void *) {
 	auto new_result = channel_info;
 	new_result.load_more_community_posts();
 	
-	Util_log_save("channel-com", "truncate start");
+	logger.info("channel-com", "truncate start");
 	std::vector<View *> new_post_views;
 	for (size_t i = channel_info.community_posts.size(); i < new_result.community_posts.size(); i++)
 		new_post_views.push_back(community_post_2_view(new_result.community_posts[i]));
-	Util_log_save("channel-com", "truncate end");
+	logger.info("channel-com", "truncate end");
 	
 	
 	resource_lock.lock();

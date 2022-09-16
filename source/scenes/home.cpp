@@ -58,7 +58,7 @@ static void load_subscription_feed(void *);
 static void update_subscribed_channels(const std::vector<SubscriptionChannel> &new_subscribed_channels);
 
 void Home_init(void) {
-	Util_log_save("subsc/init", "Initializing...");
+	logger.info("subsc/init", "Initializing...");
 	
 	home_videos_list_view = (new VerticalListView(0, 0, 320))->set_margin(SMALL_MARGIN)
 		->enable_thumbnail_request_update(MAX_THUMBNAIL_LOAD_REQUEST, SceneType::HOME);
@@ -135,7 +135,7 @@ void Home_exit(void) {
 	
 	resource_lock.unlock();
 	
-	Util_log_save("subsc/exit", "Exited.");
+	logger.info("subsc/exit", "Exited.");
 }
 void Home_suspend(void) {
 	thread_suspend = true;
@@ -194,10 +194,10 @@ static void load_home_page(void *) {
 	auto results = youtube_load_home_page();
 	remove_cpu_limit(ADDITIONAL_CPU_LIMIT);
 	
-	Util_log_save("home", "truncate/view creation start");
+	logger.info("home", "truncate/view creation start");
 	std::vector<View *> new_videos_view;
 	for (auto video : results.videos) new_videos_view.push_back(convert_video_to_view(video));
-	Util_log_save("home", "truncate/view creation end");
+	logger.info("home", "truncate/view creation end");
 	
 	resource_lock.lock();
 	if (results.error == "") {
@@ -213,10 +213,10 @@ static void load_home_page_more(void *) {
 	auto new_result = home_info;
 	new_result.load_more_results();
 	
-	Util_log_save("home-c", "truncate/view creation start");
+	logger.info("home-c", "truncate/view creation start");
 	std::vector<View *> new_videos_view;
 	for (size_t i = home_info.videos.size(); i < new_result.videos.size(); i++) new_videos_view.push_back(convert_video_to_view(new_result.videos[i]));
-	Util_log_save("home-c", "truncate/view creation end");
+	logger.info("home-c", "truncate/view creation end");
 	
 	resource_lock.lock();
 	home_info = new_result;
@@ -264,7 +264,7 @@ static void load_subscription_feed(void *) {
 			char *end;
 			int number = strtoll(date_number_str.c_str(), &end, 10);
 			if (*end) {
-				Util_log_save("subsc", "failed to parse the integer in date : " + video.publish_date);
+				logger.error("subsc", "failed to parse the integer in date : " + video.publish_date);
 				continue;
 			}
 			int unit = -1;
@@ -289,14 +289,14 @@ static void load_subscription_feed(void *) {
 				}
 			}
 			if (unit == -1) {
-				Util_log_save("subsc", "failed to parse the unit of date : " + video.publish_date);
+				logger.error("subsc", "failed to parse the unit of date : " + video.publish_date);
 				continue;
 			}
 			if (std::pair<int, int>{unit, number} > std::pair<int, int>{5, 2}) continue; // more than 2 months old
 			loaded_cnt++;
 			loaded_videos[{unit, number}].push_back(video);
 		}
-		Util_log_save("subsc", "loaded " + result.name + " : " + std::to_string(loaded_cnt) + " video(s)");
+		logger.info("subsc", "loaded " + result.name + " : " + std::to_string(loaded_cnt) + " video(s)");
 	}
 	
 	std::vector<View *> new_feed_video_views;

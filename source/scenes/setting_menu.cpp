@@ -127,7 +127,7 @@ std::string install_update(NetworkSessionList &session_list) {
 }
 
 static void update_worker_thread_func(void *) {
-	Util_log_save("updater", "Thread started.");
+	logger.info("updater", "Thread started.");
 	
 	static NetworkSessionList session_list;
 	session_list.init();
@@ -145,7 +145,7 @@ static void update_worker_thread_func(void *) {
 				std::string error;
 				RJson result_json = RJson::parse(json_root, (char *) result.data.data(), error);
 				if (error != "") {
-					Util_log_save("updater", "failed to parse json : " + error);
+					logger.error("updater", "failed to parse json : " + error);
 					new_error_message = "failed to parse json : " + error;
 				} else {
 					update_url_3dsx = update_url_cia;
@@ -199,14 +199,14 @@ static void update_worker_thread_func(void *) {
 		usleep(100000);
 	}
 	
-	Util_log_save("updater", "Thread exit.");
+	logger.info("updater", "Thread exit.");
 	threadExit(0);
 }
 
 
 
 void Sem_init(void) {
-	Util_log_save("settings/init", "Initializing...");
+	logger.info("settings/init", "Initializing...");
 	Result_with_string result;
 	
 	load_settings();
@@ -565,7 +565,7 @@ void Sem_exit(void) {
 	save_settings();
 	
 	u64 time_out = 10000000000;
-	Util_log_save(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(update_worker_thread, time_out));
+	logger.info(DEF_MENU_EXIT_STR, "threadJoin()...", threadJoin(update_worker_thread, time_out));
 	threadFree(update_worker_thread);
 	
 	main_view->recursive_delete_subviews();
@@ -573,7 +573,7 @@ void Sem_exit(void) {
 	main_view = NULL;
 	main_tab_view = NULL;
 	
-	Util_log_save("settings/exit", "Exited.");
+	logger.info("settings/exit", "Exited.");
 }
 void Sem_suspend(void) {
 	thread_suspend = true;

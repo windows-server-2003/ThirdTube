@@ -39,7 +39,7 @@ using namespace WatchHistory;
 static void update_watch_history(const std::vector<HistoryVideo> &new_watch_history);
 
 void History_init(void) {
-	Util_log_save("history/init", "Initializing...");
+	logger.info("history/init", "Initializing...");
 	
 	on_long_tap_dialog = new OverlayView(0, 0, 320, 240);
 	on_long_tap_dialog->set_is_visible(false);
@@ -54,7 +54,7 @@ void History_exit(void) {
 	thread_suspend = false;
 	exiting = true;
 	
-	Util_log_save("history/exit", "Exited.");
+	logger.info("history/exit", "Exited.");
 }
 void History_suspend(void) {
 	thread_suspend = true;

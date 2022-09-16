@@ -33,7 +33,7 @@ void misc_tasks_thread_func(void *arg) {
 		} else usleep(50000);
 	}
 	
-	Util_log_save("misc-task", "Thread exit.");
+	logger.info("misc-task", "Thread exit.");
 	threadExit(0);
 }
 void misc_tasks_thread_exit_request() { should_be_running = false; }

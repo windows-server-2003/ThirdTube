@@ -35,7 +35,7 @@ static bool parse_searched_item(RJson content, std::vector<YouTubeSuccinctItem> 
 				auto video_id = get_video_id_from_thumbnail_url(cur_list.thumbnail_url);
 				cur_list.url = "https://m.youtube.com/watch?v=" + video_id + "&list=" + playlist_id;
 			} else {
-				debug("unknown playlist url");
+				debug_warning("unknown playlist url");
 				return false;
 			}
 		}
@@ -88,9 +88,9 @@ YouTubeSearchResult youtube_load_search(std::string url) {
 				if (i.has_key("continuationItemRenderer"))
 					res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 			}
-			if (res.continue_token == "") debug("failed to get next continue token");
+			if (res.continue_token == "") debug_caution("failed to get next continue token");
 		},
-		[&] (const std::string &error) { debug((res.error = "[se] " + error)); }
+		[&] (const std::string &error) { debug_error((res.error = "[se] " + error)); }
 	);
 	
 	return res;
@@ -120,8 +120,8 @@ void YouTubeSearchResult::load_more_results() {
 						continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 				}
 			}
-			if (continue_token == "") debug("failed to get next continue token");
+			if (continue_token == "") debug_caution("failed to get next continue token");
 		},
-		[&] (const std::string &error) { debug((this->error = "[se+] " + error)); }
+		[&] (const std::string &error) { debug_error((this->error = "[se+] " + error)); }
 	);
 }

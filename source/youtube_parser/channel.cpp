@@ -31,7 +31,7 @@ static void parse_channel_data(RJson data, YouTubeChannelDetail &res) {
 					res.videos.push_back(parse_succinct_video(content["compactVideoRenderer"]));
 				} else if (content.has_key("continuationItemRenderer")) {
 					res.continue_token = content["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
-				} else debug("unknown item found in channel videos");
+				} else debug_warning("unknown item found in channel videos");
 			}
 		}
 		std::string tab_url = tab["tabRenderer"]["endpoint"]["commandMetadata"]["webCommandMetadata"]["url"].string_value();
@@ -72,7 +72,7 @@ YouTubeChannelDetail youtube_load_channel_page(std::string url_or_id) {
 		}
 		
 		auto result = http_get(url);
-		if (!result.first) debug((res.error = "[ch-id] " + result.second));
+		if (!result.first) debug_error((res.error = "[ch-id] " + result.second));
 		else {
 			auto html = result.second;
 			if (!html.size()) {
@@ -96,7 +96,7 @@ YouTubeChannelDetail youtube_load_channel_page(std::string url_or_id) {
 			[&] (Document &, RJson json) { parse_channel_data(json, res); },
 			[&] (const std::string &error) {
 				res.error = "[ch-id] " + error;
-				debug(res.error);
+				debug_error(res.error);
 			}
 		);
 	}
@@ -125,9 +125,9 @@ std::vector<YouTubeChannelDetail> youtube_load_channel_page_multi(std::vector<st
 			if (progress) progress(++finished, n);
 		}));
 	}
-	debug("access(multi)...");
+	debug_info("access(multi)...");
 	auto results = thread_network_session_list.perform(requests);
-	debug("ok");
+	debug_info("ok");
 	for (auto result : results) {
 		result.data.push_back('\0');
 		YouTubeChannelDetail cur_res;
@@ -135,7 +135,7 @@ std::vector<YouTubeChannelDetail> youtube_load_channel_page_multi(std::vector<st
 			[&] (Document &, RJson data) { parse_channel_data(data, cur_res); },
 			[&] (const std::string &error) {
 				cur_res.error = "[ch-mul] " + error;
-				debug(cur_res.error);
+				debug_error(cur_res.error);
 			}
 		);
 		res.push_back(cur_res);
@@ -169,9 +169,9 @@ void YouTubeChannelDetail::load_more_videos() {
 						continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 				}
 			}
-			if (continue_token == "") debug("failed to get next continue token");
+			if (continue_token == "") debug_caution("failed to get next continue token");
 		},
-		[&] (const std::string &error) { debug((this->error = "[ch+] " + error)); }
+		[&] (const std::string &error) { debug_error((this->error = "[ch+] " + error)); }
 	);
 }
 
@@ -194,7 +194,7 @@ static void channel_load_playlists_(RJson yt_result, YouTubeChannelDetail &new_r
 				auto video_id = get_video_id_from_thumbnail_url(cur_list.thumbnail_url);
 				cur_list.url = "https://m.youtube.com/watch?v=" + video_id + "&list=" + playlist_id;
 			} else {
-				debug("unknown playlist url");
+				debug_warning("unknown playlist url");
 				return cur_list;
 			}
 		}
@@ -240,7 +240,7 @@ void YouTubeChannelDetail::load_playlists() {
 	access_and_parse_json(
 		[&] () { return http_post_json(get_innertube_api_url("browse"), post_content); },
 		[&] (Document &, RJson json) { channel_load_playlists_(json, *this); },
-		[&] (const std::string &error) { debug((this->error = "[ch/pl] " + error)); }
+		[&] (const std::string &error) { debug_error((this->error = "[ch/pl] " + error)); }
 	);
 }
 
@@ -285,7 +285,7 @@ void YouTubeChannelDetail::load_more_community_posts() {
 		// community post seems to be only available in the desktop version
 		std::string url = convert_url_to_desktop(this->url + "/community");
 		auto result = http_get(url, {{"User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:94.0) Gecko/20100101 Firefox/94.0"}});
-		if (!result.first) debug((this->error = "[ch/c+] " + result.second));
+		if (!result.first) debug_error((this->error = "[ch/c+] " + result.second));
 		else {
 			auto html = result.second;
 			if (!html.size()) {
@@ -315,7 +315,7 @@ void YouTubeChannelDetail::load_more_community_posts() {
 					contents = i["appendContinuationItemsAction"]["continuationItems"];
 				load_community_items(contents, *this);
 			},
-			[&] (const std::string &error) { debug((this->error = "[ch/c+] " + error)); }
+			[&] (const std::string &error) { debug_error((this->error = "[ch/c+] " + error)); }
 		);
 	}
 }

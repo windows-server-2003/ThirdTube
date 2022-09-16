@@ -6,10 +6,8 @@ void load_settings() {
 	char buf[0x1001] = { 0 };
 	u32 read_size;
 	Result_with_string result = Util_file_load_from_file("settings.txt", DEF_MAIN_DIR, (u8 *) buf, 0x1000, &read_size);
-	Util_log_save(DEF_SEM_INIT_STR , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
+	logger.info(DEF_SEM_INIT_STR , "Util_file_load_from_file()..." + result.string + result.error_description, result.code);
 	auto settings = parse_xml_like_text(buf);
-	
-	for (auto i : settings) Util_log_save("settings/load", i.first + ":" + i.second);
 	
 	auto load_int = [&] (std::string key, int default_value) {
 		if (!settings.count(key)) return default_value;
@@ -89,5 +87,5 @@ void save_settings() {
 	add_double("dpad_scroll_speed1_threashold", var_dpad_scroll_speed1_threashold);
 	
 	Result_with_string result = Util_file_save_to_file("settings.txt", DEF_MAIN_DIR, (u8 *) data.c_str(), data.size(), true);
-	Util_log_save("settings/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
+	logger.info("settings/save", "Util_file_save_to_file()..." + result.string + result.error_description, result.code);
 }

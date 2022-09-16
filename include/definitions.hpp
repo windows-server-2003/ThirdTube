@@ -4,7 +4,6 @@
 #define DEF_MAIN_DIR (std::string)"/3ds/ThirdTube/"
 #define DEF_UPDATE_DIR_PREFIX (std::string)"/3ds/Video_player_ver_"
 #define DEF_UPDATE_FILE_PREFIX (std::string)"video_player"
-#define DEF_LOG_COLOR 0xFFBBBB00
 #define DEF_SWKBD_MAX_DIC_WORDS 128
 #define DEF_CHECK_INTERNET_URL (std::string)"https://connectivitycheck.gstatic.com/generate_204"
 #define DEF_SEND_APP_INFO_URL (std::string)"https://script.google.com/macros/s/AKfycbyn_blFyKWXCgJr6NIF8x6ETs7CHRN5FXKYEAAIrzV6jPYcCkI/exec"

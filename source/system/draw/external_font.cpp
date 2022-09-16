@@ -702,69 +702,48 @@ namespace ExFont {
 using namespace ExFont;
 
 
-void Exfont_load_font_thread(void* arg)
-{
-	Util_log_save(DEF_EXFONT_LOAD_FONT_THREAD_STR, "Thread started.");
+void Exfont_load_font_thread(void* arg) {
+	logger.info(DEF_EXFONT_LOAD_FONT_THREAD_STR, "Thread started.");
 	Result_with_string result;
 
-	while(exfont_thread_run)
-	{
-		if(exfont_load_external_font_request)
-		{
-			for(int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++)
-			{
-				if(exfont_request_external_font_state[i] && !exfont_loaded_external_font[i])
-				{
+	while(exfont_thread_run) {
+		if(exfont_load_external_font_request) {
+			for(int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++) {
+				if(exfont_request_external_font_state[i] && !exfont_loaded_external_font[i]) {
 					result = Exfont_load_exfont(i);
-					Util_log_save(DEF_EXFONT_LOAD_FONT_THREAD_STR, "Exfont_load_exfont()..." + result.string + result.error_description, result.code);
+					if (result.code != 0) logger.error(DEF_EXFONT_LOAD_FONT_THREAD_STR, "Exfont_load_exfont()..." + result.string + result.error_description, result.code);
 				}
 			}
 			exfont_load_external_font_request = false;
-		}
-		else if(exfont_unload_external_font_request)
-		{
-			for(int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++)
-			{
-				if(!exfont_request_external_font_state[i] && exfont_loaded_external_font[i])
-					Exfont_unload_exfont(i);
-			}
+		} else if(exfont_unload_external_font_request) {
+			for(int i = 0; i < DEF_EXFONT_NUM_OF_FONT_NAME; i++) 
+				if (!exfont_request_external_font_state[i] && exfont_loaded_external_font[i]) Exfont_unload_exfont(i);
 			exfont_unload_external_font_request = false;
-		}
-		else if(exfont_load_system_font_request)
-		{
-			for(int i = 0; i < 4; i++)
-			{
-				if(exfont_request_system_font_state[i] && !exfont_loaded_system_font[i])
-				{
+		} else if(exfont_load_system_font_request) {
+			for(int i = 0; i < 4; i++) {
+				if (exfont_request_system_font_state[i] && !exfont_loaded_system_font[i]) {
 					result = Draw_load_system_font(i);
-					Util_log_save(DEF_EXFONT_LOAD_FONT_THREAD_STR, "Draw_load_system_font()..." + result.string + result.error_description, result.code);
-					if(result.code == 0 || i == var_system_region)
-						exfont_loaded_system_font[i] = true;
+					if (result.code != 0) logger.error(DEF_EXFONT_LOAD_FONT_THREAD_STR, "Draw_load_system_font()..." + result.string + result.error_description, result.code);
+					if (result.code == 0 || i == var_system_region) exfont_loaded_system_font[i] = true;
 				}
 			}
 			exfont_load_system_font_request = false;
-		}
-		else if(exfont_unload_system_font_request)
-		{
-			for(int i = 0; i < 4; i++)
-			{
-				if(!exfont_request_system_font_state[i] && exfont_loaded_system_font[i])
-				{
+		} else if(exfont_unload_system_font_request) {
+			for(int i = 0; i < 4; i++) {
+				if(!exfont_request_system_font_state[i] && exfont_loaded_system_font[i]) {
 					Draw_free_system_font(i);
 					exfont_loaded_system_font[i] = false;
 				}
 			}
 			exfont_unload_system_font_request = false;
-		}
-		else
-			usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
+		} else usleep(DEF_ACTIVE_THREAD_SLEEP_TIME);
 	}
-	Util_log_save(DEF_EXFONT_LOAD_FONT_THREAD_STR, "Thread exit.");
+	logger.info(DEF_EXFONT_LOAD_FONT_THREAD_STR, "Thread exit.");
 }
 
 void Exfont_init(void)
 {
-	Util_log_save(DEF_EXFONT_INIT_STR, "Initializing...");
+	logger.info(DEF_EXFONT_INIT_STR, "Initializing...");
 	int characters = 0;
 	u8* fs_buffer = NULL;
 	u32 read_size = 0;
@@ -773,29 +752,26 @@ void Exfont_init(void)
 
 	memset((void*)fs_buffer, 0x0, 0x8000);
 	result = Util_file_load_from_rom("font_name.txt", "romfs:/gfx/msg/", fs_buffer, 0x2000, &read_size);
-	Util_log_save(DEF_EXFONT_INIT_STR, "Util_file_load_from_rom()..." + result.string + result.error_description, result.code);
+	if (result.code != 0) logger.error(DEF_EXFONT_INIT_STR, "Load font_name.txt: " + result.string + result.error_description, result.code);
 	
 	result = Util_parse_file((char*)fs_buffer, DEF_EXFONT_NUM_OF_FONT_NAME, exfont_font_name);
-	Util_log_save(DEF_EXFONT_INIT_STR, "Util_parse_file()..." + result.string + result.error_description, result.code);
+	if (result.code != 0) logger.error(DEF_EXFONT_INIT_STR, "Util_parse_file()..." + result.string + result.error_description, result.code);
 
 	memset((void*)fs_buffer, 0x0, 0x8000);
 	result = Util_file_load_from_rom("font_samples.txt", "romfs:/gfx/font/sample/", fs_buffer, 0x8000, &read_size);
-	Util_log_save(DEF_EXFONT_INIT_STR, "Util_file_load_from_rom()..." + result.string + result.error_description, result.code);
-	if (result.code == 0)
-		Exfont_text_parse((char*)fs_buffer, exfont_font_samples, 10240, &characters);
+	if (result.code == 0) Exfont_text_parse((char*)fs_buffer, exfont_font_samples, 10240, &characters);
+	else logger.error(DEF_EXFONT_INIT_STR, "Load font_samples.txt: " + result.string + result.error_description, result.code);
 
-	for (int i = characters; i > -1; i--)
-		exfont_font_samples[i + 1] = exfont_font_samples[i];
+	for (int i = characters; i > -1; i--) exfont_font_samples[i + 1] = exfont_font_samples[i];
 	exfont_font_samples[0] = 0; // NULL character
 	
 	for (int i = 0; i < characters; i++) if (exfont_font_samples[i] >= exfont_font_samples[i + 1])
-		Util_log_save("font", "non-increasing at " + std::to_string(i));
+		logger.error("font", "non-increasing at " + std::to_string(i));
 
 	memset((void*)fs_buffer, 0x0, 0x8000);
 	result = Util_file_load_from_rom("font_right_to_left_samples.txt", "romfs:/gfx/font/sample/", fs_buffer, 0x8000, &read_size);
-	Util_log_save(DEF_EXFONT_INIT_STR, "Util_file_load_from_rom()..." + result.string + result.error_description, result.code);
-	if (result.code == 0)
-		Exfont_text_parse((char*)fs_buffer, exfont_font_right_to_left_samples, 256, &characters);
+	if (result.code == 0) Exfont_text_parse((char*)fs_buffer, exfont_font_right_to_left_samples, 256, &characters);
+	else logger.error(DEF_EXFONT_INIT_STR, "Load font_right_to_left_samples.txt: " + result.string + result.error_description, result.code);
 
 	exfont_num_of_right_left_charcters = characters;
 
@@ -822,18 +798,18 @@ void Exfont_init(void)
 	exfont_thread_run = true;
 	exfont_load_font_thread = threadCreate(Exfont_load_font_thread, (void*)(""), DEF_STACKSIZE, DEF_THREAD_PRIORITY_NORMAL, 0, false);
 
-	Util_log_save(DEF_EXFONT_INIT_STR, "Initialized.");
+	logger.info(DEF_EXFONT_INIT_STR, "Initialized.");
 }
 
 void Exfont_exit(void)
 {
-	Util_log_save(DEF_EXFONT_EXIT_STR, "Exiting...");
+	logger.info(DEF_EXFONT_EXIT_STR, "Exiting...");
 
 	exfont_thread_run = false;
-	Util_log_save(DEF_EXFONT_EXIT_STR, "threadJoin()...", threadJoin(exfont_load_font_thread, 10000000000));
+	logger.info(DEF_EXFONT_EXIT_STR, "threadJoin()...", threadJoin(exfont_load_font_thread, 10000000000));
 	threadFree(exfont_load_font_thread);
 
-	Util_log_save(DEF_EXFONT_EXIT_STR, "Exited.");
+	logger.info(DEF_EXFONT_EXIT_STR, "Exited.");
 }
 
 std::string Exfont_query_external_font_name(int exfont_num)
