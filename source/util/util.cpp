@@ -124,9 +124,8 @@ std::map<std::string, std::string> parse_xml_like_text(std::string data) {
 // truncate and wrap into at most `max_lines` lines so that each line fit in `max_width` if drawn with the size of `x_size` x `y_size`
 // assumes input_str doesn't contain any linebreaks
 std::vector<std::string> truncate_str(std::string input_str, int max_width, int max_lines, double x_size, double y_size) {
-	u64 input[1024 + 1];
-	int n;
-	Exfont_text_parse(input_str, input, 1024, &n);
+	u32 input[1024];
+	int n = Extfont_parse_utf8_str_to_u32(input_str.c_str(), input, 1024);
 	
 	std::vector<std::vector<u64> > words; // each word is considered not separable
 	std::vector<size_t> word_start;

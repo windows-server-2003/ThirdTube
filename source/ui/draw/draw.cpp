@@ -10,17 +10,17 @@ namespace Draw_ {
 	C2D_Image battery_level_icon_image[21];
 	C2D_Image battery_charge_icon_image[1];
 	C2D_Image eco_image[2];
-	u64 draw_japanese_kanji[3001];
+	u32 draw_japanese_kanji[3001];
 	int japanese_kanji_num;
-	u64 draw_simple_chinese[6301];
+	u32 draw_simple_chinese[6301];
 	int simple_chinese_num;
 	TickCounter draw_frame_time_timer;
 	
 	std::string samples_str[8] = {"\u0000", "\u000A", "\u4DFF", "\uA000", "\u312F", "\u3190", "\uABFF", "\uD7B0"};
-	u64 samples[8];
+	u32 samples[8];
 	
-	static inline u64 str2u64(const std::string &str) {
-		u64 res = 0;
+	static inline u32 str2u32(const std::string &str) {
+		u32 res = 0;
 		for (char c : str) res = res * 0x100 + (u8) c;
 		return res;
 	}
@@ -216,21 +216,20 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 {
 	bool reverse = false;
 	bool found = false;
-	bool font_loaded[2] = { Exfont_is_loaded_system_font(0), Exfont_is_loaded_system_font(1), };//JPN, CHN
+	bool font_loaded[2] = { Extfont_is_sysfont_loaded(0), Extfont_is_sysfont_loaded(1), };//JPN, CHN
 	float width = 0, height = 0, original_x, y_offset;
-	int characters = 0;
 	static int font_num_list[1024];
-	static u64 draw_part_text[1024];
+	static u32 draw_part_text[1024];
 	static C2D_Text c2d_text;
 	static C2D_TextBuf c2d_buf;
 	original_x = x;
 	if (!c2d_buf) c2d_buf = C2D_TextBufNew(4096);
 
-	Exfont_text_parse(text, draw_part_text, 1023, &characters);
-	Exfont_text_sort(draw_part_text, characters);
+	int characters = Extfont_parse_utf8_str_to_u32(text.c_str(), draw_part_text, 1024);
+	Extfont_sort_rtl(draw_part_text, characters);
 
 	for (int i = 0; i < characters; i++) {
-		u64 cur_char = draw_part_text[i];
+		u32 cur_char = draw_part_text[i];
 		
 		if (cur_char == samples[0]) { // NULL
 			font_num_list[i] = -2;
@@ -276,8 +275,8 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 			if (prev_font_list_num == -1) { // linebreak
 				y += 20.0 * text_size_y;
 				x = original_x;
-			} else if (!Exfont_is_loaded_external_font(0) || (prev_font_list_num >= 0 && prev_font_list_num <= 3)) {
-				C2D_Font cur_font = Exfont_is_loaded_external_font(0) ? system_fonts[prev_font_list_num] : NULL;
+			} else if (!Extfont_is_extfont_loaded(0) || (prev_font_list_num >= 0 && prev_font_list_num <= 3)) {
+				C2D_Font cur_font = Extfont_is_extfont_loaded(0) ? system_fonts[prev_font_list_num] : NULL;
 				
 				C2D_TextBufClear(c2d_buf);
 				if (prev_font_list_num == 1) y_offset = 3 * text_size_y;
@@ -286,7 +285,7 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 				
 				std::string draw_str;
 				for (int j = consecutive_start; j < i; j++) {
-					u64 cur_char = draw_part_text[j];
+					u32 cur_char = draw_part_text[j];
 					if (cur_char >> 24) draw_str.push_back(cur_char >> 24);
 					if (cur_char >> 16) draw_str.push_back(cur_char >> 16 & 0xFF);
 					if (cur_char >> 8) draw_str.push_back(cur_char >> 8 & 0xFF);
@@ -299,7 +298,7 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 				C2D_DrawText(&c2d_text, C2D_WithColor, x, y + y_offset, 0.0, text_size_x, text_size_y, abgr8888);
 				x += width;
 			} else if (prev_font_list_num == 4) {
-				Exfont_draw_external_fonts(draw_part_text + consecutive_start, i - consecutive_start, x, y, text_size_x * 1.56, text_size_y * 1.56, abgr8888, &width, &height);
+				Extfont_draw_extfonts(draw_part_text + consecutive_start, i - consecutive_start, x, y, text_size_x * 1.56, text_size_y * 1.56, abgr8888, &width);
 				x += width;
 			}
 			
@@ -310,20 +309,15 @@ void Draw(std::string text, float x, float y, float text_size_x, float text_size
 	}
 }
 
-float Draw_get_height(std::string text, float text_size_y) {
-	if (text == "") return 0;
-	int characters;
-	std::vector<u64> part_text(text.size() + 1);
-	Exfont_text_parse(text, &part_text[0], text.size(), &characters);
-	int lines = 1;
-	for (int i = 0; i < characters; i++) if (part_text[i] == (u8) '\n') lines++;
+float Draw_get_height(const std::string &text, float text_size_y) {
+	int lines = 1 + std::count(text.begin(), text.end(), '\n');
 	return lines * 20.0 * text_size_y;
 }
 
-float Draw_get_width_one(u64 cur_char, float text_size_x) {
+float Draw_get_width_one(u32 cur_char, float text_size_x) {
 	if (cur_char == samples[0] || cur_char == samples[1]) return 0; // NULL, linebreak
 	
-	bool font_loaded[2] = { Exfont_is_loaded_system_font(0), Exfont_is_loaded_system_font(1), };//JPN, CHN
+	bool font_loaded[2] = { Extfont_is_sysfont_loaded(0), Extfont_is_sysfont_loaded(1), };//JPN, CHN
 	
 	int font_list_num;
 	if (cur_char > samples[2] && cur_char < samples[3]) {
@@ -352,8 +346,8 @@ float Draw_get_width_one(u64 cur_char, float text_size_x) {
 	} else font_list_num = 4;
 	
 	float res = 0;
-	if (!Exfont_is_loaded_external_font(0) || (font_list_num >= 0 && font_list_num <= 3)) {
-		C2D_Font cur_font = Exfont_is_loaded_external_font(0) ? system_fonts[font_list_num] : NULL;
+	if (!Extfont_is_extfont_loaded(0) || (font_list_num >= 0 && font_list_num <= 3)) {
+		C2D_Font cur_font = Extfont_is_extfont_loaded(0) ? system_fonts[font_list_num] : NULL;
 		
 		u8 buf[5] = { 0 };
 		u8 *ptr = buf;
@@ -367,21 +361,18 @@ float Draw_get_width_one(u64 cur_char, float text_size_x) {
 		if (decode_utf8(&code, (u8 *) buf) == -1) code = 0xFFFD;
 		C2D_FontCalcGlyphPos(cur_font, &glyphData, C2D_FontGlyphIndexFromCodePoint(cur_font, code), 0, 1.0f, 1.0f);
 		res = glyphData.xAdvance * text_size_x;
-	} else if (font_list_num == 4) res = Exfont_get_width_one(cur_char, text_size_x * 1.56);
+	} else if (font_list_num == 4) res = Extfont_get_width_one(cur_char, text_size_x * 1.56);
 	return res;
 }
-float Draw_get_width(std::string text, float text_size_x)
-{
+float Draw_get_width(const std::string &text, float text_size_x) {
 	float x = 0, x_max = 0;
 	
-	int characters = 0;
-	std::vector<u64> part_text;
-	part_text.resize(text.size() + 1);
-	Exfont_text_parse(text, &part_text[0], text.size(), &characters);
-	Exfont_text_sort(&part_text[0], characters);
+	std::vector<u32> part_text(text.size());
+	int characters = Extfont_parse_utf8_str_to_u32(text.c_str(), &part_text[0], text.size());
+	Extfont_sort_rtl(&part_text[0], characters);
 	
 	for (int i = 0; i < characters; i++) {
-		u64 cur_char = part_text[i];
+		u32 cur_char = part_text[i];
 		if (!cur_char) break;
 		if (cur_char == (u8) '\n') {
 			x = 0;
@@ -394,7 +385,6 @@ float Draw_get_width(std::string text, float text_size_x)
 	
 	return x_max;
 }
-
 
 void Draw_x_centered(std::string text, float x0, float x1, float y, float text_size_x, float text_size_y, int abgr8888) {
 	float x = x0 + (x1 - x0 - Draw_get_width(text, text_size_x)) / 2;
@@ -553,22 +543,17 @@ void Draw_debug_info(void)
 
 Result_with_string Draw_load_kanji_samples(void)
 {
-	int characters = 0;
 	u8* fs_buffer = (u8*)malloc(0x8000);
 	u32 size_read = 0;
 	Result_with_string result;
 
 	memset((void*)fs_buffer, 0x0, 0x8000);
 	result = Path("romfs:/gfx/font/sample/kanji.txt").read_file(fs_buffer, 0x8000, size_read);
-	if(result.code == 0)
-		Exfont_text_parse((char*)fs_buffer, draw_japanese_kanji, 3000, &characters);
-	japanese_kanji_num = characters;
+	if (result.code == 0) japanese_kanji_num = Extfont_parse_utf8_str_to_u32((const char *) fs_buffer, draw_japanese_kanji, 3000);
 	
 	memset((void*)fs_buffer, 0x0, 0x8000);
 	result = Path("romfs:/gfx/font/sample/hanyu_s.txt").read_file(fs_buffer, 0x8000, size_read);
-	if(result.code == 0)
-		Exfont_text_parse((char*)fs_buffer, draw_simple_chinese, 6300, &characters);
-	simple_chinese_num = characters;
+	if (result.code == 0) simple_chinese_num = Extfont_parse_utf8_str_to_u32((const char *) fs_buffer, draw_simple_chinese, 6300);
 
 	free(fs_buffer);
 	return result;
@@ -610,7 +595,7 @@ Result_with_string Draw_init(bool wide)
 
 	result = Draw_load_kanji_samples();
 	
-	for (int i = 0; i < 8; i++) samples[i] = str2u64(samples_str[i]);
+	for (int i = 0; i < 8; i++) samples[i] = str2u32(samples_str[i]);
 
 	return result;
 }

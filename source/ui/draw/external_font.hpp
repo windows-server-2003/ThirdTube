@@ -1,43 +1,20 @@
 ﻿#pragma once
 
-void Exfont_init(void);
+#define FONT_BLOCK_NUM 50
+#define SYSTEM_FONT_NUM 4
 
-void Exfont_exit(void);
+void Extfont_init(void);
+void Extfont_exit(void);
 
-std::string Exfont_query_external_font_name(int exfont_num);
+void Extfont_request_extfont_status(int i, bool loaded);
+void Extfont_request_sysfont_status(int i, bool loaded);
+bool Extfont_is_extfont_loaded(int block_id);
+bool Extfont_is_sysfont_loaded(int id);
 
-bool Exfont_is_loaded_external_font(int exfont_num);
+float Extfont_get_width_one(u32 c, float size);
+float Extfont_get_width(const std::string &s, float size);
 
-bool Exfont_is_loading_external_font(void);
+int Extfont_parse_utf8_str_to_u32(const char *in, u32 *out, int out_size);
+void Extfont_sort_rtl(u32 *s, int n);
 
-bool Exfont_is_unloading_external_font(void);
-
-bool Exfont_is_loaded_system_font(int system_font_num);
-
-bool Exfont_is_loading_system_font(void);
-
-bool Exfont_is_unloading_system_font(void);
-
-void Exfont_set_external_font_request_state(int exfont_num, bool flag);
-
-void Exfont_request_load_external_font(void);
-
-void Exfont_request_unload_external_font(void);
-
-void Exfont_set_system_font_request_state(int system_font_num, bool flag);
-
-void Exfont_request_load_system_font(void);
-
-void Exfont_request_unload_system_font(void);
-
-void Exfont_text_sort(u64 *source_string, int characters);
-
-void Exfont_text_parse(std::string source_string, u64 *out_strings, int max_loop, int* out_element);
-
-void Exfont_draw_external_fonts(u64 *in_string, size_t length, float texture_x, float texture_y, float texture_size_x, float texture_size_y, int abgr8888, float* out_width, float* out_height);
-float Exfont_get_width_one(u64 cur_char, float texture_size_x);
-float Exfont_get_width(std::string in_string, float texture_size_x);
-
-Result_with_string Exfont_load_exfont(int exfont_num);
-
-void Exfont_unload_exfont(int exfont_num);
+void Extfont_draw_extfonts(u32 *s, size_t len, float x, float y, float texture_size_x, float texture_size_y, int abgr8888, float* out_width);

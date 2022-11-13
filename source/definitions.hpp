@@ -43,12 +43,6 @@
 #define DEF_EXPL_EXIT_STR (std::string)"Expl/Exit"
 #define DEF_EXPL_READ_DIR_THREAD_STR (std::string)"Expl/Read dir thread"
 
-//external font
-#define DEF_EXFONT_NUM_OF_FONT_NAME 50
-#define DEF_EXFONT_INIT_STR (std::string)"Exfont/Init"
-#define DEF_EXFONT_EXIT_STR (std::string)"Exfont/Exit"
-#define DEF_EXFONT_LOAD_FONT_THREAD_STR (std::string)"Exfont/Load font thread"
-
 //error num
 #define DEF_ERR_SUMMARY 0
 #define DEF_ERR_DESCRIPTION 1
