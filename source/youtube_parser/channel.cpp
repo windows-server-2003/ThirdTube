@@ -25,14 +25,12 @@ static void parse_channel_data(RJson data, YouTubeChannelDetail &res) {
 	res.description = metadata_renderer["description"].string_value();
 	
 	for (auto tab : data["contents"]["singleColumnBrowseResultsRenderer"]["tabs"].array_items()) {
-		for (auto i : tab["tabRenderer"]["content"]["sectionListRenderer"]["contents"].array_items()) {
-			for (auto content : i["itemSectionRenderer"]["contents"].array_items()) {
-				if (content.has_key("compactVideoRenderer")) {
-					res.videos.push_back(parse_succinct_video(content["compactVideoRenderer"]));
-				} else if (content.has_key("continuationItemRenderer")) {
-					res.continue_token = content["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
-				} else debug_warning("unknown item found in channel videos");
-			}
+		for (auto i : tab["tabRenderer"]["content"]["richGridRenderer"]["contents"].array_items()) {
+			if (i.has_key("continuationItemRenderer")) 
+				res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
+			else if (i["richItemRenderer"]["content"].has_key("compactVideoRenderer")) 
+				res.videos.push_back(parse_succinct_video(i["richItemRenderer"]["content"]["compactVideoRenderer"]));
+			else debug_warning("unknown item found in channel videos");
 		}
 		std::string tab_url = tab["tabRenderer"]["endpoint"]["commandMetadata"]["webCommandMetadata"]["url"].string_value();
 		if (ends_with(tab_url, "/playlists")) {
