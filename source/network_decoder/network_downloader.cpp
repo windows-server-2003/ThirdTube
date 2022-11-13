@@ -176,7 +176,7 @@ void NetworkStreamDownloader::downloader_thread() {
 		if (cur_stream->whole_download) {
 			auto &session_list = cur_stream->session_list ? *cur_stream->session_list : thread_network_session_list;
 			auto result = session_list.perform(HttpRequest::GET(cur_stream->url, {}));
-			cur_stream->url = result.redirected_url;
+			if (result.redirected_url != "") cur_stream->url = result.redirected_url;
 			
 			if (!result.fail && result.status_code_is_success() && result.data.size()) {
 				{ // acquire necessary headers
@@ -239,7 +239,7 @@ void NetworkStreamDownloader::downloader_thread() {
 			
 			auto &session_list = cur_stream->session_list ? *cur_stream->session_list : thread_network_session_list;
 			auto result = session_list.perform(HttpRequest::GET(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}}));
-			cur_stream->url = result.redirected_url;
+			if (result.redirected_url != "") cur_stream->url = result.redirected_url;
 			
 			
 			if (!result.fail && result.status_code_is_success()) {
