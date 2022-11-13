@@ -2,6 +2,7 @@
 #include <vector>
 #include <numeric>
 #include <math.h>
+#include <regex>
 
 #include "scenes/video_player.hpp"
 #include "ui/overlay.hpp"
@@ -835,7 +836,7 @@ static void load_video_page(void *arg) {
 									->set_text(tmp_video_info.author.name)
 									->set_font_size(0.55, DEFAULT_FONT_INTERVAL + SMALL_MARGIN),
 								(new TextView(0, 0, 320 - SMALL_MARGIN - ICON_SIZE, DEFAULT_FONT_INTERVAL))
-									->set_text(tmp_video_info.author.subscribers)
+									->set_text(std::regex_replace(LOCALIZED(SUBSCRIBER_COUNT), std::regex("%0"), tmp_video_info.author.subscribers))
 									->set_font_size(0.45, DEFAULT_FONT_INTERVAL + SMALL_MARGIN)
 									->set_get_text_color([] () { return LIGHT1_TEXT_COLOR; })
 							})
