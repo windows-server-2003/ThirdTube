@@ -30,6 +30,8 @@ static void parse_channel_data(RJson data, YouTubeChannelDetail &res) {
 				res.continue_token = i["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 			else if (i["richItemRenderer"]["content"].has_key("compactVideoRenderer")) 
 				res.videos.push_back(parse_succinct_video(i["richItemRenderer"]["content"]["compactVideoRenderer"]));
+			else if (i["richItemRenderer"]["content"].has_key("videoWithContextRenderer")) 
+				res.videos.push_back(parse_succinct_video(i["richItemRenderer"]["content"]["videoWithContextRenderer"]));
 			else debug_warning("unknown item found in channel videos");
 		}
 		std::string tab_url = tab["tabRenderer"]["endpoint"]["commandMetadata"]["webCommandMetadata"]["url"].string_value();

@@ -62,6 +62,7 @@ YouTubePageType youtube_get_page_type(std::string url) {
 	if (starts_with(url, "https://m.youtube.com/user/", 0)) return YouTubePageType::CHANNEL;
 	if (starts_with(url, "https://m.youtube.com/channel/", 0)) return YouTubePageType::CHANNEL;
 	if (starts_with(url, "https://m.youtube.com/c/", 0)) return YouTubePageType::CHANNEL;
+	if (starts_with(url, "https://m.youtube.com/@", 0)) return YouTubePageType::CHANNEL;
 	if (starts_with(url, "https://m.youtube.com/results?", 0)) return YouTubePageType::SEARCH;
 	return YouTubePageType::INVALID;
 }
