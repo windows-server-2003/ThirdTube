@@ -434,7 +434,7 @@ void Sem_init(void) {
 					(new EmptyView(0, 0, 320, SMALL_MARGIN)),
 					(new TextView(10, 0, 100, DEFAULT_FONT_INTERVAL + SMALL_MARGIN * 2))
 						->set_text((std::function<std::string ()>) [] () -> std::string {
-							if (update_state == UpdateState::FAILED_CHECKING) return LOCALIZED(RETRY);
+							if (update_state == UpdateState::FAILED_CHECKING || update_state == UpdateState::UP_TO_DATE) return LOCALIZED(RETRY);
 							if (update_state == UpdateState::UPDATES_AVAILABLE) return LOCALIZED(UPDATE);
 							if (update_state == UpdateState::FAILED_INSTALLING) return LOCALIZED(RETRY);
 							return "";
@@ -442,7 +442,10 @@ void Sem_init(void) {
 						->set_x_alignment(TextView::XAlign::CENTER)
 						->set_text_offset(0, -1)
 						->set_on_view_released([] (const View &) {
-							if (update_state == UpdateState::FAILED_CHECKING) update_state = UpdateState::CHECKING_UPDATES;
+							if (update_state == UpdateState::FAILED_CHECKING || update_state == UpdateState::UP_TO_DATE) {
+								update_state = UpdateState::CHECKING_UPDATES;
+								var_need_reflesh = true;
+							}
 							if (update_state == UpdateState::UPDATES_AVAILABLE || update_state == UpdateState::FAILED_INSTALLING) {
 								std::vector<std::string> confirm_lines;
 								if (is_3dsx) confirm_lines = truncate_str(std::regex_replace(LOCALIZED(OVERWRITE_3DSX_CONFIRM), std::regex("%0"), path_3dsx), DIALOG_WIDTH, 3, 0.5, 0.5);
@@ -462,7 +465,7 @@ void Sem_init(void) {
 							}
 						})
 						->set_get_background_color([] (const View &view) -> u32 {
-							if (update_state == UpdateState::FAILED_CHECKING || update_state == UpdateState::UPDATES_AVAILABLE) {
+							if (update_state == UpdateState::FAILED_CHECKING || update_state == UpdateState::UPDATES_AVAILABLE || update_state == UpdateState::UP_TO_DATE) {
 								int blue = std::min<int>(0xFF, 0xB0 + 0x30 * view.touch_darkness);
 								int other = 0x50 + 0x20 * (1 - view.touch_darkness);
 								return 0xFF000000 | blue << 16 | other << 8 | other;
