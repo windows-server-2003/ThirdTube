@@ -56,7 +56,7 @@ YouTubeChannelDetail youtube_load_channel_page(std::string url_or_id) {
 		// append "/videos" at the end of the url
 		{
 			bool ok = false;
-			for (auto pattern : std::vector<std::string>{"https://m.youtube.com/channel/", "https://m.youtube.com/c/", "https://m.youtube.com/user/"}) {
+			for (auto pattern : std::vector<std::string>{"https://m.youtube.com/channel/", "https://m.youtube.com/c/", "https://m.youtube.com/user/", "https://m.youtube.com/@"}) {
 				if (url.substr(0, pattern.size()) == pattern) {
 					url = url.substr(pattern.size(), url.size());
 					auto next_slash = std::find(url.begin(), url.end(), '/');
@@ -163,9 +163,11 @@ void YouTubeChannelDetail::load_more_videos() {
 			
 			for (auto i : yt_result["onResponseReceivedActions"].array_items()) {
 				for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {
-					if (j.has_key("compactVideoRenderer")) {
+					if (j["richItemRenderer"]["content"].has_key("videoWithContextRenderer")) 
+						videos.push_back(parse_succinct_video(j["richItemRenderer"]["content"]["videoWithContextRenderer"]));
+					else if (j.has_key("compactVideoRenderer"))
 						videos.push_back(parse_succinct_video(j["compactVideoRenderer"]));
-					} else if (j.has_key("continuationItemRenderer"))
+					else if (j.has_key("continuationItemRenderer"))
 						continue_token = j["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"].string_value();
 				}
 			}
@@ -174,7 +176,6 @@ void YouTubeChannelDetail::load_more_videos() {
 		[&] (const std::string &error) { debug_error((this->error = "[ch+] " + error)); }
 	);
 }
-
 
 
 
