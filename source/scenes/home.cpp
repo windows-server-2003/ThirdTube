@@ -149,7 +149,7 @@ void Home_resume(std::string arg) {
 	var_need_reflesh = true;
 	
 	resource_lock.lock();
-	update_subscribed_channels(get_subscribed_channels());
+	update_subscribed_channels(get_valid_subscribed_channels());
 	resource_lock.unlock();
 }
 
@@ -325,7 +325,7 @@ static void load_subscription_feed(void *) {
 		resource_lock.unlock();
 		return;
 	}
-	update_subscribed_channels(get_subscribed_channels());
+	update_subscribed_channels(get_valid_subscribed_channels());
 	
 	feed_videos_list_view->recursive_delete_subviews();
 	feed_videos_list_view->views = new_feed_video_views;

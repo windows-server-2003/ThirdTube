@@ -12,6 +12,10 @@ static Mutex resource_lock;
 #define SUBSCRIPTION_VERSION 0
 #define SUBSCRIPTION_FILE_PATH (DEF_MAIN_DIR + "subscription.json")
 
+static bool is_valid_subscription_channel(const SubscriptionChannel &channel) {
+	return is_youtube_url(channel.url) && is_youtube_thumbnail_url(channel.icon_url);
+}
+
 void load_subscription() {
 	u64 file_size;
 	Result_with_string result = Path(SUBSCRIPTION_FILE_PATH).get_size(file_size);
@@ -43,10 +47,11 @@ void load_subscription() {
 				cur_channel.icon_url = video["icon_url"].string_value();
 				cur_channel.name = video["name"].string_value();
 				cur_channel.subscriber_count_str = video["subscriber_count_str"].string_value();
+				// "invalid" channels will not be shown in the subscription list but will still be kept in the subscription file
+				cur_channel.valid = is_valid_subscription_channel(cur_channel);
+				if (!cur_channel.valid) logger.caution("subsc/load", "invalid channel : " + cur_channel.name);
 				
-				bool valid = is_youtube_url(cur_channel.url) && is_youtube_thumbnail_url(cur_channel.icon_url);
-				if (!valid) logger.caution("subsc/load", "invalid channel, ignoring...");
-				else loaded_channels.push_back(cur_channel);
+				loaded_channels.push_back(cur_channel);
 			}
 			std::sort(loaded_channels.begin(), loaded_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
 			resource_lock.lock();
@@ -90,7 +95,7 @@ void save_subscription() {
 bool subscription_is_subscribed(const std::string &id) {
 	resource_lock.lock();
 	bool found = false;
-	for (auto channel : subscribed_channels) if (channel.id == id) {
+	for (auto channel : subscribed_channels) if (channel.valid && channel.id == id) {
 		found = true;
 		break;
 	}
@@ -101,8 +106,9 @@ bool subscription_is_subscribed(const std::string &id) {
 void subscription_subscribe(const SubscriptionChannel &new_channel) {
 	resource_lock.lock();
 	bool found = false;
-	for (auto channel : subscribed_channels) if (channel.id == new_channel.id) {
+	for (auto &channel : subscribed_channels) if (channel.id == new_channel.id) {
 		found = true;
+		channel = new_channel;
 		break;
 	}
 	if (!found) subscribed_channels.push_back(new_channel);
@@ -114,13 +120,13 @@ void subscription_unsubscribe(const std::string &id) {
 	std::vector<SubscriptionChannel> new_subscribed_channels;
 	for (auto channel : subscribed_channels) if (channel.id != id) new_subscribed_channels.push_back(channel);
 	subscribed_channels = new_subscribed_channels;
-	std::sort(subscribed_channels.begin(), subscribed_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
 	resource_lock.unlock();
 }
 
-std::vector<SubscriptionChannel> get_subscribed_channels() {
+std::vector<SubscriptionChannel> get_valid_subscribed_channels() {
 	resource_lock.lock();
-	auto res = subscribed_channels;
+	std::vector<SubscriptionChannel> res;
+	for (auto &channel : subscribed_channels) if (channel.valid) res.push_back(channel);
 	resource_lock.unlock();
 	return res;
 }
