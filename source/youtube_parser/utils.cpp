@@ -51,7 +51,8 @@ bool is_youtube_url(const std::string &url) {
 bool is_youtube_thumbnail_url(const std::string &url) {
 	std::vector<std::string> patterns = {
 		"https://i.ytimg.com/vi/",
-		"https://yt3.ggpht.com/"
+		"https://yt3.ggpht.com/",
+		"https://yt3.googleusercontent.com/"
 	};
 	for (auto pattern : patterns) if (starts_with(url, pattern, 0)) return true;
 	return false;
