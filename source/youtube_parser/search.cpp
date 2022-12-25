@@ -3,8 +3,9 @@
 #include "parser.hpp"
 
 static bool parse_searched_item(RJson content, std::vector<YouTubeSuccinctItem> &res) {
-	if (content.has_key("compactVideoRenderer")) {
-		res.push_back(YouTubeSuccinctItem(parse_succinct_video(content["compactVideoRenderer"])));
+	if (content.has_key("compactVideoRenderer") || content.has_key("videoWithContextRenderer")) {
+		res.push_back(YouTubeSuccinctItem(parse_succinct_video(content.has_key("compactVideoRenderer") ?
+			content["compactVideoRenderer"] : content["videoWithContextRenderer"])));
 		return true;
 	} else if (content.has_key("compactChannelRenderer")) {
 		auto channel_renderer = content["compactChannelRenderer"];
@@ -55,6 +56,7 @@ YouTubeSearchResult youtube_load_search(std::string url) {
 		size_t head = pos + std::string("?search_query=").size();
 		while (head < url.size() && url[head] != '&') query_word.push_back(url[head++]);
 	}
+	url = convert_url_to_mobile(url);
 	{ // decode back %?? url encoding because the API parameter doesn't seem to need it
 		std::string new_query_word;
 		for (size_t i = 0; i < query_word.size(); ) {
