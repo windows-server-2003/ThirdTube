@@ -11,57 +11,63 @@ static Mutex resource_lock;
 
 #define SUBSCRIPTION_VERSION 0
 #define SUBSCRIPTION_FILE_PATH (DEF_MAIN_DIR + "subscription.json")
+#define SUBSCRIPTION_FILE_TMP_PATH (DEF_MAIN_DIR + "subscription_tmp.json")
+
+static AtomicFileIO atomic_io(SUBSCRIPTION_FILE_PATH, SUBSCRIPTION_FILE_TMP_PATH);
 
 static bool is_valid_subscription_channel(const SubscriptionChannel &channel) {
 	return is_youtube_url(channel.url) && is_youtube_thumbnail_url(channel.icon_url);
 }
 
 void load_subscription() {
-	u64 file_size;
-	Result_with_string result = Path(SUBSCRIPTION_FILE_PATH).get_size(file_size);
+	auto tmp = atomic_io.load([] (const std::string &data) {
+		Document json_root;
+		std::string error;
+		RJson data_json = RJson::parse(json_root, data.c_str(), error);
+		
+		int version = data_json.has_key("version") ? data_json["version"].int_value() : -1;
+		return version >= 0;
+	});
+	Result_with_string result = tmp.first;
+	std::string data = tmp.second;
 	if (result.code != 0) {
-		logger.error("subsc/load" , "get_size()..." + result.string + result.error_description, result.code);
+		logger.error("subsc/load", result.string + result.error_description + " " + std::to_string(result.code));
 		return;
 	}
 	
-	char *buf = (char *) malloc(file_size + 1);
+	Document json_root;
+	std::string error;
+	RJson data_json = RJson::parse(json_root, data.c_str(), error);
 	
-	u32 read_size;
-	result = Path(SUBSCRIPTION_FILE_PATH).read_file((u8 *) buf, file_size, read_size);
-	logger.info("subsc/load" , "read_file()..." + result.string + result.error_description, result.code);
-	if (result.code == 0) {
-		buf[read_size] = '\0';
-		
-		Document json_root;
-		std::string error;
-		RJson data = RJson::parse(json_root, buf, error);
-		
-		int version = data.has_key("version") ? data["version"].int_value() : -1;
-		
-		if (version >= 0) {
-			std::vector<SubscriptionChannel> loaded_channels;
-			for (auto video : data["channels"].array_items()) {
-				SubscriptionChannel cur_channel;
-				cur_channel.id = video["id"].string_value();
-				cur_channel.url = video["url"].string_value();
-				cur_channel.icon_url = video["icon_url"].string_value();
-				cur_channel.name = video["name"].string_value();
-				cur_channel.subscriber_count_str = video["subscriber_count_str"].string_value();
-				// "invalid" channels will not be shown in the subscription list but will still be kept in the subscription file
-				cur_channel.valid = is_valid_subscription_channel(cur_channel);
-				if (!cur_channel.valid) logger.caution("subsc/load", "invalid channel : " + cur_channel.name);
-				
-				loaded_channels.push_back(cur_channel);
-			}
-			std::sort(loaded_channels.begin(), loaded_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
-			resource_lock.lock();
-			subscribed_channels = loaded_channels;
-			resource_lock.unlock();
-			logger.info("subsc/load" , "loaded subsc(" + std::to_string(subscribed_channels.size()) + " items)");
-		} else logger.error("subsc/load" , "json err: " + error);
+	int version = data_json.has_key("version") ? data_json["version"].int_value() : -1;
+	
+	std::vector<SubscriptionChannel> loaded_channels;
+	if (version >= 0) {
+		for (auto video : data_json["channels"].array_items()) {
+			SubscriptionChannel cur_channel;
+			cur_channel.id = video["id"].string_value();
+			cur_channel.url = video["url"].string_value();
+			cur_channel.icon_url = video["icon_url"].string_value();
+			cur_channel.name = video["name"].string_value();
+			cur_channel.subscriber_count_str = video["subscriber_count_str"].string_value();
+			// "invalid" channels will not be shown in the subscription list but will still be kept in the subscription file
+			cur_channel.valid = is_valid_subscription_channel(cur_channel);
+			if (!cur_channel.valid) logger.caution("subsc/load", "invalid channel : " + cur_channel.name);
+			
+			loaded_channels.push_back(cur_channel);
+		}
+		std::sort(loaded_channels.begin(), loaded_channels.end(), [] (const auto &i, const auto &j) { return i.name < j.name; });
+	} else {
+		logger.error("subsc/load", "json err : " + data.substr(0, 40));
+		return;
 	}
-	free(buf);
+	
+	resource_lock.lock();
+	subscribed_channels = loaded_channels;
+	resource_lock.unlock();
+	logger.info("subsc/load" , "loaded subsc(" + std::to_string(loaded_channels.size()) + " items)");
 }
+
 void save_subscription() {
 	resource_lock.lock();
 	auto channels_backup = subscribed_channels;
@@ -87,8 +93,9 @@ void save_subscription() {
 	
 	std::string data = RJson(json_root).dump();
 	
-	Result_with_string result = Path(SUBSCRIPTION_FILE_PATH).write_file((u8 *) data.c_str(), data.size());
-	logger.info("subsc/save", "write_file()..." + result.string + result.error_description, result.code);
+	auto result = atomic_io.save(data);
+	if (result.code != 0) logger.warning("subsc/save", result.string + result.error_description, result.code);
+	else logger.info("subsc/save", "subscription saved.");
 }
 
 

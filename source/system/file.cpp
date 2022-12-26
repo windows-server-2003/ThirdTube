@@ -4,7 +4,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-Result_with_string Path::write_file(u8 *data, u32 size) {
+Result_with_string Path::write_file(const u8 *data, u32 size) {
 	Result_with_string res;
 	res.string = [&] () -> std::string {
 		FILE *fp = fopen(path.c_str(), "w");
@@ -55,6 +55,12 @@ Result_with_string Path::delete_file() {
 	Result_with_string res;
 	errno = 0;
 	if (remove(path.c_str()) != 0) res.string = "remove() failed", res.code = errno;
+	return res;
+}
+Result_with_string Path::rename_to(const std::string &new_name) {
+	Result_with_string res;
+	errno = 0;
+	if (rename(path.c_str(), new_name.c_str()) != 0) res.string = "rename() failed", res.code = errno;
 	return res;
 }
 Result_with_string Path::get_size(u64 &size) {

@@ -67,7 +67,7 @@ void History_resume(std::string arg) {
 	thread_suspend = false;
 	var_need_reflesh = true;
 	
-	update_watch_history(get_watch_history());
+	update_watch_history(get_valid_watch_history());
 }
 
 

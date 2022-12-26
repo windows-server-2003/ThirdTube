@@ -11,60 +11,60 @@ static Mutex resource_lock;
 
 #define HISTORY_VERSION 0
 #define HISTORY_FILE_PATH (DEF_MAIN_DIR + "watch_history.json")
+#define HISTORY_FILE_TMP_PATH (DEF_MAIN_DIR + "watch_history_tmp.json")
+
+static AtomicFileIO atomic_io(HISTORY_FILE_PATH, HISTORY_FILE_TMP_PATH);
 
 void load_watch_history() {
-	u64 file_size;
-	Result_with_string result = Path(HISTORY_FILE_PATH).get_size(file_size);
+	auto tmp = atomic_io.load([] (const std::string &data) {
+		Document json_root;
+		std::string error;
+		RJson data_json = RJson::parse(json_root, data.c_str(), error);
+		
+		int version = data_json.has_key("version") ? data_json["version"].int_value() : -1;
+		return version >= 0;
+	});
+	Result_with_string result = tmp.first;
+	std::string data = tmp.second;
 	if (result.code != 0) {
-		logger.error("history/load" , "get_size()..." + result.string + result.error_description, result.code);
+		logger.error("history/load", result.string + result.error_description + " " + std::to_string(result.code));
 		return;
 	}
 	
-	char *buf = (char *) malloc(file_size + 1);
+	Document json_root;
+	std::string error;
+	RJson data_json = RJson::parse(json_root, data.c_str(), error);
 	
-	u32 read_size;
-	result = Path(HISTORY_FILE_PATH).read_file((u8 *) buf, file_size, read_size);
-	logger.info("history/load" , "read_file()..." + result.string + result.error_description, result.code);
-	if (result.code == 0) {
-		buf[read_size] = '\0';
-		
-		Document json_root;
-		std::string error;
-		RJson data = RJson::parse(json_root, buf, error);
-		
-		int version = data.has_key("version") ? data["version"].int_value() : -1;
-		
-		if (version >= 0) {
-			std::vector<HistoryVideo> loaded_watch_history;
-			for (auto video : data["history"].array_items()) {
-				HistoryVideo cur_video;
-				cur_video.id = video["id"].string_value();
-				cur_video.title = video["title"].string_value();
-				cur_video.title_lines = truncate_str(cur_video.title, 320 - VIDEO_LIST_THUMBNAIL_WIDTH - 6, 2, 0.5, 0.5);
-				cur_video.author_name = video["author_name"].string_value();
-				cur_video.length_text = video["length"].string_value();
-				cur_video.my_view_count = video["my_view_count"].int_value();
-				{
-					auto str = video["last_watch_time"].string_value();
-					char *end;
-					cur_video.last_watch_time = strtoll(str.c_str(), &end, 10);
-				}
-				// validation
-				bool valid = youtube_is_valid_video_id(cur_video.id);
-				if (!valid) logger.caution("history/load", "invalid history item, ignoring...");
-				else loaded_watch_history.push_back(cur_video);
-			}
-			std::sort(loaded_watch_history.begin(), loaded_watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
-				return i.last_watch_time > j.last_watch_time;
-			});
-			resource_lock.lock();
-			watch_history = loaded_watch_history;
-			resource_lock.unlock();
-			logger.info("history/load" , "loaded history(" + std::to_string(loaded_watch_history.size()) + " items)");
-		} else logger.error("history/load" , "failed to load history, json err:" + error);
-		
+	int version = data_json.has_key("version") ? data_json["version"].int_value() : -1;
+	
+	std::vector<HistoryVideo> loaded_watch_history;
+	if (version >= 0) {
+		for (auto video : data_json["history"].array_items()) {
+			HistoryVideo cur_video;
+			cur_video.id = video["id"].string_value();
+			cur_video.title = video["title"].string_value();
+			cur_video.title_lines = truncate_str(cur_video.title, 320 - VIDEO_LIST_THUMBNAIL_WIDTH - 6, 2, 0.5, 0.5);
+			cur_video.author_name = video["author_name"].string_value();
+			cur_video.length_text = video["length"].string_value();
+			cur_video.my_view_count = video["my_view_count"].int_value();
+			cur_video.last_watch_time = strtoll(video["last_watch_time"].string_value().c_str(), NULL, 10);
+			cur_video.valid = youtube_is_valid_video_id(cur_video.id);
+			if (!cur_video.valid) logger.caution("history/load", "invalid history item : " + cur_video.title);
+			
+			loaded_watch_history.push_back(cur_video);
+		}
+		std::sort(loaded_watch_history.begin(), loaded_watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
+			return i.last_watch_time > j.last_watch_time;
+		});
+	} else {
+		logger.error("history/load", "json err : " + data.substr(0, 40));
+		return;
 	}
-	free(buf);
+	
+	resource_lock.lock();
+	watch_history = loaded_watch_history;
+	resource_lock.unlock();
+	logger.info("history/load" , "loaded history(" + std::to_string(loaded_watch_history.size()) + " items)");
 }
 void save_watch_history() {
 	resource_lock.lock();
@@ -91,20 +91,23 @@ void save_watch_history() {
 	
 	std::string data = RJson(json_root).dump();
 	
-	Result_with_string result = Path(HISTORY_FILE_PATH).write_file((u8 *) data.c_str(), data.size());
-	logger.info("history/save", "write_file()..." + result.string + result.error_description, result.code);
+	auto result = atomic_io.save(data);
+	if (result.code != 0) logger.warning("history/save", result.string + result.error_description, result.code);
+	else logger.info("history/save", "history saved.");
 }
 void add_watched_video(HistoryVideo video) {
 	if (var_history_enabled) {
+		video.title_lines = truncate_str(video.title, 320 - VIDEO_LIST_THUMBNAIL_WIDTH - 6, 2, 0.5, 0.5);
 		resource_lock.lock();
 		bool found = false;
 		for (auto &i : watch_history) if (i.id == video.id) {
-			i.my_view_count++;
-			i.last_watch_time = video.last_watch_time;
+			int my_view_count = i.my_view_count + 1;
+			i = video;
+			i.my_view_count = my_view_count;
 			found = true;
 		}
 		if (!found) {
-			video.title_lines = truncate_str(video.title, 320 - VIDEO_LIST_THUMBNAIL_WIDTH - 6, 2, 0.5, 0.5);
+			video.my_view_count = 1;
 			watch_history.push_back(video);
 		}
 		std::sort(watch_history.begin(), watch_history.end(), [] (const HistoryVideo &i, const HistoryVideo &j) {
@@ -125,9 +128,11 @@ void history_erase_all() {
 	watch_history.clear();
 	resource_lock.unlock();
 }
-std::vector<HistoryVideo> get_watch_history() {
+// ------------------------------------------------
+std::vector<HistoryVideo> get_valid_watch_history() {
 	resource_lock.lock();
-	std::vector<HistoryVideo> res = watch_history;
+	std::vector<HistoryVideo> res;
+	for (auto &video : watch_history) if (video.valid) res.push_back(video);
 	resource_lock.unlock();
 	return res;
 }
