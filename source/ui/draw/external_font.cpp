@@ -108,7 +108,7 @@ struct FontTable {
 		if (c < 0x80) return c;
 		
 		u32 c2 = c >> 8;
-		int group_index;
+		u8 group_index;
 		if (c2 <= TWO_BYTE_HIGH) {
 			if (c2 < TWO_BYTE_LOW) return -1;
 			group_index = group_index_2[c2 - TWO_BYTE_LOW];
@@ -119,7 +119,8 @@ struct FontTable {
 			if (c2 < FOUR_BYTE_LOW) return -1;
 			group_index = group_index_4[c2 - FOUR_BYTE_LOW];
 		} else return -1;
-		return 0x80 + (group_index << 6) + (c & 63);
+		if (group_index == (u8) -1) return -1;
+		return 0x80 + ((u32) group_index << 6) + (c & 63);
 	}
 	
 	void load_initial() {
@@ -181,6 +182,9 @@ struct FontTable {
 			logger.error(DEF_EXTFONT_INIT_STR, "Unknown RTL char: " + std::to_string(rtl_characters[i]));
 		
 		free(fs_buffer);
+		
+		// clear font_images
+		memset(font_images, 0, sizeof(font_images));
 	}
 	void deinit() {
 		free(font_samples);
@@ -257,11 +261,14 @@ struct FontTable {
 		if (reverse_start != -1) std::reverse(s + reverse_start, s + n);
 	}
 
+	bool is_font_available(int index) { return font_images[index].subtex; }
 	float get_width_by_index(int index) { return font_images[index].subtex->width; }
 	float get_width_one(u32 c, float size) {
 		u32 index = char_to_font_index(c);
 		// out of bounds or font not loaded/unused character -> the width of <?>
-		if (index == (u32) -1 || !font_images[index].subtex) return is_ignored_character(c) ? 0 : (get_width_by_index(0) + INTERVAL_OFFSET) * size;
+		if (index != (u32) -1) my_assert(index < MAX_FONT_CHARS);
+		if (index == (u32) -1 || !is_font_available(index)) 
+			return is_ignored_character(c) || !is_font_available(0) ? 0 : (get_width_by_index(0) + INTERVAL_OFFSET) * size;
 		return (get_width_by_index(index) + INTERVAL_OFFSET) * size;
 	}
 	float get_width(const std::string &s, float size) {
