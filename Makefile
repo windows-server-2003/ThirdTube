@@ -50,7 +50,7 @@ ROMFS		:=	romfs
 LIBRARY := library
 GFXBUILD	:=	$(ROMFS)/gfx
 #---------------------------------------------------------------------------------
-APP_VER					:= 81
+APP_VER					:= 82
 APP_TITLE				:= ThirdTube
 APP_DESCRIPTION				:= A YouTube client for the new 3DS
 APP_AUTHOR				:= windows_server_2003
