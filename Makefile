@@ -52,7 +52,7 @@ GFXBUILD	:=	$(ROMFS)/gfx
 #---------------------------------------------------------------------------------
 APP_VER					:= 82
 APP_TITLE				:= ThirdTube
-APP_DESCRIPTION				:= A YouTube client for the new 3DS
+APP_DESCRIPTION				:= A YouTube client for the 3DS
 APP_AUTHOR				:= windows_server_2003
 PRODUCT_CODE				:= CTR-TYT
 UNIQUE_ID				:= 0xBF74D
