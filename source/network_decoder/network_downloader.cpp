@@ -116,6 +116,17 @@ static void confirm_thread_network_session_list_inited() {
 	}
 }
 
+static std::string remove_url_parameter(const std::string &url, const std::string &param) {
+	std::string res;
+	for (size_t i = 0; i < url.size(); ) {
+		if (url[i] == '&' || url[i] == '?') {
+			if (url.substr(i + 1, param.size() + 1) == param + "=") {
+				i = std::find(url.begin() + i + 1, url.end(), '&') - url.begin();
+			} else res.push_back(url[i++]);
+		} else res.push_back(url[i++]);
+	}
+	return res;
+}
 
 #define LOG_THREAD_STR "net/dl"
 void NetworkStreamDownloader::downloader_thread() {
@@ -238,12 +249,15 @@ void NetworkStreamDownloader::downloader_thread() {
 			u64 expected_len = end - start;
 			
 			auto &session_list = cur_stream->session_list ? *cur_stream->session_list : thread_network_session_list;
-			auto result = session_list.perform(HttpRequest::GET(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}}));
-			if (result.redirected_url != "") cur_stream->url = result.redirected_url;
+			// length not sure -> use Range header to get the size (slower)
+			auto result = cur_stream->len == 0 ?
+				session_list.perform(HttpRequest::GET(cur_stream->url, {{"Range", "bytes=" + std::to_string(start) + "-" + std::to_string(end - 1)}})) :
+				session_list.perform(HttpRequest::GET(cur_stream->url + "&range=" + std::to_string(start) + "-" + std::to_string(end - 1), {}));
+			if (result.redirected_url != "") cur_stream->url = remove_url_parameter(result.redirected_url, "range");
 			
 			
 			if (!result.fail && result.status_code_is_success()) {
-				if (!cur_stream->ready) {
+				if (cur_stream->len == 0) {
 					auto content_range_str = result.get_header("Content-Range");
 					char *slash = strchr(content_range_str.c_str(), '/');
 					bool ok = false;
@@ -252,7 +266,7 @@ void NetworkStreamDownloader::downloader_thread() {
 						cur_stream->len = strtoll(slash + 1, &end, 10);
 						if (!*end) {
 							ok = true;
-							cur_stream->block_num = (cur_stream->len + BLOCK_SIZE - 1) / BLOCK_SIZE;
+							cur_stream->block_num = NetworkStream::get_block_num(cur_stream->len);
 						} else logger.error(LOG_THREAD_STR, "failed to parse Content-Range : " + std::string(slash + 1));
 					} else logger.error(LOG_THREAD_STR, "no slash in Content-Range response header : " + content_range_str);
 					if (!ok) cur_stream->error = true;

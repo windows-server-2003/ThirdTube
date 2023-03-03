@@ -67,4 +67,13 @@ YouTubePageType youtube_get_page_type(std::string url) {
 	if (starts_with(url, "https://m.youtube.com/results?", 0)) return YouTubePageType::SEARCH;
 	return YouTubePageType::INVALID;
 }
+int64_t extract_stream_length(const std::string &url) {
+	auto pos = url.find("&clen=");
+	if (pos == std::string::npos) pos = url.find("?clen=");
+	if (pos == std::string::npos) return -1;
+	pos += std::string("&clen=").size();
+	int64_t res = 0;
+	while (pos < url.size() && isdigit(url[pos])) res = res * 10 + url[pos++] - '0';
+	return res;
+}
 
