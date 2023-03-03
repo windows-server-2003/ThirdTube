@@ -33,7 +33,7 @@ You can use the qr code below to download & install .cia from 3ds (Thanks @[Mini
  - Captions  
  - Local watch history and channel subscription  
  - No ads  
-   It's more like "Ads are not implemented" rather than "We have ad-blocking functionality".  
+   - It's more like "Ads are not implemented" rather than "We have ad-blocking functionality".  
    Of course, I will never "implement" it :)  
 
 ## Controls
