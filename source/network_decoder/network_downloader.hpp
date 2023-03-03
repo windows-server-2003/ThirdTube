@@ -12,16 +12,17 @@ struct NetworkStream {
 	static constexpr u64 NEW3DS_MAX_CACHE_BLOCKS = 12 * 1000 * 1000 / BLOCK_SIZE;
 	static constexpr u64 OLD3DS_MAX_CACHE_BLOCKS = 4 * 1000 * 1000 / BLOCK_SIZE;
 	static constexpr int RETRY_CNT_MAX = 1;
+	static u64 get_block_num(u64 size) { return (size + BLOCK_SIZE - 1) / BLOCK_SIZE; }
 	
-	u64 block_num = 0;
 	std::string url;
 	Mutex downloaded_data_lock; // std::map needs locking when searching and inserting at the same time
+	u64 len = 0;
+	u64 block_num = 0;
 	std::map<u64, std::vector<u8> > downloaded_data;
 	bool whole_download = false;
 	NetworkSessionList *session_list = NULL;
 	
 	// anything above here is not supposed to be used from outside network_downloader.cpp and network_downloader.hpp
-	u64 len = 0;
 	volatile bool ready = false;
 	volatile bool suspend_request = false;
 	volatile bool quit_request = false;
@@ -37,8 +38,10 @@ struct NetworkStream {
 	bool livestream_private = false;
 	bool read_dead_tried = false;
 	
+	
 	// if `whole_download` is true, it will not use Range request but download the whole content at once (used for livestreams)
-	NetworkStream (std::string url, bool whole_download, NetworkSessionList *session_list) : url(url), whole_download(whole_download), session_list(session_list) {}
+	NetworkStream (std::string url, int64_t len, bool whole_download, NetworkSessionList *session_list) : url(url), len(len < 0 ? 0 : len),
+		block_num(get_block_num(this->len)), whole_download(whole_download), session_list(session_list) {}
 	
 	double get_download_percentage();
 	std::vector<double> get_buffering_progress_bar(int res_len);

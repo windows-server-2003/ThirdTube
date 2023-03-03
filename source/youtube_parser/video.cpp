@@ -40,7 +40,6 @@ static bool extract_player_data(Document &json_root, RJson player_response, YouT
 		
 		url = url.substr(0, n_start) + next_n + url.substr(n_end, url.size() - n_end);
 		if (url.find("ratebypass") == std::string::npos) url += "&ratebypass=yes";
-		
 		i.set_str(json_root, "url", url.c_str());
 	}
 	for (auto &i : formats) i.set_str(json_root, "url", url_decode(i["url"].string_value()).c_str()); // something like %2C still appears in the url, so decode them back
@@ -302,7 +301,7 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 #	ifdef _WIN32
 	// for debug purpose, to check whether the extracted stream url is working
 	if (res.audio_stream_url != "") {
-		auto tmp_data = http_get(res.audio_stream_url, {{"Range", "bytes=0-400000"}}).second;
+		auto tmp_data = http_get(res.audio_stream_url + "&range=0-400000").second;
 		if (tmp_data.size() != 400001) {
 			debug_error("!!!!!!!!!!!!!!!!!!!!! SIZE DIFFER : " + std::to_string(tmp_data.size()) + " !!!!!!!!!!!!!!!!!!!!!");
 		} else debug_info("----------------------- OK -----------------------");
