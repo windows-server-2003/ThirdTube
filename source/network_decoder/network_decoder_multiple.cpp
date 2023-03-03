@@ -1,5 +1,6 @@
 #include "network_decoder_multiple.hpp"
 #include "headers.hpp"
+#include "youtube_parser/parser.hpp"
 
 void NetworkMultipleDecoder::deinit() {
 	initer_stop_request = true;
@@ -72,8 +73,8 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 	NetworkDecoderFFmpegIOData tmp_ffmpeg_data;
 	std::vector<NetworkStream *> streams;
 	if (video_audio_seperate) {
-		NetworkStream *video_stream = new NetworkStream(video_url + url_append, is_livestream, NULL);
-		NetworkStream *audio_stream = new NetworkStream(audio_url + url_append, is_livestream, NULL);
+		NetworkStream *video_stream = new NetworkStream(video_url + url_append, extract_stream_length(video_url), is_livestream, NULL);
+		NetworkStream *audio_stream = new NetworkStream(audio_url + url_append, extract_stream_length(audio_url), is_livestream, NULL);
 		streams = {video_stream, audio_stream};
 		downloader.add_stream(video_stream);
 		downloader.add_stream(audio_stream);
@@ -85,7 +86,7 @@ Result_with_string NetworkMultipleDecoder::init(std::string video_url, std::stri
 		video_url = get_base_url(video_stream->url);
 		audio_url = get_base_url(audio_stream->url);
 	} else {
-		NetworkStream *both_stream = new NetworkStream(both_url + url_append, is_livestream, NULL);
+		NetworkStream *both_stream = new NetworkStream(both_url + url_append, extract_stream_length(both_url), is_livestream, NULL);
 		streams = { both_stream };
 		downloader.add_stream(both_stream);
 		decoder.interrupt = false;
@@ -244,9 +245,10 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 		logger.info("net/live-init", "next : " + std::to_string(seq_next));
 		
 		NetworkDecoderFFmpegIOData tmp_ffmpeg_data;
+		std::string url_prefix = "&sq=" + std::to_string(seq_next);
 		if (video_audio_seperate) {
-			NetworkStream *video_stream = new NetworkStream(video_url + "&sq=" + std::to_string(seq_next), is_livestream, NULL);
-			NetworkStream *audio_stream = new NetworkStream(audio_url + "&sq=" + std::to_string(seq_next), is_livestream, NULL);
+			NetworkStream *video_stream = new NetworkStream(video_url + url_prefix, extract_stream_length(video_url), is_livestream, NULL);
+			NetworkStream *audio_stream = new NetworkStream(audio_url + url_prefix, extract_stream_length(audio_url), is_livestream, NULL);
 			video_stream->disable_interrupt = audio_stream->disable_interrupt = true;
 			downloader->add_stream(video_stream);
 			downloader->add_stream(audio_stream);
@@ -278,7 +280,7 @@ void NetworkMultipleDecoder::livestream_initer_thread_func() {
 			}
 			video_stream->disable_interrupt = audio_stream->disable_interrupt = false;
 		} else {
-			NetworkStream *both_stream = new NetworkStream(both_url + "&sq=" + std::to_string(seq_next), is_livestream, NULL);
+			NetworkStream *both_stream = new NetworkStream(both_url + url_prefix, extract_stream_length(both_url), is_livestream, NULL);
 			both_stream->disable_interrupt = true;
 			downloader->add_stream(both_stream);
 			Result_with_string result = tmp_ffmpeg_data.init(both_stream, &decoder);
