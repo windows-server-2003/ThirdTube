@@ -15,7 +15,7 @@ It does not run any javascripts or render html/css, so it's significantly faster
 The name is derived from the fact that it is the third YouTube client on 3DS, following the official YouTube app (discontinued) and the new 3DS browser.  
 
 ## QR code
-You can use the qr code below to download & install .cia from 3ds (Thanks @[Minionguyjpro](https://github.com/Minionguyjpro))
+You can use the qr code below to download & install .cia from 3DS (Thanks @[Minionguyjpro](https://github.com/Minionguyjpro))
 <img src="https://github.com/windows-server-2003/ThirdTube/blob/main/images/qr_code.png" width="200" height="200">
 
 ## Screenshots
@@ -52,7 +52,7 @@ Below are for debug purposes
  - Select + R + A : toggle FPS monitor
 
 ## Requirments
-* A 3DS (including 2DS) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.
+* A 3DS (including 2DS and all other models such as XL) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.
 * I haven't tested the minimum system version, but at least 8.1.0-0
 
 ## FAQs
