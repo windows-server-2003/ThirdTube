@@ -29,11 +29,11 @@
 
 #include "rational.h"
 #include "avutil.h"
+#include "channel_layout.h"
 #include "dict.h"
 #include "log.h"
 #include "pixfmt.h"
 #include "samplefmt.h"
-#include "version.h"
 
 /**
  * @defgroup avoptions AVOptions
@@ -238,8 +238,11 @@ enum AVOptionType{
     AV_OPT_TYPE_VIDEO_RATE, ///< offset must point to AVRational
     AV_OPT_TYPE_DURATION,
     AV_OPT_TYPE_COLOR,
+#if FF_API_OLD_CHANNEL_LAYOUT
     AV_OPT_TYPE_CHANNEL_LAYOUT,
+#endif
     AV_OPT_TYPE_BOOL,
+    AV_OPT_TYPE_CHLAYOUT,
 };
 
 /**
@@ -694,7 +697,11 @@ int av_opt_set_image_size(void *obj, const char *name, int w, int h, int search_
 int av_opt_set_pixel_fmt (void *obj, const char *name, enum AVPixelFormat fmt, int search_flags);
 int av_opt_set_sample_fmt(void *obj, const char *name, enum AVSampleFormat fmt, int search_flags);
 int av_opt_set_video_rate(void *obj, const char *name, AVRational val, int search_flags);
+#if FF_API_OLD_CHANNEL_LAYOUT
+attribute_deprecated
 int av_opt_set_channel_layout(void *obj, const char *name, int64_t ch_layout, int search_flags);
+#endif
+int av_opt_set_chlayout(void *obj, const char *name, const AVChannelLayout *layout, int search_flags);
 /**
  * @note Any old dictionary present is discarded and replaced with a copy of the new one. The
  * caller still owns val is and responsible for freeing it.
@@ -749,7 +756,11 @@ int av_opt_get_image_size(void *obj, const char *name, int search_flags, int *w_
 int av_opt_get_pixel_fmt (void *obj, const char *name, int search_flags, enum AVPixelFormat *out_fmt);
 int av_opt_get_sample_fmt(void *obj, const char *name, int search_flags, enum AVSampleFormat *out_fmt);
 int av_opt_get_video_rate(void *obj, const char *name, int search_flags, AVRational *out_val);
+#if FF_API_OLD_CHANNEL_LAYOUT
+attribute_deprecated
 int av_opt_get_channel_layout(void *obj, const char *name, int search_flags, int64_t *ch_layout);
+#endif
+int av_opt_get_chlayout(void *obj, const char *name, int search_flags, AVChannelLayout *layout);
 /**
  * @param[out] out_val The returned dictionary is a copy of the actual value and must
  * be freed with av_dict_free() by the caller
@@ -791,8 +802,15 @@ int av_opt_query_ranges(AVOptionRanges **, void *obj, const char *key, int flags
 /**
  * Copy options from src object into dest object.
  *
+ * The underlying AVClass of both src and dest must coincide. The guarantee
+ * below does not apply if this is not fulfilled.
+ *
  * Options that require memory allocation (e.g. string or binary) are malloc'ed in dest object.
  * Original memory allocated for such options is freed unless both src and dest options points to the same memory.
+ *
+ * Even on error it is guaranteed that allocated options from src and dest
+ * no longer alias each other afterwards; in particular calling av_opt_free()
+ * on both src and dest is safe afterwards if dest has been memdup'ed from src.
  *
  * @param dest Object to copy from
  * @param src  Object to copy into
