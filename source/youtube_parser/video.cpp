@@ -115,12 +115,24 @@ static bool extract_player_data(Document &json_root, RJson player_response, YouT
 }
 
 static void extract_like_dislike_counts(RJson buttons, YouTubeVideoDetail &res) {
-	for (auto button : buttons.array_items()) if (button.has_key("slimMetadataToggleButtonRenderer")) {
-		auto content = get_text_from_object(button["slimMetadataToggleButtonRenderer"]["button"]["toggleButtonRenderer"]["defaultText"]);
-		if (content.size() && !isdigit(content[0])) content = "hidden";
-		if (button["slimMetadataToggleButtonRenderer"]["isLike"].bool_value()) res.like_count_str = content;
-		else if (button["slimMetadataToggleButtonRenderer"]["isDislike"].bool_value()) res.dislike_count_str = content;
-		if (button["slimMetadataToggleButtonRenderer"]["target"]["videoId"].is_valid()) res.id = button["slimMetadataToggleButtonRenderer"]["target"]["videoId"].string_value();
+	for (auto button : buttons.array_items()) {
+		if (button.has_key("slimMetadataToggleButtonRenderer")) { // legacy?
+			auto content = get_text_from_object(button["slimMetadataToggleButtonRenderer"]["button"]["toggleButtonRenderer"]["defaultText"]);
+			if (content.size() && !isdigit(content[0])) content = "hidden";
+			if (button["slimMetadataToggleButtonRenderer"]["isLike"].bool_value()) res.like_count_str = content;
+			else if (button["slimMetadataToggleButtonRenderer"]["isDislike"].bool_value()) res.dislike_count_str = content;
+			if (button["slimMetadataToggleButtonRenderer"]["target"]["videoId"].is_valid()) res.id = button["slimMetadataToggleButtonRenderer"]["target"]["videoId"].string_value();
+		}
+		if (button["slimMetadataButtonRenderer"]["button"].has_key("segmentedLikeDislikeButtonRenderer")) {
+			auto renderer = button["slimMetadataButtonRenderer"]["button"]["segmentedLikeDislikeButtonRenderer"];
+			auto get_text = [] (RJson button) -> std::string {
+				auto text = get_text_from_object(button["toggleButtonRenderer"]["defaultText"]);
+				if (text.size() && !isdigit(text[0])) return "hidden";
+				return text;
+			};
+			res.like_count_str = get_text(renderer["likeButton"]);
+			res.dislike_count_str = get_text(renderer["dislikeButton"]);
+		}
 	}
 }
 
@@ -223,8 +235,10 @@ static void extract_metadata(RJson data, YouTubeVideoDetail &res) {
 			}
 		}
 		for (auto j : i["engagementPanelSectionListRenderer"]["content"]["structuredDescriptionContentRenderer"]["items"].array_items()) {
-			if (j.has_key("expandableVideoDescriptionBodyRenderer"))
+			if (j["expandableVideoDescriptionBodyRenderer"].has_key("descriptionBodyText"))
 				res.description = get_text_from_object(j["expandableVideoDescriptionBodyRenderer"]["descriptionBodyText"]);
+			if (j["expandableVideoDescriptionBodyRenderer"].has_key("attributedDescriptionBodyText"))
+				res.description = j["expandableVideoDescriptionBodyRenderer"]["attributedDescriptionBodyText"]["content"].string_value();
 			if (j.has_key("videoDescriptionHeaderRenderer")) {
 				res.publish_date = get_text_from_object(j["videoDescriptionHeaderRenderer"]["publishDate"]);
 				res.views_str = get_text_from_object(j["videoDescriptionHeaderRenderer"]["views"]);
