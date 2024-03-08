@@ -27,8 +27,11 @@ static void parse_channel_data(RJson data, YouTubeChannelDetail &res) {
 		auto model = data["header"]["pageHeaderRenderer"]["content"]["pageHeaderViewModel"];
 		res.banner_url = get_thumbnail_url_exact(model["banner"]["imageBannerViewModel"]["image"]["sources"], 320);
 		res.icon_url = get_thumbnail_url_closest(model["image"]["decoratedAvatarViewModel"]["avatar"]["avatarViewModel"]["image"]["sources"], 88);
-		res.subscriber_count_str = model["metadata"]["contentMetadataViewModel"]["metadataRows"].array_items()[0]
-			["metadataParts"].array_items()[1]["text"]["content"].string_value();
+		auto tmp = model["metadata"]["contentMetadataViewModel"]["metadataRows"].array_items();
+		if (tmp.size()) {
+			tmp = tmp[0]["metadataParts"].array_items();
+			if (tmp.size() >= 2) res.subscriber_count_str = tmp[1]["text"]["content"].string_value();
+		}
 	}
 	res.id = metadata_renderer["externalId"].string_value();
 	res.url = "https://m.youtube.com/channel/" + metadata_renderer["externalId"].string_value();
@@ -125,7 +128,7 @@ std::vector<YouTubeChannelDetail> youtube_load_channel_page_multi(std::vector<st
 	int n = ids.size();
 	int finished = 0;
 	for (int i = 0; i < n; i++) {
-		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00"}}, "browseId": "%2", "params":"EgZ2aWRlb3M%3D"})";
+		std::string post_content = R"({"context": {"client": {"hl": "%0", "gl": "%1", "clientName": "MWEB", "clientVersion": "2.20210711.08.00"}}, "browseId": "%2", "params":"EgZ2aWRlb3PyBgQKAjoA"})";
 		post_content = std::regex_replace(post_content, std::regex("%0"), language_code);
 		post_content = std::regex_replace(post_content, std::regex("%1"), country_code);
 		post_content = std::regex_replace(post_content, std::regex("%2"), ids[i]);
