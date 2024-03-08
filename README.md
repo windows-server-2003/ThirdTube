@@ -1,8 +1,8 @@
 # ThirdTube
 
 A work-in-progress homebrew YouTube client for the 3DS  
-[GBAtemp Thread](https://gbatemp.net/threads/release-thirdtube-a-homebrew-youtube-client-for-the-new-3ds.591696/)  
-[Discord Server](https://discord.gg/CVcThBCQJM)
+* [GBAtemp Thread](https://gbatemp.net/threads/release-thirdtube-a-homebrew-youtube-client-for-the-new-3ds.591696/)  
+* [Discord Server](https://discord.gg/CVcThBCQJM)
 
 ## Instability Warning
 
@@ -15,7 +15,7 @@ It does not run any javascripts or render html/css, so it's significantly faster
 The name is derived from the fact that it is the third YouTube client on 3DS, following the official YouTube app (discontinued) and the new 3DS browser.  
 
 ## QR code
-You can use the qr code below to download & install .cia from 3ds(Thanks @Minionguyjpro)
+You can use the qr code below to download & install .cia from 3DS (Thanks @[Minionguyjpro](https://github.com/Minionguyjpro))
 <img src="https://github.com/windows-server-2003/ThirdTube/blob/main/images/qr_code.png" width="200" height="200">
 
 ## Screenshots
@@ -25,7 +25,7 @@ You can use the qr code below to download & install .cia from 3ds(Thanks @Minion
 ## Features
 
  - Video Playback up to 360p  
-   480p might be possible and could be considered in the future development
+   - 480p might be possible and could be considered in the future development
  - Livestreams and premiere videos support  
  - Searching  
  - Video suggestion  
@@ -33,7 +33,7 @@ You can use the qr code below to download & install .cia from 3ds(Thanks @Minion
  - Captions  
  - Local watch history and channel subscription  
  - No ads  
-   It's more like "Ads are not implemented" rather than "We have ad-blocking functionality".  
+   - It's more like "Ads are not implemented" rather than "We have ad-blocking functionality".  
    Of course, I will never "implement" it :)  
 
 ## Controls
@@ -51,16 +51,14 @@ Below are for debug purposes
  - Select + Y : toggle memory usage monitor
  - Select + R + A : toggle FPS monitor
 
-
-
 ## Requirments
-A 3DS (including 2DS) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.  
-I haven't tested the minimum system version, but at least 8.1.0-0 is needed.  
+* A 3DS (including 2DS and all other models such as XL) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.
+* I haven't tested the minimum system version, but at least 8.1.0-0
 
 ## FAQs
 
- - Does it make sense?  
-   The **worst** question in the console homebrew scene. Isn't it just exciting to see your favorite videos playing on a 3DS?
+ - Q: Does it make sense?  
+   A: The **worst** question in the console homebrew scene. Isn't it just exciting to see your favorite videos playing on a 3DS?
 
 ## Building
 You need:
