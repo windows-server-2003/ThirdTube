@@ -123,7 +123,7 @@ static void extract_like_dislike_counts(RJson buttons, YouTubeVideoDetail &res) 
 			else if (button["slimMetadataToggleButtonRenderer"]["isDislike"].bool_value()) res.dislike_count_str = content;
 			if (button["slimMetadataToggleButtonRenderer"]["target"]["videoId"].is_valid()) res.id = button["slimMetadataToggleButtonRenderer"]["target"]["videoId"].string_value();
 		}
-		if (button["slimMetadataButtonRenderer"]["button"].has_key("segmentedLikeDislikeButtonRenderer")) {
+		if (button["slimMetadataButtonRenderer"]["button"].has_key("segmentedLikeDislikeButtonRenderer")) { // old?
 			auto renderer = button["slimMetadataButtonRenderer"]["button"]["segmentedLikeDislikeButtonRenderer"];
 			auto get_text = [] (RJson button) -> std::string {
 				auto text = get_text_from_object(button["toggleButtonRenderer"]["defaultText"]);
@@ -132,6 +132,11 @@ static void extract_like_dislike_counts(RJson buttons, YouTubeVideoDetail &res) 
 			};
 			res.like_count_str = get_text(renderer["likeButton"]);
 			res.dislike_count_str = get_text(renderer["dislikeButton"]);
+		}
+		if (button["slimMetadataButtonRenderer"]["button"].has_key("segmentedLikeDislikeButtonViewModel")) {
+			res.like_count_str = button["slimMetadataButtonRenderer"]["button"]["segmentedLikeDislikeButtonViewModel"]["likeButtonViewModel"]
+				["likeButtonViewModel"]["toggleButtonViewModel"]["toggleButtonViewModel"]["defaultButtonViewModel"]["buttonViewModel"]["title"].string_value();
+			if (res.like_count_str.size() && !isdigit(res.like_count_str[0])) res.like_count_str = "hidden";
 		}
 	}
 }
