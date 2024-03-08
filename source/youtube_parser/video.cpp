@@ -316,16 +316,6 @@ YouTubeVideoDetail youtube_load_video_page(std::string url) {
 		);
 	}
 #	endif
-
-#	ifdef _WIN32
-	// for debug purpose, to check whether the extracted stream url is working
-	if (res.audio_stream_url != "") {
-		auto tmp_data = http_get(res.audio_stream_url + "&range=0-400000").second;
-		if (tmp_data.size() != 400001) {
-			debug_error("!!!!!!!!!!!!!!!!!!!!! SIZE DIFFER : " + std::to_string(tmp_data.size()) + " !!!!!!!!!!!!!!!!!!!!!");
-		} else debug_info("----------------------- OK -----------------------");
-	} else debug_error("!!!!!!!!!!!!!!!!!!!!! AUDIO STREAM URL EMPTY !!!!!!!!!!!!!!!!!!!!!");
-#	endif
 	
 	if (res.id != "") res.succinct_thumbnail_url = youtube_get_video_thumbnail_url_by_id(res.id);
 #	ifndef _WIN32
