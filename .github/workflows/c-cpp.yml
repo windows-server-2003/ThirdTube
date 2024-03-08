@@ -13,11 +13,11 @@ jobs:
     container: devkitpro/devkitarm
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: make
       run: make
     - name: Upload binary
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Build
         path: |
