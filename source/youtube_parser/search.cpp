@@ -82,7 +82,7 @@ YouTubeSearchResult youtube_load_search(std::string url) {
 	access_and_parse_json(
 		[&] () { return http_post_json(get_innertube_api_url("search"), post_content); },
 		[&] (Document &, RJson yt_result) {
-			res.estimated_result_num = std::stoll(yt_result["estimatedResults"].string_value());
+			res.estimated_result_num = yt_result["estimatedResults"].string_value();
 			res.continue_token = "";
 			for (auto i : yt_result["contents"]["sectionListRenderer"]["contents"].array_items()) {
 				if (i.has_key("itemSectionRenderer"))
@@ -112,7 +112,7 @@ void YouTubeSearchResult::load_more_results() {
 	access_and_parse_json(
 		[&] () { return http_post_json(get_innertube_api_url("search"), post_content); },
 		[&] (Document &, RJson yt_result) {
-			estimated_result_num = std::stoll(yt_result["estimatedResults"].string_value());
+			estimated_result_num = yt_result["estimatedResults"].string_value();
 			continue_token = "";
 			for (auto i : yt_result["onResponseReceivedCommands"].array_items()) {
 				for (auto j : i["appendContinuationItemsAction"]["continuationItems"].array_items()) {

@@ -52,7 +52,7 @@ struct YouTubeSuccinctItem {
 
 struct YouTubeSearchResult {
 	std::string error;
-	int estimated_result_num;
+	std::string estimated_result_num;
 	std::vector<YouTubeSuccinctItem> results;
 	
 	std::string continue_token;
@@ -91,7 +91,6 @@ struct YouTubeVideoDetail {
 	std::string views_str;
 	
 	// caption-related data
-	std::string caption_base_url;
 	struct CaptionBaseLanguage {
 		std::string name; // e.g. "English", "Japanese"
 		std::string id; // e.g. "en", "ja"
