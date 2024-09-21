@@ -53,7 +53,7 @@ Below are for debug purposes
 
 
 
-## Requirments
+## Requirements
 A 3DS (including 2DS) with [Luma3DS](https://github.com/LumaTeam/Luma3DS) installed and [DSP1](https://github.com/zoogie/DSP1) run.  
 I haven't tested the minimum system version, but at least 8.1.0-0 is needed.  
 
