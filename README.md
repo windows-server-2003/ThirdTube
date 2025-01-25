@@ -1,3 +1,8 @@
+## Important
+This project is now archived, please use [FourthTube](https://github.com/erievs/FourthTube/), the translations are here and updated!
+
+#
+
 # ThirdTube
 
 A work-in-progress homebrew YouTube client for the 3DS  
